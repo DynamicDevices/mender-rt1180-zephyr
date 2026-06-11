@@ -1,5 +1,7 @@
 # Mender OTA on NXP i.MX RT1180 (Zephyr)
 
+Public repo: https://github.com/DynamicDevices/mender-rt1180-zephyr
+
 Public overlay for [mender-mcu-integration](https://github.com/mendersoftware/mender-mcu-integration): RT1180 EVK (CM33) board configuration, build/flash notes, and Hosted Mender bring-up documentation.
 
 West dependencies (`zephyr/`, `modules/`, `bootloader/`) are **not** in this repository. Clone upstream, apply this overlay, then run `west update`.

@@ -6,6 +6,8 @@ Upstream getting-started and native_sim instructions remain in [mender-mcu-integ
 
 ## Purpose
 
+Public repo: https://github.com/DynamicDevices/mender-rt1180-zephyr
+
 Evaluate **Mender MCU OTA** on the RT1180 CM33 core: MCUboot + swap, Ethernet bring-up, Hosted Mender client, and automatic `zephyr-image` artifact generation at build time.
 
 **Scope (CM33 vs CM7):** RT1180 is dual-core (Cortex-M33 + Cortex-M7). This port targets **CM33 only** — Mender MCU, MCUboot, and Zephyr networking. **CM7 is a separate phase** and out of scope for initial bring-up.
