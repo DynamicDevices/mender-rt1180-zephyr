@@ -309,7 +309,7 @@ Goal: exercise the Mender MCU client, TLS, and Hosted Mender polling on the host
 |------|-------------|
 | Host GCC 11 + multilib | `sudo apt install gcc-11 g++-11 gcc-11-multilib` (alternative: `gcc-multilib` / `g++-multilib` for default GCC 13 if you prefer not to use GCC 11) |
 | `net-tools` | Clone [zephyrproject-rtos/net-tools](https://github.com/zephyrproject-rtos/net-tools) to `tools/net-tools` at the workspace root (not in this West manifest). |
-| TAP / net setup | Run `tools/net-tools/net-setup.sh` and configure host NAT per [Zephyr QEMU networking](https://docs.zephyrproject.org/latest/connectivity/networking/qemu_setup.html#setting-up-zephyr-and-nat-masquerading-on-host-to-access-internet). Without this, `eth_tap` cannot create `zeth` and the client stays on “Waiting for network up…”. |
+| TAP / net setup | `tools/net-tools/net-setup.sh --config nat.conf` from `tools/net-tools/` (DHCP + NAT + `dnsmasq`), or default `zeth.conf` plus manual `dnsmasq` — see troubleshooting below. [Zephyr NAT guide](https://docs.zephyrproject.org/latest/connectivity/networking/qemu_setup.html#setting-up-zephyr-and-nat-masquerading-on-host-to-access-internet). Without DHCP on `zeth`, the client stays on “Waiting for network up…”. |
 | Secrets | Same gitignored `mender-mcu-integration/mender-local.conf` (tenant token + `CONFIG_MENDER_SERVER_HOST_US=y`). |
 
 All paths below are from the **West workspace root** (directory that contains `mender-mcu-integration/` and `.west/`).
@@ -329,6 +329,10 @@ In a **separate terminal**, start TAP (needs root; leave running while `zephyr.e
 cd /path/to/your/west/workspace
 sudo ./tools/net-tools/net-setup.sh
 ```
+
+**This blocks — that is normal.** With no `start`/`stop` argument, the script creates `zeth`, sources `zeth.conf`, then sleeps until you press **Ctrl-C** (see `tools/net-tools/net-setup.sh` header). There is no “ready” line after `Creating zeth`; the terminal should sit idle while the TAP stays up. Run `./build-native_sim/zephyr/zephyr.exe` (or `west build -d build-native_sim -t run`) in **another** terminal.
+
+If a previous run left `zeth` behind (`ip link show zeth`), delete it before restarting: `sudo ip link delete zeth`, or run `sudo ./tools/net-tools/net-setup.sh stop`. To bring the TAP up without holding a shell open: `sudo ./tools/net-tools/net-setup.sh start` … later `sudo ./tools/net-tools/net-setup.sh stop`.
 
 Configure host NAT so the sim can reach Hosted Mender: [Setting up Zephyr and NAT/masquerading on host to access internet](https://docs.zephyrproject.org/latest/connectivity/networking/qemu_setup.html#setting-up-zephyr-and-nat-masquerading-on-host-to-access-internet).
 
@@ -376,6 +380,39 @@ west build -d build-native_sim -t run
 ```
 
 **Pass (sim):** Binary starts; Zephyr banner; Mender app logs interface `zeth0` and proceeds past “network up” once TAP is configured; Hosted Mender shows device check-in (noop deployments do not flash firmware).
+
+**Troubleshooting — stuck on “Waiting for network up…”**
+
+| Check | Command / expectation |
+|-------|------------------------|
+| Build is Mender app (not a stray hello_world tree) | `grep configuration-dir build-native_sim/build_info.yml` → `mender-mcu-integration`. `Hello World! native_sim/native` is printed by `main.c` in this app — normal. |
+| `zeth` exists and is UP | `ip link show zeth` → `state UP`; host side is usually `192.0.2.2/24`. |
+| DHCP server on `zeth` | `pgrep -a dnsmasq` — must be running. Default `zeth.conf` via `net-setup.sh` does **not** start DHCP. |
+| NAT (Hosted Mender / internet) | `sysctl net.ipv4.ip_forward` → `1`; `iptables -t nat -L POSTROUTING -n` includes MASQUERADE for `192.0.2.0/24` (needs root to list). |
+
+**What “network up” means:** `netup_wait_for_network()` (`src/utils/netup.c`) calls `net_dhcpv4_start()` on the default interface and waits on a semaphore until `NET_EVENT_IPV4_ADDR_ADD` with address type `NET_ADDR_DHCP`. No DHCP offer → hang at “Waiting for network up…”.
+
+**Fix A (recommended):** use `nat.conf` so TAP + NAT + `dnsmasq` start together (`dnsmasq` must read `dnsmasq_nat.conf` from this directory):
+
+```bash
+cd tools/net-tools
+sudo ./net-setup.sh stop    # if zeth already exists
+sudo ./net-setup.sh --config nat.conf
+```
+
+Leave that terminal blocked (or use `start` / `stop`). In another terminal: `./build-native_sim/zephyr/zephyr.exe`.
+
+**Fix B (plain `net-setup.sh` already running in terminal 1):** in terminal 2:
+
+```bash
+cd tools/net-tools
+sudo sysctl -w net.ipv4.ip_forward=1
+sudo iptables -t nat -C POSTROUTING -s 192.0.2.0/24 -j MASQUERADE 2>/dev/null ||   sudo iptables -t nat -A POSTROUTING -s 192.0.2.0/24 -j MASQUERADE
+sudo iptables -P FORWARD ACCEPT
+sudo dnsmasq -C dnsmasq_nat.conf -x /var/run/dnsmasq_zeth.pid -d
+```
+
+Restart `zephyr.exe` after `dnsmasq` is up. Success logs include `Address[…]` / lease time, then Mender client activity.
 
 **What sim validates vs EVK (Phases 0–2)**
 
