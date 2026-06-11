@@ -34,6 +34,7 @@ Full procedure (SDK, secrets, build, flash, Mender): **[mender-mcu-integration/P
 | `mender-mcu-integration/west.yml` | West manifest (Zephyr v4.2.0 + mender-mcu) |
 | `mender-mcu-integration/README.md` | Pointer to PROJECT-NOTES for RT1180 |
 | `mender-mcu-integration/.gitignore` | Local secrets and build paths |
+| `scripts/fix-native-sim-link.sh` | Phase 0b: pin NSI host link to gcc-11 after native_sim configure |
 
 ## Secrets
 
