@@ -298,6 +298,18 @@ mender-artifact read build/mender-mcu-integration/zephyr/zephyr.mender
 
 ### Phase 0b — `native_sim` smoke test (no EVK)
 
+> **Troubleshooting — `native_sim` build still failing?**
+>
+> | Symptom | Likely cause | Correct sequence (from workspace root) |
+> |---------|--------------|----------------------------------------|
+> | `cannot find -lgcc` / `skipping incompatible .../13/libgcc.a` at **native runner** link | Pristine configure reset `NSI_CC` to host **GCC 13** (no `-m32` libgcc on Ubuntu 24.04). **Not** an RT1180/sysbuild error. | After **every** `west build -p -d build-native_sim …`: `./scripts/fix-native-sim-link.sh` then `west build -d build-native_sim` (see **0b.1**). |
+> | Same error after you already fixed once | Re-ran `west build -p` without re-running the fix script | `./scripts/fix-native-sim-link.sh && west build -d build-native_sim` |
+> | `mender-artifact: not found` / artifact step fails | Building RT1180 sysbuild without `.tools/bin` on `PATH` | `export PATH="$(pwd)/.tools/bin:$PATH"` then sysbuild command in [Build (canonical)](#build-canonical) |
+> | Wrong board / empty `build/` | Ran `native_sim` into `-d build` or RT1180 into `-d build-native_sim` | RT1180: `-d build --sysbuild -b mimxrt1180_evk/...`. Sim: `-d build-native_sim --board native_sim` |
+> | `No such file .../app` | Wrong app path | Use `mender-mcu-integration` (no `app/` subdirectory) |
+>
+> Check NSI pin: `grep '^NSI_CC' build-native_sim/zephyr/NSI/nsi_config` should show `gcc-11` after the fix script (default pristine value is `gcc`).
+
 Goal: exercise the Mender MCU client, TLS, and Hosted Mender polling on the host **before** RT1180 hardware is available. Uses Zephyr `native_sim` with the **noop-update** module (no MCUboot, no `zephyr-image` OTA). Upstream notes: [mender-mcu-integration/README.md](README.md#native-simulator).
 
 **Host prerequisites (in addition to [Prerequisites](#prerequisites-all-phases))**
