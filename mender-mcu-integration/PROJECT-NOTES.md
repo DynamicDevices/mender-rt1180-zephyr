@@ -196,6 +196,7 @@ Executable bring-up steps live in **[Zephyr testing plan](#zephyr-testing-plan)*
 | Roadmap track | Testing plan phase | Notes |
 |---------------|-------------------|-------|
 | CM33 Mender OTA | Phase 2 | Current track; no `SECOND_CORE_MCUX` yet |
+| Hosted Mender client (no hardware) | Phase 0b | `native_sim` + noop-update; see [Phase 0b](#phase-0b--native_sim-smoke-test-no-evk) |
 | CM7 boot verify | Phase 3 | Separate sysbuild image; **do not** flash over Mender CM33 build until slot1 repartition |
 | CM7 OTA via CM33 | Phase 4 | Future — needs `cm7_partition` + custom update module |
 
@@ -289,6 +290,66 @@ mender-artifact read build/mender-mcu-integration/zephyr/zephyr.mender
 **Pass:** `validate` exit 0; `read` shows device type `mimxrt1180_evk`, artifact name matches `CONFIG_MENDER_ARTIFACT_NAME` (e.g. `dev-1`), type `zephyr-image`.
 
 **Fail triage:** missing `mender-artifact` on PATH → [Hosted Mender workstation tools](#hosted-mender-workstation-tools); signing errors → check `CONFIG_MCUBOOT_SIGNATURE_KEY_FILE` and Python deps; sysbuild MCUboot errors → `mender-mcu-integration/sysbuild-mcuboot.conf`.
+
+---
+
+### Phase 0b — `native_sim` smoke test (no EVK)
+
+Goal: exercise the Mender MCU client, TLS, and Hosted Mender polling on the host **before** RT1180 hardware is available. Uses Zephyr `native_sim` with the **noop-update** module (no MCUboot, no `zephyr-image` OTA). Upstream notes: [mender-mcu-integration/README.md](README.md#native-simulator).
+
+**Host prerequisites (in addition to [Prerequisites](#prerequisites-all-phases))**
+
+| Item | Requirement |
+|------|-------------|
+| 32-bit host libs | `native_sim` links with `-m32`. Install `gcc-multilib` and `g++-multilib`, **or** use `gcc-11` / `g++-11` if multilib is only available for GCC 11 on the host. |
+| `net-tools` | Clone [zephyrproject-rtos/net-tools](https://github.com/zephyrproject-rtos/net-tools) to `tools/net-tools` at the workspace root (not in this West manifest). |
+| TAP / net setup | Run `tools/net-tools/net-setup.sh` and configure host NAT per [Zephyr QEMU networking](https://docs.zephyrproject.org/latest/connectivity/networking/qemu_setup.html#setting-up-zephyr-and-nat-masquerading-on-host-to-access-internet). Without this, `eth_tap` cannot create `zeth` and the client stays on “Waiting for network up…”. |
+| Secrets | Same gitignored `mender-mcu-integration/mender-local.conf` (tenant token + `CONFIG_MENDER_SERVER_HOST_US=y`). |
+
+- [ ] **0b.1** Pristine build (separate directory from EVK `build/`):
+
+```bash
+source zephyr/zephyr-env.sh
+west build -p -d build-native_sim --board native_sim mender-mcu-integration -- \
+  -DEXTRA_CONF_FILE=mender-local.conf
+```
+
+`EXTRA_CONF_FILE` is relative to the application directory (`mender-mcu-integration/`). From the workspace root you can also pass `mender-mcu-integration/mender-local.conf` in sysbuild-style invocations; for this target the short name above matches the app path.
+
+- [ ] **0b.2** If the final link fails with `cannot find -lgcc` (GCC 13, no `-m32` libgcc), either install multilib packages or patch the native simulator compiler and rebuild the runner:
+
+```bash
+sed -i 's|NSI_CC:=.*|NSI_CC:=/usr/bin/gcc-11|' build-native_sim/zephyr/NSI/nsi_config
+west build -d build-native_sim
+```
+
+- [ ] **0b.3** Outputs:
+
+```bash
+test -f build-native_sim/zephyr/zephyr.elf
+test -f build-native_sim/zephyr/zephyr.exe
+```
+
+- [ ] **0b.4** Run (after `net-setup.sh` in a separate terminal, often as root):
+
+```bash
+./build-native_sim/zephyr/zephyr.exe
+# or
+west build -d build-native_sim -t run
+```
+
+**Pass (sim):** Binary starts; Zephyr banner; Mender app logs interface `zeth0` and proceeds past “network up” once TAP is configured; Hosted Mender shows device check-in (noop deployments do not flash firmware).
+
+**What sim validates vs EVK (Phases 0–2)**
+
+| Area | `native_sim` | RT1180 EVK |
+|------|----------------|------------|
+| Mender client / TLS / tenant token | Yes | Yes |
+| Hosted Mender inventory & polling | Yes (with net-setup) | Yes (Ethernet DHCP) |
+| MCUboot + signed image | No (noop update module) | Yes |
+| `zephyr-image` artifact OTA | No | Yes |
+| NXP NETC Ethernet, SW5, flash | No | Yes |
+| CM7 / dual-core | No | Phase 3+ |
 
 ---
 
@@ -437,6 +498,7 @@ Track progress with the **[Zephyr testing plan](#zephyr-testing-plan)** checkbox
 |------|--------------|-------|
 | West workspace + dependencies | Prerequisites | Done |
 | Host sysbuild + artifact | Phase 0 | Done |
+| `native_sim` smoke (optional) | Phase 0b | Done (build + run; net-setup for full Mender check-in) |
 | EVK flash + serial | Phase 1 | Done |
 | Ethernet DHCP | Phase 1 | **Not verified** |
 | Hosted Mender accept + OTA | Phase 2 | **Not verified** |
