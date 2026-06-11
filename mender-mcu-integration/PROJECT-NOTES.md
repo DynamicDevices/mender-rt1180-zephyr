@@ -309,13 +309,17 @@ Goal: exercise the Mender MCU client, TLS, and Hosted Mender polling on the host
 | TAP / net setup | Run `tools/net-tools/net-setup.sh` and configure host NAT per [Zephyr QEMU networking](https://docs.zephyrproject.org/latest/connectivity/networking/qemu_setup.html#setting-up-zephyr-and-nat-masquerading-on-host-to-access-internet). Without this, `eth_tap` cannot create `zeth` and the client stays on “Waiting for network up…”. |
 | Secrets | Same gitignored `mender-mcu-integration/mender-local.conf` (tenant token + `CONFIG_MENDER_SERVER_HOST_US=y`). |
 
-- [ ] **0b.1** Pristine build (separate directory from EVK `build/`):
+- [ ] **0b.1** Pristine build (separate directory from EVK `build/`). West application path is `mender-mcu-integration` (not `mender-mcu-integration/app` — there is no `app/` subdirectory):
 
 ```bash
 source zephyr/zephyr-env.sh
 west build -p -d build-native_sim --board native_sim mender-mcu-integration -- \
   -DEXTRA_CONF_FILE=mender-local.conf
+./scripts/fix-native-sim-link.sh
+west build -d build-native_sim
 ```
+
+Run `./scripts/fix-native-sim-link.sh` after every `west build -p` (NSI regenerates `nsi_config` on pristine configure). On hosts where the default GCC lacks `-m32` libgcc (typical Ubuntu 24.04), the pristine command may exit at the NSI link with `cannot find -lgcc` — that is expected; run the fix script and incremental `west build` next. Skip the script only if multilib for your default compiler is installed and the first build already produced `zephyr.exe`.
 
 `EXTRA_CONF_FILE` is relative to the application directory (`mender-mcu-integration/`). From the workspace root you can also pass `mender-mcu-integration/mender-local.conf` in sysbuild-style invocations; for this target the short name above matches the app path.
 
