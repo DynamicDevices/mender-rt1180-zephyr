@@ -1,0 +1,24 @@
+# Local-only Kconfig fragments (tenant tokens, credentials)
+mender-local.conf
+*-local.conf
+secrets.conf
+boards/mender-local.conf
+boards/*-local.conf
+
+# Local Go toolchain + mender-artifact (West workspace .tools/)
+.tools/
+
+# Zephyr / West build output
+build/
+build-*/
+
+# Firmware / Mender artifacts
+*.bin
+*.hex
+*.elf
+*.map
+*.signed.bin
+*.mender
+
+# Secrets directory
+secrets/

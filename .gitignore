@@ -1,0 +1,48 @@
+# West workspace dependencies (west update — do not commit)
+zephyr/
+modules/
+bootloader/
+.west/
+
+# Local tooling and caches
+.tools/
+.local/
+
+# Build outputs
+build/
+build-*/
+
+# Secrets and local Kconfig
+mender-local.conf
+*-local.conf
+secrets.conf
+boards/mender-local.conf
+boards/*-local.conf
+
+# Mender / firmware artifacts
+*.mender
+*.bin
+*.hex
+*.elf
+*.map
+*.signed.bin
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Nested repo backup (local only)
+mender-mcu-integration/.git.mcu-integration-backup/
+mender-mcu-integration/.git/

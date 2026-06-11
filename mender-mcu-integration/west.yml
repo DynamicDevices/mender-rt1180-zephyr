@@ -1,0 +1,28 @@
+manifest:
+
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+    - name: mender
+      url-base: https://github.com/mendersoftware
+
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: v4.2.0
+      import:
+        name-allowlist:
+          - cmsis_6
+          - mbedtls
+          - mcuboot
+          - hal_nxp
+          - hal_nordic
+          - hal_espressif
+    - name: mender-mcu
+      remote: mender
+      revision: main
+      path: modules/mender-mcu
+      import: true
+
+  self:
+    path: mender-mcu-integration
