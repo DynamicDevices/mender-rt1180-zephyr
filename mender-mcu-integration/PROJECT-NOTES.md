@@ -92,6 +92,8 @@ CONFIG_MENDER_SERVER_HOST_US=y
 
 Never commit tenant tokens or credentials. `prj.conf` uses `"..."` placeholders only.
 
+For **mender-cli** on your workstation, create `mender-mcu-integration/mender-pat-local.conf` (also matched by `*-local.conf` in `.gitignore`). Put **one line** in the file: the raw Hosted Mender PAT JWT only (not Kconfig `KEY=value` syntax).
+
 ## Build (canonical)
 
 From the West workspace root:
@@ -504,10 +506,10 @@ Brief criteria only — full design in [CM7 boot and OTA](#cm7-boot-and-ota).
 
 ## Hosted Mender workstation tools
 
-Store your Hosted Mender **personal access token** in `mender-pat-local.txt` at the West workspace root (gitignored). Example login:
+Store your Hosted Mender **personal access token** in `mender-mcu-integration/mender-pat-local.conf` (gitignored; same directory as `mender-local.conf`). The file is a **single line** with the raw PAT JWT (not tenant token, not Kconfig). Example login from the workspace root:
 
 ```bash
-mender-cli login --password "$(cat mender-pat-local.txt)"
+mender-cli login --password "$(cat mender-mcu-integration/mender-pat-local.conf)"
 ```
 
 

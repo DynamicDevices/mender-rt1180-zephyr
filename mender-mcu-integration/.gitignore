@@ -1,7 +1,6 @@
 # Local-only Kconfig fragments (tenant tokens, credentials)
 mender-local.conf
 *-local.conf
-*-local.txt
 secrets.conf
 boards/mender-local.conf
 boards/*-local.conf
@@ -24,8 +23,3 @@ build-*/
 # Secrets directory
 secrets/
 
-# Hosted Mender PAT / API tokens
-mender-pat-local.txt
-*-local.txt
-pat-*.txt
-*-token.txt
