@@ -58,7 +58,8 @@ West topdir is this directory (parent of `mender-mcu-integration/`). Manifest: `
 ├── bootloader/mcuboot/     # MCUboot (west import)
 ├── modules/mender-mcu/     # Mender MCU Zephyr module
 ├── mender-mcu-integration/ # Reference app + west manifest (git repo)
-├── scripts/                # Host helpers (e.g. native_sim NSI gcc-11 link fix)
+├── scripts/                # Host helpers (`scripts/build-native-sim.sh` for native_sim)
+├── tools/net-tools/          # Zephyr net-tools (manual `git clone`; gitignored)
 ├── .tools/bin/             # Local mender-artifact + mender-cli (gitignored)
 └── build/                  # Sysbuild output (gitignored)
 ```
@@ -298,64 +299,66 @@ mender-artifact read build/mender-mcu-integration/zephyr/zephyr.mender
 
 ### Phase 0b — `native_sim` smoke test (no EVK)
 
-> **Troubleshooting — `native_sim` build still failing?**
->
-> | Symptom | Likely cause | Correct sequence (from workspace root) |
-> |---------|--------------|----------------------------------------|
-> | `cannot find -lgcc` / `skipping incompatible .../13/libgcc.a` at **native runner** link | Pristine configure reset `NSI_CC` to host **GCC 13** (no `-m32` libgcc on Ubuntu 24.04). **Not** an RT1180/sysbuild error. | After **every** `west build -p -d build-native_sim …`: `./scripts/fix-native-sim-link.sh` then `west build -d build-native_sim` (see **0b.1**). |
-> | Same error after you already fixed once | Re-ran `west build -p` without re-running the fix script | `./scripts/fix-native-sim-link.sh && west build -d build-native_sim` |
-> | `mender-artifact: not found` / artifact step fails | Building RT1180 sysbuild without `.tools/bin` on `PATH` | `export PATH="$(pwd)/.tools/bin:$PATH"` then sysbuild command in [Build (canonical)](#build-canonical) |
-> | Wrong board / empty `build/` | Ran `native_sim` into `-d build` or RT1180 into `-d build-native_sim` | RT1180: `-d build --sysbuild -b mimxrt1180_evk/...`. Sim: `-d build-native_sim --board native_sim` |
-> | `No such file .../app` | Wrong app path | Use `mender-mcu-integration` (no `app/` subdirectory) |
->
-> Check NSI pin: `grep '^NSI_CC' build-native_sim/zephyr/NSI/nsi_config` should show `gcc-11` after the fix script (default pristine value is `gcc`).
-
 Goal: exercise the Mender MCU client, TLS, and Hosted Mender polling on the host **before** RT1180 hardware is available. Uses Zephyr `native_sim` with the **noop-update** module (no MCUboot, no `zephyr-image` OTA). Upstream notes: [mender-mcu-integration/README.md](README.md#native-simulator).
+
+**Why not plain `west build -p`?** `native_sim` links the NSI runner with `-m32`. NSI sets `NSI_CC` from the host `CMAKE_C_COMPILER`. Ubuntu 24.04 default **GCC 13** has no `-m32` `libgcc`, so a pristine configure fails at the final link with `cannot find -lgcc`. Pin the host compiler to **GCC 11** (with `gcc-11-multilib`) for configure and link.
 
 **Host prerequisites (in addition to [Prerequisites](#prerequisites-all-phases))**
 
 | Item | Requirement |
 |------|-------------|
-| 32-bit host libs | `native_sim` links with `-m32`. Install `gcc-multilib` and `g++-multilib`, **or** use `gcc-11` / `g++-11` if multilib is only available for GCC 11 on the host. |
+| Host GCC 11 + multilib | `sudo apt install gcc-11 g++-11 gcc-11-multilib` (alternative: `gcc-multilib` / `g++-multilib` for default GCC 13 if you prefer not to use GCC 11) |
 | `net-tools` | Clone [zephyrproject-rtos/net-tools](https://github.com/zephyrproject-rtos/net-tools) to `tools/net-tools` at the workspace root (not in this West manifest). |
 | TAP / net setup | Run `tools/net-tools/net-setup.sh` and configure host NAT per [Zephyr QEMU networking](https://docs.zephyrproject.org/latest/connectivity/networking/qemu_setup.html#setting-up-zephyr-and-nat-masquerading-on-host-to-access-internet). Without this, `eth_tap` cannot create `zeth` and the client stays on “Waiting for network up…”. |
 | Secrets | Same gitignored `mender-mcu-integration/mender-local.conf` (tenant token + `CONFIG_MENDER_SERVER_HOST_US=y`). |
 
-- [ ] **0b.1** Pristine build (separate directory from EVK `build/`). West application path is `mender-mcu-integration` (not `mender-mcu-integration/app` — there is no `app/` subdirectory):
+All paths below are from the **West workspace root** (directory that contains `mender-mcu-integration/` and `.west/`).
+
+- [ ] **0b.0** Clone `net-tools` once (not in the West manifest; not committed):
+
+```bash
+cd /path/to/your/west/workspace   # parent of mender-mcu-integration/
+mkdir -p tools
+git clone https://github.com/zephyrproject-rtos/net-tools.git tools/net-tools
+test -x tools/net-tools/net-setup.sh || chmod +x tools/net-tools/net-setup.sh
+```
+
+In a **separate terminal**, start TAP (needs root; leave running while `zephyr.exe` runs):
+
+```bash
+cd /path/to/your/west/workspace
+sudo ./tools/net-tools/net-setup.sh
+```
+
+Configure host NAT so the sim can reach Hosted Mender: [Setting up Zephyr and NAT/masquerading on host to access internet](https://docs.zephyrproject.org/latest/connectivity/networking/qemu_setup.html#setting-up-zephyr-and-nat-masquerading-on-host-to-access-internet).
+
+- [ ] **0b.1** Pristine build (separate directory from EVK `build/`). **Recommended — one command, no failed link step:**
 
 ```bash
 source zephyr/zephyr-env.sh
-west build -p -d build-native_sim --board native_sim mender-mcu-integration -- \
+./scripts/build-native-sim.sh
+```
+
+The script exports `CC=/usr/bin/gcc-11` and `CXX=/usr/bin/g++-11`, then runs `west build -p -d build-native_sim …`. Incremental rebuild: `./scripts/build-native-sim.sh --incremental`.
+
+Equivalent manual west command (no script):
+
+```bash
+source zephyr/zephyr-env.sh
+CC=/usr/bin/gcc-11 CXX=/usr/bin/g++-11 west build -p -d build-native_sim --board native_sim mender-mcu-integration -- \
   -DEXTRA_CONF_FILE=mender-local.conf
-./scripts/fix-native-sim-link.sh
-west build -d build-native_sim
 ```
 
-Run `./scripts/fix-native-sim-link.sh` after every `west build -p` (NSI regenerates `nsi_config` on pristine configure). On hosts where the default GCC lacks `-m32` libgcc (typical Ubuntu 24.04), the pristine command may exit at the NSI link with `cannot find -lgcc` — that is expected; run the fix script and incremental `west build` next. Skip the script only if multilib for your default compiler is installed and the first build already produced `zephyr.exe`.
+`EXTRA_CONF_FILE` is relative to the application directory (`mender-mcu-integration/`).
 
-`EXTRA_CONF_FILE` is relative to the application directory (`mender-mcu-integration/`). From the workspace root you can also pass `mender-mcu-integration/mender-local.conf` in sysbuild-style invocations; for this target the short name above matches the app path.
-
-- [ ] **0b.2** If the final link fails with `cannot find -lgcc` (default host GCC 13, no `-m32` libgcc), check what is installed:
+- [ ] **0b.2** Verify NSI used GCC 11 (optional):
 
 ```bash
-which gcc gcc-11
-dpkg -l gcc-multilib g++-multilib gcc-11-multilib 2>/dev/null | awk '/^ii|^un/'
+grep '^NSI_CC' build-native_sim/zephyr/NSI/nsi_config
+# NSI_CC:=ccache /usr/bin/gcc-11
 ```
 
-**Option A — multilib for the default compiler** (needs root; on Ubuntu 24.04 use askpass if building from Cursor):
-
-```bash
-sudo apt-get update
-sudo apt-get install -y gcc-multilib g++-multilib
-west build -d build-native_sim
-```
-
-**Option B — point NSI at GCC 11** (no meta `gcc-multilib` needed if `gcc-11-multilib` is already installed; typical on Ubuntu 24.04). NSI regenerates `nsi_config` on pristine or reconfigure, so use the helper script after configure:
-
-```bash
-./scripts/fix-native-sim-link.sh   # from workspace root; re-run after west build -p
-west build -d build-native_sim
-```
+If you already ran a failing pristine build without GCC 11, either remove `build-native_sim` and re-run **0b.1**, or run `./scripts/fix-native-sim-link.sh` then `west build -d build-native_sim`.
 
 - [ ] **0b.3** Outputs:
 

@@ -47,3 +47,6 @@ env/
 mender-mcu-integration/.git.mcu-integration-backup/
 mender-mcu-integration/.git/
 
+
+# Zephyr net-tools (manual clone for native_sim TAP)
+tools/net-tools/
