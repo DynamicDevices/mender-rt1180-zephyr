@@ -316,10 +316,25 @@ west build -p -d build-native_sim --board native_sim mender-mcu-integration -- \
 
 `EXTRA_CONF_FILE` is relative to the application directory (`mender-mcu-integration/`). From the workspace root you can also pass `mender-mcu-integration/mender-local.conf` in sysbuild-style invocations; for this target the short name above matches the app path.
 
-- [ ] **0b.2** If the final link fails with `cannot find -lgcc` (GCC 13, no `-m32` libgcc), either install multilib packages or patch the native simulator compiler and rebuild the runner:
+- [ ] **0b.2** If the final link fails with `cannot find -lgcc` (default host GCC 13, no `-m32` libgcc), check what is installed:
 
 ```bash
-sed -i 's|NSI_CC:=.*|NSI_CC:=/usr/bin/gcc-11|' build-native_sim/zephyr/NSI/nsi_config
+which gcc gcc-11
+dpkg -l gcc-multilib g++-multilib gcc-11-multilib 2>/dev/null | awk '/^ii|^un/'
+```
+
+**Option A — multilib for the default compiler** (needs root; on Ubuntu 24.04 use askpass if building from Cursor):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y gcc-multilib g++-multilib
+west build -d build-native_sim
+```
+
+**Option B — point NSI at GCC 11** (no meta `gcc-multilib` needed if `gcc-11-multilib` is already installed; typical on Ubuntu 24.04):
+
+```bash
+sed -i 's|NSI_CC:=.*|NSI_CC:=ccache /usr/bin/gcc-11|' build-native_sim/zephyr/NSI/nsi_config
 west build -d build-native_sim
 ```
 
