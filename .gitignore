@@ -15,6 +15,7 @@ build-*/
 # Secrets and local Kconfig
 mender-local.conf
 *-local.conf
+*-local.txt
 secrets.conf
 boards/mender-local.conf
 boards/*-local.conf
@@ -48,6 +49,7 @@ mender-mcu-integration/.git.mcu-integration-backup/
 mender-mcu-integration/.git/
 
 # Hosted Mender / API tokens (workstation only — never commit)
-pat-token.txt
+mender-pat-local.txt
+*-local.txt
 pat-*.txt
 *-token.txt

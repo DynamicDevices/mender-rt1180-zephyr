@@ -58,6 +58,7 @@ West topdir is this directory (parent of `mender-mcu-integration/`). Manifest: `
 ├── bootloader/mcuboot/     # MCUboot (west import)
 ├── modules/mender-mcu/     # Mender MCU Zephyr module
 ├── mender-mcu-integration/ # Reference app + west manifest (git repo)
+├── scripts/                # Host helpers (e.g. native_sim NSI gcc-11 link fix)
 ├── .tools/bin/             # Local mender-artifact + mender-cli (gitignored)
 └── build/                  # Sysbuild output (gitignored)
 ```
@@ -331,10 +332,10 @@ sudo apt-get install -y gcc-multilib g++-multilib
 west build -d build-native_sim
 ```
 
-**Option B — point NSI at GCC 11** (no meta `gcc-multilib` needed if `gcc-11-multilib` is already installed; typical on Ubuntu 24.04):
+**Option B — point NSI at GCC 11** (no meta `gcc-multilib` needed if `gcc-11-multilib` is already installed; typical on Ubuntu 24.04). NSI regenerates `nsi_config` on pristine or reconfigure, so use the helper script after configure:
 
 ```bash
-sed -i 's|NSI_CC:=.*|NSI_CC:=ccache /usr/bin/gcc-11|' build-native_sim/zephyr/NSI/nsi_config
+./scripts/fix-native-sim-link.sh   # from workspace root; re-run after west build -p
 west build -d build-native_sim
 ```
 
@@ -503,10 +504,10 @@ Brief criteria only — full design in [CM7 boot and OTA](#cm7-boot-and-ota).
 
 ## Hosted Mender workstation tools
 
-Store your Hosted Mender **personal access token** in `pat-token.txt` at the West workspace root (gitignored). Example login:
+Store your Hosted Mender **personal access token** in `mender-pat-local.txt` at the West workspace root (gitignored). Example login:
 
 ```bash
-mender-cli login --password "$(cat pat-token.txt)"
+mender-cli login --password "$(cat mender-pat-local.txt)"
 ```
 
 
