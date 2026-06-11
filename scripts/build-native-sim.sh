@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# native_sim NSI final link uses -m32. Ubuntu 24.04 default GCC 13 has no -m32 libgcc
+# unless gcc-multilib is installed. Zephyr sets NSI_CC from host CMAKE_C_COMPILER (/usr/bin/gcc).
+# Configure first, pin NSI_CC to gcc-11 (gcc-11-multilib), then build — one script, no failed link.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "${ROOT}"
+
+if [[ -f zephyr/zephyr-env.sh ]]; then
+  # shellcheck source=/dev/null
+  source zephyr/zephyr-env.sh
+fi
+
+if ! command -v gcc-11 >/dev/null 2>&1; then
+  echo "gcc-11 required (with gcc-11-multilib for -m32 NSI link)." >&2
+  echo "Install: sudo apt install gcc-11 g++-11 gcc-11-multilib" >&2
+  echo "Or install gcc-multilib g++-multilib for default GCC 13 and use west build directly." >&2
+  exit 1
+fi
+
+BUILD_DIR="${BUILD_DIR:-build-native_sim}"
+WEST_CMAKE_ONLY=(--cmake-only)
+WEST_BUILD=(-p)
+if [[ "${1:-}" == "--incremental" ]]; then
+  WEST_CMAKE_ONLY=()
+  WEST_BUILD=()
+  shift
+fi
+
+west build "${WEST_BUILD[@]}" -d "${BUILD_DIR}" --board native_sim mender-mcu-integration \
+  "${WEST_CMAKE_ONLY[@]}" -- \
+  -DEXTRA_CONF_FILE=mender-local.conf "$@"
+
+"${ROOT}/scripts/fix-native-sim-link.sh"
+
+west build -d "${BUILD_DIR}"
+
+EXE="${ROOT}/${BUILD_DIR}/zephyr/zephyr.exe"
+if [[ ! -f "${EXE}" ]]; then
+  echo "Build failed: missing ${EXE}" >&2
+  exit 1
+fi
+echo "OK: ${EXE}"

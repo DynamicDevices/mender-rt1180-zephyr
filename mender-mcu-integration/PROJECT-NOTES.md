@@ -339,7 +339,7 @@ source zephyr/zephyr-env.sh
 ./scripts/build-native-sim.sh
 ```
 
-The script exports `CC=/usr/bin/gcc-11` and `CXX=/usr/bin/g++-11`, then runs `west build -p -d build-native_sim …`. Incremental rebuild: `./scripts/build-native-sim.sh --incremental`.
+The script runs `west build --cmake-only`, pins `NSI_CC` to `gcc-11` via `fix-native-sim-link.sh`, then completes the build (no failed NSI link step). Incremental rebuild: `./scripts/build-native-sim.sh --incremental`.
 
 Equivalent manual west command (no script):
 
