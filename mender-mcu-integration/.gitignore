@@ -22,3 +22,8 @@ build-*/
 
 # Secrets directory
 secrets/
+
+# Hosted Mender PAT / API tokens
+pat-token.txt
+pat-*.txt
+*-token.txt

@@ -501,6 +501,15 @@ Brief criteria only — full design in [CM7 boot and OTA](#cm7-boot-and-ota).
 | **slot1** | CM7 boot breaks Mender swap or vice versa | Do not merge Phase 2 + Phase 3 images until Phase 4 repartition |
 | **Secrets** | Auth failures | Device uses tenant token in `mender-local.conf`; workstation uses **PAT** — never commit either |
 
+## Hosted Mender workstation tools
+
+Store your Hosted Mender **personal access token** in `pat-token.txt` at the West workspace root (gitignored). Example login:
+
+```bash
+mender-cli login --password "$(cat pat-token.txt)"
+```
+
+
 ## Zephyr documentation (MCP)
 
 Use the **user-zephyr-docs** MCP server in Cursor for Zephyr Kconfig, devicetree, and API lookups while iterating on this port.

@@ -46,3 +46,8 @@ env/
 # Nested repo backup (local only)
 mender-mcu-integration/.git.mcu-integration-backup/
 mender-mcu-integration/.git/
+
+# Hosted Mender / API tokens (workstation only — never commit)
+pat-token.txt
+pat-*.txt
+*-token.txt
