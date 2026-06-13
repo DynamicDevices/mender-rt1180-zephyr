@@ -510,6 +510,8 @@ Board fragment: `mender-mcu-integration/boards/nrf5340dk_nrf5340_cpuapp.conf` �
 
 ### Phase 1 — EVK flash (CM33 Mender image)
 
+**Status: TBD — pending MIMXRT1180-EVK arrival.** Phase 0b (`native_sim`) is done; hardware bring-up (Phases 1–4) has not started.
+
 Goal: MCUboot + signed app on EVK; serial console and Ethernet link before Hosted Mender.
 
 **Preconditions:** Phase 0 pass; **SW5 = 0100**; `mender-local.conf` flashed via build (tenant token in image).
@@ -666,16 +668,16 @@ Track progress with the **[Zephyr testing plan](#zephyr-testing-plan)** checkbox
 | Host sysbuild + artifact | Phase 0 | Done |
 | `native_sim` Mender smoke + noop OTA | Phase 0b | **Done** (2026-06-13) — build, DHCP, accept, noop deploy |
 | vemu nRF5340 build/run (no network) | vemu | Done (limited — use Phase 0b for Hosted Mender) |
-| EVK flash + serial | Phase 1 | Done |
-| Ethernet DHCP | Phase 1 | **Not verified** |
-| Hosted Mender accept + OTA | Phase 2 | **Not verified** |
-| MCUboot swap on deploy | Phase 2.6 | **Not verified** |
-| CM7 `mbox_data` dual boot | Phase 3 | Repeatable (separate image) |
+| EVK flash + serial | Phase 1 | **TBD** — pending MIMXRT1180-EVK arrival |
+| Ethernet DHCP | Phase 1 | **TBD** — pending EVK |
+| Hosted Mender accept + OTA | Phase 2 | **TBD** — pending EVK |
+| MCUboot swap on deploy | Phase 2.6 | **TBD** — pending EVK |
+| CM7 `mbox_data` dual boot | Phase 3 | **TBD** — pending EVK |
 | CM7 OTA via CM33 | Phase 4 | Future |
 
 ## Next steps
 
-1. Run **Phase 1** Ethernet/DHCP checks if not already green.
+1. When **MIMXRT1180-EVK** arrives, run **Phase 1** (flash, serial, Ethernet/DHCP).
 2. Complete **Phase 2** on RT1180 EVK (accept device, upload `zephyr.mender`, deploy, confirm swap). Phase 0b on `native_sim` already validated client auth and noop OTA on the host.
 3. When needed, run **Phase 3** in `build-mbox` — then reflash Mender image before resuming Phase 2.
 4. Push local commits when ready to share the RT1180 port upstream or to a fork remote.
