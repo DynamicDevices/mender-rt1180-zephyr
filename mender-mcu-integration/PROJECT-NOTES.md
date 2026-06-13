@@ -58,7 +58,7 @@ West topdir is this directory (parent of `mender-mcu-integration/`). Manifest: `
 ├── bootloader/mcuboot/     # MCUboot (west import)
 ├── modules/mender-mcu/     # Mender MCU Zephyr module
 ├── mender-mcu-integration/ # Reference app + west manifest (git repo)
-├── scripts/                # Host helpers (`scripts/build-native-sim.sh` for native_sim)
+├── scripts/                # Host helpers — see [Scripts inventory](#scripts-inventory)
 ├── tools/net-tools/          # Zephyr net-tools (manual `git clone`; gitignored)
 ├── .tools/bin/             # Local mender-artifact + mender-cli (gitignored)
 └── build/                  # Sysbuild output (gitignored)
@@ -70,6 +70,22 @@ Fresh checkout:
 west init -l mender-mcu-integration
 west update
 ```
+
+## Scripts inventory
+
+Host helpers at the West workspace root (`scripts/`). All paths below are from that root.
+
+| Script | Role |
+|--------|------|
+| `scripts/build-native-sim.sh` | Pristine/incremental `native_sim` build; pins NSI to **GCC 11** via `fix-native-sim-link.sh` |
+| `scripts/fix-native-sim-link.sh` | Repair NSI link after a failed pristine configure (sets `NSI_CC` to `gcc-11`) |
+| `scripts/run-native-sim-network.sh` | Start/stop/status TAP + DHCP + NAT using `tools/net-tools/nat.conf` (`cd` into net-tools; `stop` passes `--config nat.conf`) |
+| `scripts/test-mender-native-sim.sh` | Build (optional) + run `zephyr.exe` Mender smoke test; expects TAP from `run-native-sim-network.sh` |
+| `scripts/create-native-sim-deployment.sh` | Build noop-update artifact (`device_type` `native_sim`) and create **one** Hosted Mender deployment |
+| `scripts/test-vemu.sh` | Build `hello_world` for nRF5340 and run headless **vemu** (or print browser load steps) |
+| `scripts/run-vemu-demo.sh` | Build `hello_world` for nRF5340 and print vemulator.com load instructions |
+| `scripts/build-mender-vemu.sh` | Sysbuild Mender app for `nrf5340dk/nrf5340/cpuapp` (noop module; uses `boards/nrf5340dk_nrf5340_cpuapp.conf`) |
+| `scripts/test-mender-vemu.sh` | Build + run Mender image in headless vemu (slow — increase `--frames`) |
 
 ## Prerequisites
 
@@ -200,7 +216,7 @@ Executable bring-up steps live in **[Zephyr testing plan](#zephyr-testing-plan)*
 | Roadmap track | Testing plan phase | Notes |
 |---------------|-------------------|-------|
 | CM33 Mender OTA | Phase 2 | Current track; no `SECOND_CORE_MCUX` yet |
-| Hosted Mender client (no hardware) | Phase 0b | `native_sim` + noop-update; see [Phase 0b](#phase-0b--native_sim-smoke-test-no-evk) |
+| Hosted Mender client (no hardware) | Phase 0b | **Done** (2026-06-13) — build, DHCP, accept, noop OTA; see [Phase 0b](#phase-0b--native_sim-smoke-test-no-evk) |
 | CM7 boot verify | Phase 3 | Separate sysbuild image; **do not** flash over Mender CM33 build until slot1 repartition |
 | CM7 OTA via CM33 | Phase 4 | Future — needs `cm7_partition` + custom update module |
 
@@ -299,7 +315,20 @@ mender-artifact read build/mender-mcu-integration/zephyr/zephyr.mender
 
 ### Phase 0b — `native_sim` smoke test (no EVK)
 
+**Status: COMPLETE (2026-06-13).** Verified on this workspace: build, TAP/DHCP/NAT, Hosted Mender auth, and noop-update deployment.
+
 Goal: exercise the Mender MCU client, TLS, and Hosted Mender polling on the host **before** RT1180 hardware is available. Uses Zephyr `native_sim` with the **noop-update** module (no MCUboot, no `zephyr-image` OTA). Upstream notes: [mender-mcu-integration/README.md](README.md#native-simulator).
+
+**Verified outcomes (2026-06-13)**
+
+| Step | Result |
+|------|--------|
+| Build | `./scripts/build-native-sim.sh` — GCC 11 NSI fix; outputs `build-native_sim/zephyr/zephyr.exe` |
+| Network | `./scripts/run-native-sim-network.sh start` — `nat.conf`; stop uses `--config nat.conf` |
+| Run | `./scripts/test-mender-native-sim.sh` — DHCP **192.0.2.24** on `zeth0`; Mender client init; device type **`native_sim`** |
+| First check-in | HTTP **401** until device **accepted** in Hosted Mender UI (pending device, MAC **02:00:5e:00:53:31**) |
+| Auth OK | After accept: log line **"No deployment available"** = tenant token auth working |
+| Noop OTA | `./scripts/create-native-sim-deployment.sh` — serial: download → install → `deployment_status_cb: success` |
 
 **Why not plain `west build -p`?** `native_sim` links the NSI runner with `-m32`. NSI sets `NSI_CC` from the host `CMAKE_C_COMPILER`. Ubuntu 24.04 default **GCC 13** has no `-m32` `libgcc`, so a pristine configure fails at the final link with `cannot find -lgcc`. Pin the host compiler to **GCC 11** (with `gcc-11-multilib`) for configure and link.
 
@@ -309,12 +338,12 @@ Goal: exercise the Mender MCU client, TLS, and Hosted Mender polling on the host
 |------|-------------|
 | Host GCC 11 + multilib | `sudo apt install gcc-11 g++-11 gcc-11-multilib` (alternative: `gcc-multilib` / `g++-multilib` for default GCC 13 if you prefer not to use GCC 11) |
 | `net-tools` | Clone [zephyrproject-rtos/net-tools](https://github.com/zephyrproject-rtos/net-tools) to `tools/net-tools` at the workspace root (not in this West manifest). |
-| TAP / net setup | `tools/net-tools/net-setup.sh --config nat.conf` from `tools/net-tools/` (DHCP + NAT + `dnsmasq`), or default `zeth.conf` plus manual `dnsmasq` — see troubleshooting below. [Zephyr NAT guide](https://docs.zephyrproject.org/latest/connectivity/networking/qemu_setup.html#setting-up-zephyr-and-nat-masquerading-on-host-to-access-internet). Without DHCP on `zeth`, the client stays on “Waiting for network up…”. |
+| TAP / net setup | `./scripts/run-native-sim-network.sh start` (recommended), or manual `tools/net-tools/net-setup.sh --config nat.conf` from `tools/net-tools/` — see [Scripts inventory](#scripts-inventory). Without DHCP on `zeth`, the client stays on “Waiting for network up…”. |
 | Secrets | Same gitignored `mender-mcu-integration/mender-local.conf` (tenant token + `CONFIG_MENDER_SERVER_HOST_US=y`). |
 
 All paths below are from the **West workspace root** (directory that contains `mender-mcu-integration/` and `.west/`).
 
-- [ ] **0b.0** Clone `net-tools` once (not in the West manifest; not committed):
+- [x] **0b.0** Clone `net-tools` once (not in the West manifest; not committed):
 
 ```bash
 cd /path/to/your/west/workspace   # parent of mender-mcu-integration/
@@ -327,16 +356,24 @@ In a **separate terminal**, start TAP (needs root; leave running while `zephyr.e
 
 ```bash
 cd /path/to/your/west/workspace
-sudo ./tools/net-tools/net-setup.sh
+sudo ./scripts/run-native-sim-network.sh start
+# stop when done: sudo ./scripts/run-native-sim-network.sh stop
 ```
 
-**This blocks — that is normal.** With no `start`/`stop` argument, the script creates `zeth`, sources `zeth.conf`, then sleeps until you press **Ctrl-C** (see `tools/net-tools/net-setup.sh` header). There is no “ready” line after `Creating zeth`; the terminal should sit idle while the TAP stays up. Run `./build-native_sim/zephyr/zephyr.exe` (or `west build -d build-native_sim -t run`) in **another** terminal.
+**Recommended wrapper** — `run-native-sim-network.sh` `cd`s into `tools/net-tools` and passes `--config nat.conf` on both start and stop (cleans `dnsmasq` + NAT rules). Manual equivalent:
 
-If a previous run left `zeth` behind (`ip link show zeth`), delete it before restarting: `sudo ip link delete zeth`, or run `sudo ./tools/net-tools/net-setup.sh stop`. To bring the TAP up without holding a shell open: `sudo ./tools/net-tools/net-setup.sh start` … later `sudo ./tools/net-tools/net-setup.sh stop`.
+```bash
+cd tools/net-tools
+sudo ./net-setup.sh --config nat.conf
+```
+
+**This blocks — that is normal.** With no `start`/`stop` argument, the script creates `zeth`, sources the config, then sleeps until you press **Ctrl-C**. Run `./scripts/test-mender-native-sim.sh --run-only` (or `./build-native_sim/zephyr/zephyr.exe`) in **another** terminal.
+
+If a previous run left `zeth` behind: `sudo ./scripts/run-native-sim-network.sh stop`, or `sudo ip link delete zeth`.
 
 Configure host NAT so the sim can reach Hosted Mender: [Setting up Zephyr and NAT/masquerading on host to access internet](https://docs.zephyrproject.org/latest/connectivity/networking/qemu_setup.html#setting-up-zephyr-and-nat-masquerading-on-host-to-access-internet).
 
-- [ ] **0b.1** Pristine build (separate directory from EVK `build/`). **Recommended — one command, no failed link step:**
+- [x] **0b.1** Pristine build (separate directory from EVK `build/`). **Recommended — one command, no failed link step:**
 
 ```bash
 source zephyr/zephyr-env.sh
@@ -355,7 +392,7 @@ CC=/usr/bin/gcc-11 CXX=/usr/bin/g++-11 west build -p -d build-native_sim --board
 
 `EXTRA_CONF_FILE` is relative to the application directory (`mender-mcu-integration/`).
 
-- [ ] **0b.2** Verify NSI used GCC 11 (optional):
+- [x] **0b.2** Verify NSI used GCC 11 (optional):
 
 ```bash
 grep '^NSI_CC' build-native_sim/zephyr/NSI/nsi_config
@@ -364,22 +401,47 @@ grep '^NSI_CC' build-native_sim/zephyr/NSI/nsi_config
 
 If you already ran a failing pristine build without GCC 11, either remove `build-native_sim` and re-run **0b.1**, or run `./scripts/fix-native-sim-link.sh` then `west build -d build-native_sim`.
 
-- [ ] **0b.3** Outputs:
+- [x] **0b.3** Outputs:
 
 ```bash
 test -f build-native_sim/zephyr/zephyr.elf
 test -f build-native_sim/zephyr/zephyr.exe
 ```
 
-- [ ] **0b.4** Run (after `net-setup.sh` in a separate terminal, often as root):
+- [x] **0b.4** Run (after `run-native-sim-network.sh start` in a separate terminal):
 
 ```bash
+./scripts/test-mender-native-sim.sh --run-only
+# or
 ./build-native_sim/zephyr/zephyr.exe
 # or
 west build -d build-native_sim -t run
 ```
 
-**Pass (sim):** Binary starts; Zephyr banner; Mender app logs interface `zeth0` and proceeds past “network up” once TAP is configured; Hosted Mender shows device check-in (noop deployments do not flash firmware).
+- [x] **0b.5** Accept pending device in Hosted Mender UI (**Devices → Pending**). Pending MAC **02:00:5e:00:53:31**; first poll may log **401** until accepted. After accept: **"No deployment available"** confirms auth.
+
+- [x] **0b.6** Noop deployment:
+
+```bash
+./scripts/create-native-sim-deployment.sh
+# if a prior deployment is still in progress:
+./scripts/create-native-sim-deployment.sh --abort-inprogress
+```
+
+**Pass (sim):** Binary starts; DHCP on `zeth0` (e.g. **192.0.2.24**); device accepted; noop deploy logs download → install → `deployment_status_cb: success`.
+
+**Troubleshooting — HTTP 401 on first check-in**
+
+| Symptom | Cause | Action |
+|---------|-------|--------|
+| Repeated **401** in serial/API | Device not yet **accepted** | Hosted Mender UI → **Devices → Pending** → Accept (MAC **02:00:5e:00:53:31** for default sim identity) |
+| **401** after accept | Wrong credential in image | Rebuild with tenant token in gitignored `mender-local.conf` — not workstation PAT |
+
+**Troubleshooting — deployment 409 (Deployment aborted)**
+
+| Symptom | Cause | Action |
+|---------|-------|--------|
+| **409** / deployment aborted | **Overlapping deployments** to the same device — not a bad artifact | Wait for in-progress deploy to finish, or `./scripts/create-native-sim-deployment.sh --abort-inprogress`; run **one deployment at a time** |
 
 **Troubleshooting — stuck on “Waiting for network up…”**
 
@@ -392,15 +454,15 @@ west build -d build-native_sim -t run
 
 **What “network up” means:** `netup_wait_for_network()` (`src/utils/netup.c`) calls `net_dhcpv4_start()` on the default interface and waits on a semaphore until `NET_EVENT_IPV4_ADDR_ADD` with address type `NET_ADDR_DHCP`. No DHCP offer → hang at “Waiting for network up…”.
 
-**Fix A (recommended):** use `nat.conf` so TAP + NAT + `dnsmasq` start together (`dnsmasq` must read `dnsmasq_nat.conf` from this directory):
+**Fix A (recommended):** `./scripts/run-native-sim-network.sh start` (wraps `nat.conf` — TAP + NAT + `dnsmasq`). Manual equivalent:
 
 ```bash
 cd tools/net-tools
-sudo ./net-setup.sh stop    # if zeth already exists
+sudo ./net-setup.sh stop --config nat.conf    # if zeth already exists
 sudo ./net-setup.sh --config nat.conf
 ```
 
-Leave that terminal blocked (or use `start` / `stop`). In another terminal: `./build-native_sim/zephyr/zephyr.exe`.
+Leave that terminal blocked (or use `start` / `stop`). In another terminal: `./scripts/test-mender-native-sim.sh --run-only`.
 
 **Fix B (plain `net-setup.sh` already running in terminal 1):** in terminal 2:
 
@@ -424,6 +486,25 @@ Restart `zephyr.exe` after `dnsmasq` is up. Success logs include `Address[…]` 
 | `zephyr-image` artifact OTA | No | Yes |
 | NXP NETC Ethernet, SW5, flash | No | Yes |
 | CM7 / dual-core | No | Phase 3+ |
+
+---
+
+### vemu (nRF5340) — limited scope
+
+**Status:** build/run verified; **not** a substitute for Phase 0b Hosted Mender testing.
+
+Swedish Embedded **vemu** freeware runs nRF5340 firmware in the browser or headless Node — **no network stack**, so the Mender client cannot reach Hosted Mender. Use **`native_sim`** for OTA/auth validation; use vemu for quick nRF5340 build sanity and Mender app boot without hardware.
+
+Board fragment: `mender-mcu-integration/boards/nrf5340dk_nrf5340_cpuapp.conf` — noop update module, no artifact generation, test RNG (no nRF5 entropy in vemu).
+
+| Script | Role |
+|--------|------|
+| `./scripts/test-vemu.sh` | `hello_world` on `nrf5340dk/nrf5340/cpuapp` + headless vemu |
+| `./scripts/run-vemu-demo.sh` | Build hello_world + print vemulator.com load steps |
+| `./scripts/build-mender-vemu.sh` | Mender integration app for vemu board target |
+| `./scripts/test-mender-vemu.sh` | Build + run Mender image in vemu (increase `--frames` — image is slow) |
+
+**Pass (vemu):** ELF builds; vemu runs without immediate fault. **Does not pass:** Hosted Mender check-in or deployment (no network in freeware vemu).
 
 ---
 
@@ -559,6 +640,8 @@ Brief criteria only — full design in [CM7 boot and OTA](#cm7-boot-and-ota).
 | **Flash tool** | pyOCD failure | Use LinkServer or J-Link only |
 | **slot1** | CM7 boot breaks Mender swap or vice versa | Do not merge Phase 2 + Phase 3 images until Phase 4 repartition |
 | **Secrets** | Auth failures | Device uses tenant token in `mender-local.conf`; workstation uses **PAT** — never commit either |
+| **native_sim 401** | Check-in rejected before accept | Accept pending device in UI; 401 is normal on first run |
+| **native_sim 409** | Deployment aborted | Overlapping deployments — `--abort-inprogress`; one deploy at a time |
 
 ## Hosted Mender workstation tools
 
@@ -581,7 +664,8 @@ Track progress with the **[Zephyr testing plan](#zephyr-testing-plan)** checkbox
 |------|--------------|-------|
 | West workspace + dependencies | Prerequisites | Done |
 | Host sysbuild + artifact | Phase 0 | Done |
-| `native_sim` smoke (optional) | Phase 0b | Done (build + run; net-setup for full Mender check-in) |
+| `native_sim` Mender smoke + noop OTA | Phase 0b | **Done** (2026-06-13) — build, DHCP, accept, noop deploy |
+| vemu nRF5340 build/run (no network) | vemu | Done (limited — use Phase 0b for Hosted Mender) |
 | EVK flash + serial | Phase 1 | Done |
 | Ethernet DHCP | Phase 1 | **Not verified** |
 | Hosted Mender accept + OTA | Phase 2 | **Not verified** |
@@ -592,7 +676,7 @@ Track progress with the **[Zephyr testing plan](#zephyr-testing-plan)** checkbox
 ## Next steps
 
 1. Run **Phase 1** Ethernet/DHCP checks if not already green.
-2. Complete **Phase 2** (accept device, upload `zephyr.mender`, deploy, confirm swap).
+2. Complete **Phase 2** on RT1180 EVK (accept device, upload `zephyr.mender`, deploy, confirm swap). Phase 0b on `native_sim` already validated client auth and noop OTA on the host.
 3. When needed, run **Phase 3** in `build-mbox` — then reflash Mender image before resuming Phase 2.
 4. Push local commits when ready to share the RT1180 port upstream or to a fork remote.
 
