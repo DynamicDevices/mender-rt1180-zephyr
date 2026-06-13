@@ -48,6 +48,8 @@ Troubleshooting (401 pending accept, 409 overlapping deploys, network hang): **[
 
 **Status: TBD — pending MIMXRT1180-EVK arrival.** Phase 0b (`native_sim`) is complete; **Phase 1+ on actual RT1180 EVK hardware has not started.** Flash, Ethernet, Hosted Mender OTA, and CM7 phases will be run when the board is available. See **[PROJECT-NOTES — Phase 1](mender-mcu-integration/PROJECT-NOTES.md#phase-1--evk-flash-cm33-mender-image)**.
 
+When the EVK is available, use **`scripts/create-rt1180-deployment.sh`** (static group **`rt1180-lab`**) to upload `zephyr.mender` — see [PROJECT-NOTES — rt1180-lab](mender-mcu-integration/PROJECT-NOTES.md#device-groups--mimxrt1180_evk--rt1180-lab).
+
 ## What this repo contains
 
 | Path | Purpose |

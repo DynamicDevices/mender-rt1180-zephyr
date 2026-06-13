@@ -81,7 +81,8 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 | `scripts/fix-native-sim-link.sh` | Repair NSI link after a failed pristine configure (sets `NSI_CC` to `gcc-11`) |
 | `scripts/run-native-sim-network.sh` | Start/stop/status TAP + DHCP + NAT using `tools/net-tools/nat.conf` (`cd` into net-tools; `stop` passes `--config nat.conf`) |
 | `scripts/test-mender-native-sim.sh` | Build (optional) + run `zephyr.exe` Mender smoke test; expects TAP from `run-native-sim-network.sh` |
-| `scripts/create-native-sim-deployment.sh` | Build noop-update artifact (`device_type` `native_sim`) and create **one** Hosted Mender deployment |
+| `scripts/create-native-sim-deployment.sh` | Build noop-update artifact (`device_type` `native_sim`) and create **one** Hosted Mender deployment (`MENDER_DEPLOY_TARGET=device` \| `device_type` \| `group`; default group **`simulator`**) |
+| `scripts/create-rt1180-deployment.sh` | Upload `zephyr.mender` (`device_type` `mimxrt1180_evk`) and create **one** deployment (**TBD** until EVK; default group **`rt1180-lab`**) |
 | `scripts/test-vemu.sh` | Build `hello_world` for nRF5340 and run headless **vemu** (or print browser load steps) |
 | `scripts/run-vemu-demo.sh` | Build `hello_world` for nRF5340 and print vemulator.com load instructions |
 | `scripts/build-mender-vemu.sh` | Sysbuild Mender app for `nrf5340dk/nrf5340/cpuapp` (noop module; uses `boards/nrf5340dk_nrf5340_cpuapp.conf`) |
@@ -186,6 +187,44 @@ export PATH="$(pwd)/.tools/bin:$PATH"
 | **curl + jq** | Hosted Mender REST API for **accept pending device** and **create deployment** when you need full control or the CLI lacks a subcommand. |
 
 Store PATs and tenant tokens only in gitignored local config or your environment — never in git or these notes.
+
+## Device groups — `native_sim` / `simulator`
+
+**Static group (inventory):** name **`simulator`** (Mender has no separate group UUID — the name is the identifier). The accepted `native_sim` device (`03fac8bb-567a-4008-b6d5-57efb522d1c3`, MAC **02:00:5e:00:53:31**) is assigned to this group. Groups are created implicitly when the first device is added (`PUT /api/management/v1/inventory/devices/{id}/group` or `PATCH .../groups/{name}/devices`).
+
+**Deploy to the group** (after artifact upload):
+
+```bash
+MENDER_DEPLOY_TARGET=group ./scripts/create-native-sim-deployment.sh
+# optional override (default is simulator):
+MENDER_DEPLOY_TARGET=group MENDER_DEVICE_GROUP=simulator ./scripts/create-native-sim-deployment.sh
+```
+
+REST equivalent: `POST /api/management/v1/deployments/deployments/group/simulator` with JSON `{ "name", "artifact_name", "force_installation" }`.
+
+**Other targets** (same script): `MENDER_DEPLOY_TARGET=device` (single device ID) or `device_type` (ad-hoc filter on `device_type=native_sim` + accepted).
+
+**Saved filter (dynamic search):** filter name **`simulator-native_sim`**, id **`6a2d518a7f9c80463ad089a0`** — `device_type` `$eq` `native_sim` and status accepted. Useful in the UI device list; deployments still use static **group** or inline **filter** on the deployments API, not the saved filter id.
+
+**API / CLI limits:** `mender-cli` 2.0.0 has no `groups` subcommand — use **curl + PAT** for group membership. Each device belongs to **at most one** static group. OpenAPI marks saved filters as Enterprise; this tenant can create them, but do not rely on that on all Hosted tiers.
+
+
+## Device groups — `mimxrt1180_evk` / `rt1180-lab`
+
+**Static group (inventory):** name **`rt1180-lab`**. Mender does not list empty groups — **`rt1180-lab` appears in the UI when the first accepted EVK device is assigned** (`PUT /api/management/v1/inventory/devices/{id}/group` with body `{"group": "rt1180-lab"}` or `PATCH .../groups/rt1180-lab/devices`). Until hardware arrives, only the **`simulator`** group is in use for Phase 0b (`native_sim`).
+
+**Deploy to the lab group** (after EVK build produces `build/mender-mcu-integration/zephyr/zephyr.mender`):
+
+```bash
+./scripts/create-rt1180-deployment.sh
+# optional overrides:
+MENDER_DEPLOY_TARGET=group MENDER_DEVICE_GROUP=rt1180-lab ./scripts/create-rt1180-deployment.sh
+MENDER_DEPLOY_TARGET=device MENDER_DEVICE_ID=<uuid> ./scripts/create-rt1180-deployment.sh
+```
+
+**When to use which group:** **`simulator`** — Zephyr `native_sim` noop-update smoke tests (no EVK). **`rt1180-lab`** — physical **MIMXRT1180-EVK** CM33 images (`zephyr-image` artifact from sysbuild). Do not mix device types in one static group.
+
+REST equivalent: `POST /api/management/v1/deployments/deployments/group/rt1180-lab` with JSON `{ "name", "artifact_name", "force_installation" }`.
 
 ## RT1180 board configuration notes
 
@@ -424,9 +463,13 @@ west build -d build-native_sim -t run
 
 ```bash
 ./scripts/create-native-sim-deployment.sh
+# deploy to static group simulator (all devices in that group):
+MENDER_DEPLOY_TARGET=group ./scripts/create-native-sim-deployment.sh
 # if a prior deployment is still in progress:
 ./scripts/create-native-sim-deployment.sh --abort-inprogress
 ```
+
+See [Device groups — `native_sim` / `simulator`](#device-groups--native_sim--simulator).
 
 **Pass (sim):** Binary starts; DHCP on `zeth0` (e.g. **192.0.2.24**); device accepted; noop deploy logs download → install → `deployment_status_cb: success`.
 

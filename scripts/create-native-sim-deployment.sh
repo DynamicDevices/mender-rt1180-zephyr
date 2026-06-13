@@ -15,7 +15,9 @@ ARTIFACT_NAME="${MENDER_ARTIFACT_NAME:-native-sim-noop-$(date +%Y%m%d-%H%M%S)}"
 DEPLOY_NAME="${MENDER_DEPLOYMENT_NAME:-${ARTIFACT_NAME}}"
 FORCE="${MENDER_FORCE_INSTALLATION:-true}"
 PAYLOAD_SIZE="${MENDER_NOOP_PAYLOAD_BYTES:-256}"
-TARGET="${MENDER_DEPLOY_TARGET:-device}" # device | device_type
+DEVICE_GROUP="${MENDER_DEVICE_GROUP:-simulator}"
+TARGET="${MENDER_DEPLOY_TARGET:-device}" # device | device_type | group
+
 
 if [[ ! -f "${PAT_FILE}" ]]; then
   echo "Missing PAT file: ${PAT_FILE}" >&2
@@ -54,6 +56,7 @@ echo "Uploading artifact ${ARTIFACT_NAME} (type noop-update, device type ${DEVIC
   --token-value "${MENDER_PAT}" \
   "${artifact}"
 
+deploy_url="${SERVER}/api/management/v1/deployments/deployments"
 if [[ "${TARGET}" == "device_type" ]]; then
   body="$(jq -n \
     --arg name "${DEPLOY_NAME}" \
@@ -71,7 +74,18 @@ if [[ "${TARGET}" == "device_type" ]]; then
         ]
       }
     }')"
-else
+elif [[ "${TARGET}" == "group" ]]; then
+  deploy_url="${SERVER}/api/management/v1/deployments/deployments/group/${DEVICE_GROUP}"
+  body="$(jq -n \
+    --arg name "${DEPLOY_NAME}" \
+    --arg artifact_name "${ARTIFACT_NAME}" \
+    --argjson force "$([[ "${FORCE}" == true ]] && echo true || echo false)" \
+    '{
+      name: $name,
+      artifact_name: $artifact_name,
+      force_installation: $force
+    }')"
+elif [[ "${TARGET}" == "device" ]]; then
   body="$(jq -n \
     --arg name "${DEPLOY_NAME}" \
     --arg artifact_name "${ARTIFACT_NAME}" \
@@ -83,6 +97,9 @@ else
       force_installation: $force,
       devices: [$device_id]
     }')"
+else
+  echo "Invalid MENDER_DEPLOY_TARGET=${TARGET} (use device, device_type, or group)" >&2
+  exit 1
 fi
 
 headers="${tmpdir}/headers.txt"
@@ -90,7 +107,7 @@ curl -sS -D "${headers}" -o "${tmpdir}/deploy.json" -X POST \
   -H "Authorization: Bearer ${MENDER_PAT}" \
   -H "Content-Type: application/json" \
   -d "${body}" \
-  "${SERVER}/api/management/v1/deployments/deployments"
+  "${deploy_url}"
 
 deploy_id="$(jq -r '.id // empty' "${tmpdir}/deploy.json")"
 if [[ -z "${deploy_id}" ]]; then
@@ -107,6 +124,7 @@ echo "Deployment created:"
 echo "  name:          ${DEPLOY_NAME}"
 echo "  id:            ${deploy_id}"
 echo "  artifact_name: ${ARTIFACT_NAME}"
+echo "  target:        ${TARGET}$([[ "${TARGET}" == "group" ]] && echo " (${DEVICE_GROUP})")"
 echo "  server:        ${SERVER}"
 echo "Poll in UI or: curl -s -H \"Authorization: Bearer \$(cat ${PAT_FILE})\" \\"
 echo "  ${SERVER}/api/management/v1/deployments/deployments/${deploy_id} | jq .status,.statistics"
