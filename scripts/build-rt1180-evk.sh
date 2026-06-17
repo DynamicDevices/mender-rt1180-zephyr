@@ -50,12 +50,31 @@ if [[ "${1:-}" == "--incremental" ]]; then
   shift
 fi
 
-CMAKE_EXTRA=(-DCONFIG_MENDER_ARTIFACT_NAME="\"${ARTIFACT_NAME}\"")
+EXTRA_CONF="mender-local.conf"
 if [[ -f mender-mcu-integration/mender-local.conf ]]; then
-  CMAKE_EXTRA+=(-DEXTRA_CONF_FILE=mender-mcu-integration/mender-local.conf)
+  :
+elif [[ -f mender-mcu-integration/mender-local.conf.example ]]; then
+  echo "warning: mender-local.conf missing; build may fail at compile if token required" >&2
+  EXTRA_CONF=""
 fi
 
-west build "${WEST_BUILD[@]}" --sysbuild -d "${BUILD_DIR}" -b "${BOARD}" mender-mcu-integration -- \
-  "${CMAKE_EXTRA[@]}" "$@"
+CMAKE_EXTRA=(-DCONFIG_MENDER_ARTIFACT_NAME="\"${ARTIFACT_NAME}\"")
+if [[ -n "${EXTRA_CONF}" ]]; then
+  CMAKE_EXTRA+=(-DEXTRA_CONF_FILE="${EXTRA_CONF}")
+fi
 
+# Sysbuild first configure can race (snippets.py mkdir); ensure dirs exist and retry once.
+mkdir -p "${BUILD_DIR}/mender-mcu-integration/zephyr" "${BUILD_DIR}/mender-mcu-integration/Kconfig" "${BUILD_DIR}/Kconfig"
+
+if ! west build "${WEST_BUILD[@]}" --sysbuild -d "${BUILD_DIR}" -b "${BOARD}" mender-mcu-integration -- \
+  "${CMAKE_EXTRA[@]}" "$@"; then
+  mkdir -p "${BUILD_DIR}/mender-mcu-integration/zephyr" "${BUILD_DIR}/mender-mcu-integration/Kconfig" "${BUILD_DIR}/Kconfig"
+  west build --sysbuild -d "${BUILD_DIR}" -b "${BOARD}" mender-mcu-integration -- \
+    "${CMAKE_EXTRA[@]}" "$@"
+fi
+
+SIGNED="${ROOT}/${BUILD_DIR}/mender-mcu-integration/zephyr/zephyr.signed.bin"
+MENDER="${ROOT}/${BUILD_DIR}/mender-mcu-integration/zephyr/zephyr.mender"
 echo "OK: board=${BOARD} build_dir=${BUILD_DIR}"
+[[ -f "${SIGNED}" ]] && echo "  signed app: ${SIGNED}"
+[[ -f "${MENDER}" ]] && echo "  artifact:   ${MENDER}"

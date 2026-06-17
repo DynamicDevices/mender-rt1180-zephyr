@@ -126,13 +126,14 @@ west build -p --sysbuild \
   -b mimxrt1180_evk/mimxrt1189/cm33 \
   mender-mcu-integration \
   -- \
-  -DEXTRA_CONF_FILE=mender-mcu-integration/mender-local.conf \
+  -DEXTRA_CONF_FILE=mender-local.conf \
   -DCONFIG_MENDER_ARTIFACT_NAME="dev-1"
 ```
 
 - **Sysbuild** builds MCUboot (`SB_CONFIG_BOOTLOADER_MCUBOOT=y` in `mender-mcu-integration/sysbuild-mcuboot.conf`) and the application.
 - **Board fragment** `mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.conf` is applied automatically for this board target.
 - **`mender-local.conf`** supplies Hosted Mender tenant token and server selection at build time.
+- **`EXTRA_CONF_FILE`** is relative to the application directory (`mender-mcu-integration/`); the file on disk is `mender-mcu-integration/mender-local.conf` from the workspace root. Prefer `./scripts/build-rt1180-evk.sh`.
 
 ## FRDM-IMXRT1186 vs MIMXRT1180-EVK
 
@@ -212,7 +213,7 @@ west build -p --sysbuild \
   -d build-frdm-rt1186 \
   mender-mcu-integration \
   -- \
-  -DEXTRA_CONF_FILE=mender-mcu-integration/mender-local.conf \
+  -DEXTRA_CONF_FILE=mender-local.conf \
   -DCONFIG_MENDER_ARTIFACT_NAME="dev-1"
 ```
 
@@ -621,7 +622,7 @@ west build -p --sysbuild \
   -b mimxrt1180_evk/mimxrt1189/cm33 \
   mender-mcu-integration \
   -- \
-  -DEXTRA_CONF_FILE=mender-mcu-integration/mender-local.conf \
+  -DEXTRA_CONF_FILE=mender-local.conf \
   -DCONFIG_MENDER_ARTIFACT_NAME="dev-1"
 ```
 

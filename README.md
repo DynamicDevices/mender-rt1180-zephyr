@@ -85,14 +85,14 @@ west build -p --sysbuild \
   -d build-frdm-rt1186 \
   mender-mcu-integration \
   -- \
-  -DEXTRA_CONF_FILE=mender-mcu-integration/mender-local.conf \
+  -DEXTRA_CONF_FILE=mender-local.conf \
   -DCONFIG_MENDER_ARTIFACT_NAME=dev-1
 ```
 
 
 ## Hardware bringup (Phase 1+)
 
-**Status: TBD on hardware.** EVK pending arrival; **FRDM-IMXRT1186** host sysbuild verified @ mender-mcu `1b2d374` (Zephyr v4.4.0, SDK 1.0.1). Phase 0b (`native_sim`) is complete; **Phase 1+ on physical RT118x boards has not been completed on the bench.** Flash, Ethernet, Hosted Mender OTA, and CM7 phases will be run when the board is available. See **[PROJECT-NOTES — Phase 1](mender-mcu-integration/PROJECT-NOTES.md#phase-1--evk-flash-cm33-mender-image)** and **[Upstream contribution](mender-mcu-integration/PROJECT-NOTES.md#upstream-contribution)**.
+**Status: TBD on hardware.** EVK pending arrival; **MIMXRT1180-EVK** and **FRDM-IMXRT1186** host sysbuild verified @ mender-mcu `1b2d374` (Zephyr v4.4.0, SDK 1.0.1). Phase 0b (`native_sim`) is complete; **Phase 1+ on physical RT118x boards has not been completed on the bench.** Flash, Ethernet, Hosted Mender OTA, and CM7 phases will be run when the board is available. See **[PROJECT-NOTES — Phase 1](mender-mcu-integration/PROJECT-NOTES.md#phase-1--evk-flash-cm33-mender-image)** and **[Upstream contribution](mender-mcu-integration/PROJECT-NOTES.md#upstream-contribution)**.
 
 When lab hardware is available, use **`scripts/create-rt1180-deployment.sh`** (EVK) or **`scripts/create-rt1186-frdm-deployment.sh`** (FRDM) (static group **`rt1180-lab`**) to upload `zephyr.mender` — see [PROJECT-NOTES — rt1180-lab](mender-mcu-integration/PROJECT-NOTES.md#device-groups--mimxrt1180_evk--rt1180-lab).
 
