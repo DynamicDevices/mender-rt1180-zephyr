@@ -3,6 +3,10 @@
 Public repo: https://github.com/DynamicDevices/mender-rt1180-zephyr  
 (GitHub name is historical EVK-first naming; this overlay covers the **RT118x** family — EVK and FRDM CM33.)
 
+## About
+
+Mender MCU OTA overlay for NXP i.MX RT118x on Zephyr — **MIMXRT1180-EVK** and **FRDM-IMXRT1186** CM33, `native_sim` lab validation, and EdgeLock / EU Cyber Resilience Act (CRA) programme tracking. Engineering programme and milestones: [PROJECT-NOTES](mender-mcu-integration/PROJECT-NOTES.md) · tracker [issue #1](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/1).
+
 Public overlay for [mender-mcu-integration](https://github.com/mendersoftware/mender-mcu-integration): RT118x CM33 board configuration (EVK + FRDM-IMXRT1186), build/flash notes, and Hosted Mender bring-up documentation.
 
 West dependencies (`zephyr/`, `modules/`, `bootloader/`) are **not** in this repository. Clone upstream, apply this overlay, then run `west update`.

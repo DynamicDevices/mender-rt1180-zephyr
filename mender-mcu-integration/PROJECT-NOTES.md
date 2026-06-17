@@ -460,6 +460,7 @@ For the **unified delivery plan** (workstreams, milestones, checklists), see [CR
 **Programme tracker:**
 
 - **Tracker:** [GitHub issue #1](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/1) (meta issue; prioritized backlog in [#1](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/1); child issues #2–#12)
+- **Open work issues:** [#2](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/2) Phase 1–2 hardware · [#3](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/3) MCUboot prod key · [#4](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/4) ELE TRNG · [#5](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/5) EdgeLock S3–S4 · [#6](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/6) SBOM · [#7](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/7) vuln triage · [#8](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/8) Art. 14 runbook · [#9](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/9) support period / risk · [#10](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/10) technical file · [#11](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/11) hardenconfig · [#12](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/12) upstream mender-mcu PR
 - **Note:** M-001/M-002 **Done** — tracked in this programme section only (no GitHub issues)
 - **Priorities:** `priority/P0` bench + Sep 2026 compliance; `priority/P1` pre-production fleet; `priority/P2` blocked / conformity horizon
 
@@ -570,6 +571,8 @@ Four tracks run in parallel. **Owner** is **TBD** until assigned.
 
 **Tracker:** [GitHub #1](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/1) (prioritized backlog; M-003–M-015 via #2–#11; upstream [#12](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/12); M-001/M-002 done — programme doc only)
 
+**Priority** labels on GitHub: `priority/P0` (hardware validation, vuln triage, Art. 14), `priority/P1` (signing, SBOM, support, hardenconfig, upstream PR), `priority/P2` (ELE blocked, EdgeLock S3–S4, technical file).
+
 | ID | Milestone | WS | Target | Priority | Status | GitHub | Evidence artifact |
 |----|-----------|-----|--------|----------|--------|--------|-------------------|
 | M-001 | Phase 0b `native_sim` Mender smoke | WS1 | 2026 Q2 | — | **Done** | — | Phase 0b checklist; deployment success log |
@@ -587,6 +590,8 @@ Four tracks run in parallel. **Owner** is **TBD** until assigned.
 | M-013 | Risk assessment (product-level) | WS4 | Pre-production | **P1** | **Open** | [#9](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/9) | Risk register |
 | M-014 | Technical file checklist complete | WS4 | Pre-production | **P2** | **Open** | [#10](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/10) | All boxes checked |
 | M-015 | `hardenconfig` on RT118x shipping defconfig | WS3/WS4 | Pre-production | **P1** | **Open** | [#11](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/11) | hardenconfig report |
+| — | Upstream mender-mcu Zephyr 4.4 PR | WS3 | 2026 | **P1** | **Open** | [#12](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/12) | Upstream PR merged / fork retired |
+
 
 ### Pre-hardware checklist
 
