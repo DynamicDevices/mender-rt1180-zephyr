@@ -170,7 +170,16 @@ Hosted Mender **HTTPS** (socket TLS) is largely unaffected; **device authenticat
 
 **Upstream status (2026-06):** No merged Mbed TLS 4.x port on `mendersoftware/mender-mcu` `main`; open PR [#245](https://github.com/mendersoftware/mender-mcu/pull/245) bumps **posix** mbedTLS to 3.6.6 only. `mender-mcu-integration` upstream `west.yml` still pins Zephyr **v4.2.0**.
 
-**Fork pin (this workspace):** [`DynamicDevices/mender-mcu`](https://github.com/DynamicDevices/mender-mcu) branch `feature/zephyr-4.4-mbedtls4` (commit `11b731d`) — west manifest pins that SHA. Patches under `modules/mender-mcu/` — `tls.c` uses `#if MBEDTLS_VERSION_NUMBER >= 0x04000000` for PSA `psa_generate_key` + `mbedtls_pk_copy_from_psa`, and 4.x `mbedtls_pk_parse_key` / `mbedtls_pk_sign` signatures. Also Zephyr 4.4 API renames: `zephyr/kvss/nvs.h`, `PARTITION_ID` / `PARTITION_DEVICE` (storage + image update module). **Verified:** `west build` links `zephyr.elf` for FRDM with patched `tls.c` + updated `prj.conf` (set `CONFIG_MENDER_ARTIFACT_NAME` for artifact step).
+**Fork pin (this workspace):** [`DynamicDevices/mender-mcu`](https://github.com/DynamicDevices/mender-mcu) branch [`feature/zephyr-4.4-mbedtls4`](https://github.com/DynamicDevices/mender-mcu/tree/feature/zephyr-4.4-mbedtls4) — west manifest pins commit **`1b2d374`**. Patches under `modules/mender-mcu/` — `tls.c` uses `#if MBEDTLS_VERSION_NUMBER >= 0x04000000` for PSA `psa_generate_key` + `mbedtls_pk_copy_from_psa`, 4.x `mbedtls_pk_parse_key` / `mbedtls_pk_sign` signatures, and an entropy-source fix for Mbed TLS 4.x device-auth keygen. `storage.c` and `update-module.c` use `ZEPHYR_VERSION_CODE` guards for 4.2 vs 4.4 headers (`fs/nvs.h` vs `kvss/nvs.h`, `FIXED_PARTITION_*` vs `PARTITION_*`) — non-breaking for upstream Zephyr v4.2.0.
+
+**Verified host builds (@ `1b2d374`, 2026-06-17):**
+
+| Target | Command | Result |
+|--------|---------|--------|
+| `native_sim` | `./scripts/build-native-sim.sh` | Links `zephyr.exe`; Phase 0b Mender smoke re-verified after `tls.c` entropy fix |
+| FRDM CM33 | `./scripts/build-rt1186-frdm.sh` | Sysbuild links `zephyr.elf`; `zephyr.mender` produced when `CONFIG_MENDER_ARTIFACT_NAME` set |
+
+Hardware flash, Ethernet DHCP, and Hosted Mender OTA on FRDM/EVK remain **TBD** — see [Status](#status).
 
 **Recommended actions:**
 
@@ -179,6 +188,18 @@ Hosted Mender **HTTPS** (socket TLS) is largely unaffected; **device authenticat
 3. Extend CI matrix to **Zephyr v4.4.0** + `native_sim` and one hardware target; run auth keygen + sign smoke test.
 4. Do **not** downgrade Zephyr to 4.2 for FRDM — board requires 4.4.
 5. After upstream fix: drop `CONFIG_MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS` if unused; re-audit `PSA_WANT_*` against Hosted Mender roots only.
+
+### Expected build warnings
+
+These appear during a successful sysbuild or `native_sim` build on Zephyr v4.4.0 with this overlay — **not build failures**:
+
+| Warning / message | Cause | Action |
+|-------------------|-------|--------|
+| **`CONFIG_MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS` deprecated** | Kconfig marks the symbol deprecated in Mbed TLS 4.x; still required for legacy ECDSA includes in current `prj.conf` | Safe to ignore until upstream drops the legacy path; see [Recommended actions](#recommended-actions) item 5 |
+| **`drivers__entropy` empty / no entropy device** | RT118x CM33 DTS has no `zephyr,entropy` node; board conf uses timer/test RNG (`CONFIG_TEST_RANDOM_GENERATOR` + `CONFIG_TIMER_RANDOM_GENERATOR`) | Expected for lab S0; not production-grade entropy — see [S1 — ELE TRNG](#s1--ele-trng-remediation-plan-rt118x-cm33) |
+| **`__ASSERT` / assertion-related notes** | Zephyr/Mbed TLS debug or PSA driver paths with `CONFIG_ASSERT=y` | Normal in development builds; review only if linked to a runtime fault |
+
+If the build **fails** (not warns) on `tls.c`, `storage.c`, or `update-module.c`, confirm `west update` pulled mender-mcu @ **`1b2d374`** (`git -C modules/mender-mcu rev-parse HEAD`).
 
 
 ### Build (FRDM CM33)
@@ -628,7 +649,7 @@ mender-artifact read build/mender-mcu-integration/zephyr/zephyr.mender
 
 ### Phase 0b — `native_sim` smoke test (no EVK)
 
-**Status: COMPLETE (2026-06-13).** Verified on this workspace: build, TAP/DHCP/NAT, Hosted Mender auth, and noop-update deployment.
+**Status: COMPLETE (2026-06-13; re-verified 2026-06-17 @ mender-mcu `1b2d374`).** Verified on this workspace: build, TAP/DHCP/NAT, Hosted Mender auth, and noop-update deployment.
 
 Goal: exercise the Mender MCU client, TLS, and Hosted Mender polling on the host **before** RT1180 hardware is available. Uses Zephyr `native_sim` with the **noop-update** module (no MCUboot, no `zephyr-image` OTA). Upstream notes: [mender-mcu-integration/README.md](README.md#native-simulator).
 
@@ -860,7 +881,7 @@ west flash -d build
 
 ### Phase 1 — FRDM flash (CM33 Mender image)
 
-**Status: TBD — bench validation on FRDM-IMXRT1186.** Build scripts and board Kconfig fragment are in-tree; flash/Ethernet/Mender OTA on hardware not yet signed off.
+**Status: Host build verified (2026-06-17 @ mender-mcu `1b2d374`); bench validation TBD.** `./scripts/build-rt1186-frdm.sh` sysbuild links and produces artifacts; flash/Ethernet/Mender OTA on FRDM-IMXRT1186 hardware not yet signed off.
 
 Goal: same as EVK Phase 1 — MCUboot + signed app, serial console, NETC DHCP before Hosted Mender.
 
@@ -1008,7 +1029,7 @@ Use the **user-zephyr-docs** MCP server in Cursor for Zephyr Kconfig, devicetree
 
 ## Upstream contribution
 
-This overlay workspace pins **Zephyr v4.4.0** and the [`DynamicDevices/mender-mcu`](https://github.com/DynamicDevices/mender-mcu) fork (`feature/zephyr-4.4-mbedtls4`) in [`west.yml`](west.yml) for FRDM-IMXRT1186 and Mbed TLS 4.x bring-up.
+This overlay workspace pins **Zephyr v4.4.0**, **Zephyr SDK 1.0.1**, and the [`DynamicDevices/mender-mcu`](https://github.com/DynamicDevices/mender-mcu) fork (branch `feature/zephyr-4.4-mbedtls4`, commit **`1b2d374`**) in [`west.yml`](west.yml) for FRDM-IMXRT1186 and Mbed TLS 4.x bring-up.
 
 The **module changes** intended for `mendersoftware/mender-mcu` are developed on that fork branch with **no breaking changes for Zephyr v4.2.0**: `storage.c` and `update-module.c` use `ZEPHYR_VERSION_CODE` guards (`fs/nvs.h` vs `kvss/nvs.h`, `FIXED_PARTITION_*` vs `PARTITION_*`); `tls.c` keeps `MBEDTLS_VERSION_NUMBER` guards for Mbed TLS 3.x and 4.x. Integration-app-only Kconfig (`PSA_WANT_*`, etc.) stays in this repo’s `prj.conf`, not in the module.
 
@@ -1023,10 +1044,11 @@ Track progress with the **[Zephyr testing plan](#zephyr-testing-plan)** checkbox
 |------|--------------|-------|
 | West workspace + dependencies | Prerequisites | Done |
 | Host sysbuild + artifact | Phase 0 | Done |
-| `native_sim` Mender smoke + noop OTA | Phase 0b | **Done** (2026-06-13) — build, DHCP, accept, noop deploy |
+| `native_sim` Mender smoke + noop OTA | Phase 0b | **Done** (2026-06-13; re-verified 2026-06-17 @ `1b2d374`) — build, DHCP, accept, noop deploy |
 | vemu nRF5340 build/run (no network) | vemu | Done (limited — use Phase 0b for Hosted Mender) |
+| FRDM host sysbuild + artifact | Phase 0 / 1F | **Done** (2026-06-17 @ `1b2d374`) — `./scripts/build-rt1186-frdm.sh` links; hardware flash **TBD** |
 | EVK flash + serial | Phase 1 | **TBD** — pending MIMXRT1180-EVK arrival |
-| FRDM flash + serial | Phase 1 | **TBD** — FRDM-IMXRT1186 (build scripts + board conf ready) |
+| FRDM flash + serial | Phase 1 | **TBD** — host build verified; bench not started |
 | Ethernet DHCP | Phase 1 | **TBD** — pending EVK |
 | Hosted Mender accept + OTA | Phase 2 | **TBD** — pending EVK |
 | MCUboot swap on deploy | Phase 2.6 | **TBD** — pending EVK |
@@ -1038,10 +1060,9 @@ Track progress with the **[Zephyr testing plan](#zephyr-testing-plan)** checkbox
 1. When **MIMXRT1180-EVK** arrives, run **Phase 1** (flash, serial, Ethernet/DHCP).
 2. Complete **Phase 2** on RT1180 EVK (accept device, upload `zephyr.mender`, deploy, confirm swap). Phase 0b on `native_sim` already validated client auth and noop OTA on the host.
 3. When needed, run **Phase 3** in `build-mbox` — then reflash Mender image before resuming Phase 2.
-4. Push local commits when ready to share the RT1180 port upstream or to a fork remote.
+4. When FRDM hardware is available, run **Phase 1F** (flash, serial, Ethernet/DHCP) — host sysbuild already verified @ `1b2d374`.
+5. Push local commits when ready to share the RT1180 port upstream or to a fork remote.
 
 ## Commits
 
-| Repo | Commit | Notes |
-|------|--------|-------|
-| `mender-mcu-integration/` | `76ebea3` | RT1180 board conf + `.gitignore` for local secrets/tools/build; **local, unpushed** (`main` ahead of `origin/main` by 1) |
+Track overlay-repo history on [DynamicDevices/mender-rt1180-zephyr](https://github.com/DynamicDevices/mender-rt1180-zephyr). Module changes belong on the [mender-mcu fork](https://github.com/DynamicDevices/mender-mcu/tree/feature/zephyr-4.4-mbedtls4) branch — do not commit `modules/mender-mcu/` in this overlay (west-managed checkout).

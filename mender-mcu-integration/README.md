@@ -19,7 +19,7 @@ Zephyr Module, with configurations for some boards to choose from.
 
 ## i.MX RT118x (CM33) port — EVK and FRDM
 
-Work-in-progress Mender OTA notes for **MIMXRT1180-EVK** and **FRDM-IMXRT1186** (CM33) are in [PROJECT-NOTES.md](PROJECT-NOTES.md) (build, flash, Hosted Mender, status, **EdgeLock ELE security roadmap**, and **[CRA technical mapping](PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping)** — engineering preparedness, not legal sign-off). For a fresh West workspace, see the [repo README](../README.md).
+Work-in-progress Mender OTA notes for **MIMXRT1180-EVK** and **FRDM-IMXRT1186** (CM33) are in [PROJECT-NOTES.md](PROJECT-NOTES.md) (build, flash, Hosted Mender, **mender-mcu fork pin @ `1b2d374`**, expected build warnings, status, **EdgeLock ELE security roadmap**, and **[CRA technical mapping](PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping)** — engineering preparedness, not legal sign-off). Requires **Zephyr v4.4.0** and **SDK 1.0.1**. For a fresh West workspace, see the [repo README](../README.md).
 
 ## Get started
 
@@ -142,8 +142,18 @@ with many contributions from the community. Thanks
 ### FRDM-IMXRT1186 quick build
 
 ```bash
-west update   # Zephyr v4.4.0+ required
+west update   # Zephyr v4.4.0 + mender-mcu fork @ 1b2d374
 ./scripts/build-rt1186-frdm.sh
 ```
 
-Board: `frdm_imxrt1186/mimxrt1186/cm33`. See [FRDM vs EVK](PROJECT-NOTES.md#frdm-imxrt1186-vs-mimxrt1180-evk) in PROJECT-NOTES.
+Board: `frdm_imxrt1186/mimxrt1186/cm33`. Host build verified 2026-06-17; see [Expected build warnings](PROJECT-NOTES.md#expected-build-warnings) and [FRDM vs EVK](PROJECT-NOTES.md#frdm-imxrt1186-vs-mimxrt1180-evk) in PROJECT-NOTES.
+
+### native_sim quick test
+
+```bash
+sudo ./scripts/run-native-sim-network.sh start   # separate terminal
+./scripts/build-native-sim.sh
+./scripts/test-mender-native-sim.sh --run-only
+```
+
+See [Phase 0b](PROJECT-NOTES.md#phase-0b--native_sim-smoke-test-no-evk) in PROJECT-NOTES.

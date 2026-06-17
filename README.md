@@ -6,6 +6,15 @@ Public overlay for [mender-mcu-integration](https://github.com/mendersoftware/me
 
 West dependencies (`zephyr/`, `modules/`, `bootloader/`) are **not** in this repository. Clone upstream, apply this overlay, then run `west update`.
 
+## Prerequisites (this overlay)
+
+| Requirement | Notes |
+|-------------|-------|
+| **Zephyr SDK 1.0.1** | Required for Zephyr **v4.4.0** — download [`zephyr-sdk-1.0.1_*_gnu.tar.xz`](https://github.com/zephyrproject-rtos/sdk-ng/releases/tag/v1.0.1), run `setup.sh -c -t arm-zephyr-eabi`, set `ZEPHYR_SDK_INSTALL_DIR`. |
+| **mender-mcu fork** | [`west.yml`](mender-mcu-integration/west.yml) pins [`DynamicDevices/mender-mcu`](https://github.com/DynamicDevices/mender-mcu) branch `feature/zephyr-4.4-mbedtls4` @ **`1b2d374`** (Mbed TLS 4.x `tls.c` + Zephyr 4.2/4.4 version guards in storage/update-module). Run `west update` after pulling manifest changes. |
+
+Toolchain details, expected CMake warnings, secrets, and full build/flash procedure: **[mender-mcu-integration/PROJECT-NOTES.md](mender-mcu-integration/PROJECT-NOTES.md)**.
+
 ## Quick start (fresh workspace)
 
 ```bash
@@ -27,7 +36,7 @@ Full procedure (SDK, secrets, build, flash, Mender): **[mender-mcu-integration/P
 
 ## Simulator testing (Phase 0b)
 
-**Status: COMPLETE (2026-06-13).** Hosted Mender validation without RT1180 hardware: Zephyr `native_sim` with the noop-update module (no MCUboot, no `zephyr-image` OTA). Verified end-to-end: build, TAP/DHCP/NAT, accept pending device, noop deployment.
+**Status: COMPLETE (2026-06-13; re-verified 2026-06-17 @ mender-mcu `1b2d374`).** Hosted Mender validation without RT1180 hardware: Zephyr `native_sim` with the noop-update module (no MCUboot, no `zephyr-image` OTA). Verified end-to-end: build, TAP/DHCP/NAT, accept pending device, noop deployment.
 
 From the West workspace root (after `west update` and local `mender-local.conf` — see PROJECT-NOTES):
 
@@ -49,9 +58,11 @@ Troubleshooting (401 pending accept, 409 overlapping deploys, network hang): **[
 
 NXP board page: [FRDM-IMXRT1186](https://www.nxp.com/design/design-center/development-boards-and-designs/FRDM-IMXRT1186). Same RT118x family as the **MIMXRT1180-EVK** (dual CM33/CM7, NETC Ethernet, MCUboot external flash), but Freedom form factor with on-board **MCU-Link** (no separate debug probe). Zephyr board: `frdm_imxrt1186/mimxrt1186/cm33`. Mender **device type**: `frdm_imxrt1186`.
 
-**Requires Zephyr v4.4.0+** (`frdm_imxrt1186` is not in v4.2). After pulling this repo, run `west update` from the West workspace root.
+**Requires Zephyr v4.4.0+** and **Zephyr SDK 1.0.1** (`frdm_imxrt1186` is not in v4.2). After pulling this repo, run `west update` from the West workspace root (manifest pins mender-mcu fork @ `1b2d374`).
 
-Prerequisites: `mender-mcu-integration/mender-local.conf`, Zephyr SDK per [PROJECT-NOTES — Prerequisites](mender-mcu-integration/PROJECT-NOTES.md#prerequisites). Full EVK vs FRDM table: [PROJECT-NOTES](mender-mcu-integration/PROJECT-NOTES.md#frdm-imxrt1186-vs-mimxrt1180-evk).
+**Host build verified (2026-06-17 @ `1b2d374`):** sysbuild links `zephyr.elf` and produces `zephyr.mender`; hardware flash/Ethernet/Mender OTA **TBD**.
+
+Prerequisites: `mender-mcu-integration/mender-local.conf`, SDK per [PROJECT-NOTES — Prerequisites](mender-mcu-integration/PROJECT-NOTES.md#prerequisites). Expected CMake warnings: [PROJECT-NOTES — Build warnings](mender-mcu-integration/PROJECT-NOTES.md#expected-build-warnings). Full EVK vs FRDM table: [PROJECT-NOTES](mender-mcu-integration/PROJECT-NOTES.md#frdm-imxrt1186-vs-mimxrt1180-evk).
 
 From the **West workspace root** (this repo when used as the top-level checkout):
 
@@ -81,7 +92,7 @@ west build -p --sysbuild \
 
 ## Hardware bringup (Phase 1+)
 
-**Status: TBD on hardware.** EVK pending arrival; **FRDM-IMXRT1186** build/deploy scripts and board conf are in-tree (Zephyr ≥ v4.4). Phase 0b (`native_sim`) is complete; **Phase 1+ on physical RT118x boards has not been completed on the bench.** Flash, Ethernet, Hosted Mender OTA, and CM7 phases will be run when the board is available. See **[PROJECT-NOTES — Phase 1](mender-mcu-integration/PROJECT-NOTES.md#phase-1--evk-flash-cm33-mender-image)**.
+**Status: TBD on hardware.** EVK pending arrival; **FRDM-IMXRT1186** host sysbuild verified @ mender-mcu `1b2d374` (Zephyr v4.4.0, SDK 1.0.1). Phase 0b (`native_sim`) is complete; **Phase 1+ on physical RT118x boards has not been completed on the bench.** Flash, Ethernet, Hosted Mender OTA, and CM7 phases will be run when the board is available. See **[PROJECT-NOTES — Phase 1](mender-mcu-integration/PROJECT-NOTES.md#phase-1--evk-flash-cm33-mender-image)** and **[Upstream contribution](mender-mcu-integration/PROJECT-NOTES.md#upstream-contribution)**.
 
 When lab hardware is available, use **`scripts/create-rt1180-deployment.sh`** (EVK) or **`scripts/create-rt1186-frdm-deployment.sh`** (FRDM) (static group **`rt1180-lab`**) to upload `zephyr.mender` — see [PROJECT-NOTES — rt1180-lab](mender-mcu-integration/PROJECT-NOTES.md#device-groups--mimxrt1180_evk--rt1180-lab).
 
@@ -96,7 +107,7 @@ When lab hardware is available, use **`scripts/create-rt1180-deployment.sh`** (E
 | `mender-mcu-integration/PROJECT-NOTES.md` | RT1180 workspace, build, flash, and OTA notes |
 | `mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.conf` | EVK board Kconfig fragment |
 | `mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33.conf` | FRDM board Kconfig fragment |
-| `mender-mcu-integration/west.yml` | West manifest (Zephyr v4.4.0 + mender-mcu; FRDM board) |
+| `mender-mcu-integration/west.yml` | West manifest (Zephyr v4.4.0 + mender-mcu fork @ `1b2d374`; FRDM board) |
 | `mender-mcu-integration/README.md` | Pointer to PROJECT-NOTES for RT1180 |
 | `mender-mcu-integration/.gitignore` | Local secrets and build paths |
 | `scripts/` | Host helpers — Phase 0b: `build-native-sim.sh`, `run-native-sim-network.sh`, `test-mender-native-sim.sh`, `create-native-sim-deployment.sh`; RT118x CM33: `build-rt1180-evk.sh`, `build-rt1186-frdm.sh`, `create-rt1180-deployment.sh`, `create-rt1186-frdm-deployment.sh`; vemu: `test-vemu.sh` — see [PROJECT-NOTES — Scripts inventory](mender-mcu-integration/PROJECT-NOTES.md#scripts-inventory) |
