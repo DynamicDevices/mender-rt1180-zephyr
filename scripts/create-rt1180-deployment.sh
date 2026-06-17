@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TBD until MIMXRT1180-EVK arrives — upload zephyr-image artifact and create one Hosted Mender deployment.
+# Upload zephyr-image artifact (EVK or FRDM — set MENDER_DEVICE_TYPE / MENDER_BUILD_DIR) and create one Hosted Mender deployment.
 # Requires Phase 0 sysbuild with CONFIG_MENDER_ARTIFACT_GENERATE=y (see PROJECT-NOTES build section).
 # Reads PAT from mender-mcu-integration/mender-pat-local.conf (gitignored). No secrets in this file.
 set -euo pipefail
@@ -32,9 +32,9 @@ Options:
 
 Environment:
   MENDER_ARTIFACT_PATH   Default: \${ROOT}/build/mender-mcu-integration/zephyr/zephyr.mender
-  MENDER_DEVICE_TYPE     Default: mimxrt1180_evk
+  MENDER_DEVICE_TYPE     Default: mimxrt1180_evk (use frdm_imxrt1186 for FRDM build)
   MENDER_DEPLOY_TARGET   device | device_type | group (default: group)
-  MENDER_DEVICE_GROUP    Default: rt1180-lab (static group; appears when first device is assigned)
+  MENDER_DEVICE_GROUP    Default: rt1180-lab (EVK + FRDM CM33; separate device types, same lab group)
   MENDER_DEVICE_ID       Required when MENDER_DEPLOY_TARGET=device
   MENDER_ARTIFACT_NAME   Override artifact name (default: read from .mender via mender-artifact)
   MENDER_DEPLOYMENT_NAME Deployment name (default: same as artifact name)
@@ -46,6 +46,7 @@ Build artifact (from West workspace root):
 
 Examples:
   ./scripts/create-rt1180-deployment.sh
+  ./scripts/create-rt1186-frdm-deployment.sh  # FRDM (build-frdm-rt1186/)
   MENDER_DEPLOY_TARGET=device MENDER_DEVICE_ID=<uuid> ./scripts/create-rt1180-deployment.sh
   MENDER_DEPLOY_TARGET=device_type ./scripts/create-rt1180-deployment.sh
 

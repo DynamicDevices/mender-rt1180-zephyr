@@ -1,6 +1,6 @@
 # Mender MCU OTA — i.MX RT1180 (Zephyr)
 
-Project notes for Mender over-the-air updates on the NXP **i.MX RT1180 EVK** (`mimxrt1180_evk/mimxrt1189/cm33`). This workspace is a West checkout of the upstream [mender-mcu-integration](mender-mcu-integration/) reference app with a local RT1180 board configuration.
+Project notes for Mender over-the-air updates on NXP **i.MX RT118x** boards: **MIMXRT1180-EVK** (`mimxrt1180_evk/mimxrt1189/cm33`) and **FRDM-IMXRT1186** (`frdm_imxrt1186/mimxrt1186/cm33`, CM33 only). This workspace is a West checkout of the upstream [mender-mcu-integration](mender-mcu-integration/) reference app with a local RT1180 board configuration.
 
 Upstream getting-started and native_sim instructions remain in [mender-mcu-integration/README.md](mender-mcu-integration/README.md). Mender MCU module docs: [modules/mender-mcu/README.md](modules/mender-mcu/README.md).
 
@@ -11,6 +11,8 @@ Public repo: https://github.com/DynamicDevices/mender-rt1180-zephyr
 Evaluate **Mender MCU OTA** on the RT1180 CM33 core: MCUboot + swap, Ethernet bring-up, Hosted Mender client, and automatic `zephyr-image` artifact generation at build time.
 
 **Scope (CM33 vs CM7):** RT1180 is dual-core (Cortex-M33 + Cortex-M7). This port targets **CM33 only** — Mender MCU, MCUboot, and Zephyr networking. **CM7 is a separate phase** and out of scope for initial bring-up.
+
+**Security (project requirement):** RT118x targets (**EVK** and **FRDM**) must support on-die **EdgeLock Secure Enclave (ELE)** for cryptographic device identity on the production path — not NVS-in-flash alone. Lab bring-up may use NVS auth keys temporarily; see [Security / EdgeLock](#security--edgelock).
 
 ## Linux on RT1180
 
@@ -54,7 +56,7 @@ West topdir is this directory (parent of `mender-mcu-integration/`). Manifest: `
 ```
 ./                          # West workspace root
 ├── .west/                  # West metadata
-├── zephyr/                 # Zephyr v4.2.0 (west import)
+├── zephyr/                 # Zephyr v4.4.0 (west import; `frdm_imxrt1186` requires ≥ v4.4)
 ├── bootloader/mcuboot/     # MCUboot (west import)
 ├── modules/mender-mcu/     # Mender MCU Zephyr module
 ├── mender-mcu-integration/ # Reference app + west manifest (git repo)
@@ -82,7 +84,10 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 | `scripts/run-native-sim-network.sh` | Start/stop/status TAP + DHCP + NAT using `tools/net-tools/nat.conf` (`cd` into net-tools; `stop` passes `--config nat.conf`) |
 | `scripts/test-mender-native-sim.sh` | Build (optional) + run `zephyr.exe` Mender smoke test; expects TAP from `run-native-sim-network.sh` |
 | `scripts/create-native-sim-deployment.sh` | Build noop-update artifact (`device_type` `native_sim`) and create **one** Hosted Mender deployment (`MENDER_DEPLOY_TARGET=device` \| `device_type` \| `group`; default group **`simulator`**) |
-| `scripts/create-rt1180-deployment.sh` | Upload `zephyr.mender` (`device_type` `mimxrt1180_evk`) and create **one** deployment (**TBD** until EVK; default group **`rt1180-lab`**) |
+| `scripts/build-rt1180-evk.sh` | Sysbuild Mender for EVK CM33 (default `build/`) |
+| `scripts/build-rt1186-frdm.sh` | Sysbuild Mender for FRDM-IMXRT1186 CM33 (default `build-frdm-rt1186/`) |
+| `scripts/create-rt1180-deployment.sh` | Upload `zephyr.mender` (default `device_type` `mimxrt1180_evk`, `build/`) — **one** deployment (default group **`rt1180-lab`**) |
+| `scripts/create-rt1186-frdm-deployment.sh` | Same as above for FRDM (`device_type` `frdm_imxrt1186`, `build-frdm-rt1186/`) |
 | `scripts/test-vemu.sh` | Build `hello_world` for nRF5340 and run headless **vemu** (or print browser load steps) |
 | `scripts/run-vemu-demo.sh` | Build `hello_world` for nRF5340 and print vemulator.com load instructions |
 | `scripts/build-mender-vemu.sh` | Sysbuild Mender app for `nrf5340dk/nrf5340/cpuapp` (noop module; uses `boards/nrf5340dk_nrf5340_cpuapp.conf`) |
@@ -92,7 +97,7 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 
 | Requirement | Notes |
 |-------------|-------|
-| **Zephyr SDK 0.17.4** | `arm-zephyr-eabi` toolchain; set `ZEPHYR_SDK_INSTALL_DIR` |
+| **Zephyr SDK 1.0.x** | Required for Zephyr **v4.4.0** (`FindHostTools.cmake`); download **`zephyr-sdk-1.0.1_*_gnu.tar.xz`** from [SDK 1.0.1](https://github.com/zephyrproject-rtos/sdk-ng/releases/tag/v1.0.1), run `setup.sh -c -t arm-zephyr-eabi` (or `-t all`), set `ZEPHYR_SDK_INSTALL_DIR` to the install dir. Plain (non-`_gnu`) tarballs are not the supported ng layout. SDK 0.17.4 was used with v4.2.0 EVK-only bring-up. |
 | **West + Zephyr Python env** | `pip install west`; activate Zephyr venv per [Zephyr getting started](https://docs.zephyrproject.org/latest/develop/getting_started/index.html) |
 | **Python packages** | `pyelftools`, `intelhex`, `cbor2` (MCUboot signing / artifact steps) |
 | **mender-artifact** | On `PATH` as `.tools/bin/mender-artifact` (local build or install into workspace `.tools/`) |
@@ -122,12 +127,218 @@ west build -p --sysbuild \
   mender-mcu-integration \
   -- \
   -DEXTRA_CONF_FILE=mender-mcu-integration/mender-local.conf \
-  -DCONFIG_MENDER_ARTIFACT_NAME=dev-1
+  -DCONFIG_MENDER_ARTIFACT_NAME="dev-1"
 ```
 
 - **Sysbuild** builds MCUboot (`SB_CONFIG_BOOTLOADER_MCUBOOT=y` in `mender-mcu-integration/sysbuild-mcuboot.conf`) and the application.
 - **Board fragment** `mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.conf` is applied automatically for this board target.
 - **`mender-local.conf`** supplies Hosted Mender tenant token and server selection at build time.
+
+## FRDM-IMXRT1186 vs MIMXRT1180-EVK
+
+| Topic | MIMXRT1180-EVK | FRDM-IMXRT1186 |
+|-------|-----------------|----------------|
+| Zephyr board string | `mimxrt1180_evk/mimxrt1189/cm33` | `frdm_imxrt1186/mimxrt1186/cm33` |
+| SoC | MIMXRT1189 | MIMXRT1186 |
+| Mender device type | `mimxrt1180_evk` | `frdm_imxrt1186` |
+| Board conf (auto) | `boards/mimxrt1180_evk_mimxrt1189_cm33.conf` | `boards/frdm_imxrt1186_mimxrt1186_cm33.conf` |
+| Default build dir | `build/` | `build-frdm-rt1186/` |
+| LinkServer probe | `MIMXRT1189xxxxx:MIMXRT1180-EVK` | `MIMXRT1186xxxxx:FRDM-IMXRT1186` |
+| Console UART | LPUART1 (MCU-Link J53) | LPUART1 (on-board MCU-Link) |
+| Main RAM (CM33) | EVK HyperRAM layout | 8 MiB HyperRAM @ `0x38000000` (`zephyr,sram`) |
+| External NOR | W25Q128 on FlexSPI (EVK `mimxrt1180_evk.dtsi`) | W25Q128JV on FlexSPI2 @ `0x04000000` |
+| MCUboot partitions | 128 KiB boot, 7 MiB ×2 slots, ~2 MiB storage | Same layout in `frdm_imxrt1186.dtsi` |
+| NETC Ethernet | Multiple switch ports (see EVK doc) | `switch_port0` + `switch_port2` (1 Gbps TSN ports); same NETC Kconfig as EVK |
+| Zephyr upstream focus | NXP superset / full platform support | Supported; some features may lag EVK ([board doc](https://docs.zephyrproject.org/latest/boards/nxp/frdm_imxrt1186/doc/index.html)) |
+| Lab Mender group | **`rt1180-lab`** (shared name; **do not** mix device types in one deployment target) | Same group name OK if deployments target **`device_type`** or per-device UUID |
+
+**Zephyr version:** upstream `frdm_imxrt1186` landed in Zephyr **v4.4.0**. This manifest pins **`revision: v4.4.0`** in `west.yml` (was v4.2.0 for EVK-only bring-up). Run `west update` after pulling manifest changes.
+
+### Build (FRDM CM33)
+
+```bash
+./scripts/build-rt1186-frdm.sh
+# or manually from West workspace root:
+west build -p --sysbuild \
+  -b frdm_imxrt1186/mimxrt1186/cm33 \
+  -d build-frdm-rt1186 \
+  mender-mcu-integration \
+  -- \
+  -DEXTRA_CONF_FILE=mender-mcu-integration/mender-local.conf \
+  -DCONFIG_MENDER_ARTIFACT_NAME="dev-1"
+```
+
+Artifact device type: **`frdm_imxrt1186`**. Deploy with `./scripts/create-rt1186-frdm-deployment.sh` (or `MENDER_DEVICE_TYPE=frdm_imxrt1186 MENDER_BUILD_DIR=build-frdm-rt1186 ./scripts/create-rt1180-deployment.sh`).
+
+### Flash (FRDM CM33)
+
+After sysbuild, from workspace root:
+
+```bash
+west flash -d build-frdm-rt1186
+```
+
+Use LinkServer (default) or J-Link per `zephyr/boards/nxp/frdm_imxrt1186/board.cmake`. Reset after flash; serial **115200 8N1** on MCU-Link. CM33: jumper **J60** = **1:OFF 2:OFF 3:ON**. Ethernet: cable to **`swp0` or `swp2`** (not `eth0`/`swp4`). No devicetree overlay is required for Mender storage — upstream `storage_partition` matches the EVK sizing model.
+
+## Security / EdgeLock
+
+Both **MIMXRT1180-EVK** and **FRDM-IMXRT1186** share the same on-die **EdgeLock Secure Enclave (ELE)** subsystem (RT1180 family) — not the separate **HSE** block on some other NXP MCUs. **Board choice does not change the security roadmap.**
+
+### Project requirement
+
+RT118x targets (**EVK** + **FRDM**) must support on-die **ELE** for **cryptographic device identity** on the production path — not NVS-in-flash alone. Lab bring-up may use NVS auth keys temporarily (current Mender default); shipping configuration must move device-auth private keys into ELE opaque storage with hardware entropy — not plaintext DER in external NOR.
+
+### Current state (lab)
+
+| Area | Today |
+|------|--------|
+| **ELE (Zephyr SoC)** | ELE **ping** and **TRDC** access control handled by upstream RT118x SoC driver — no application keystore, no `nxp,ele-trng` on CM33 DTS yet |
+| **Mender device-auth** | Auth keys generated in RAM; stored as DER in **NVS** on `storage_partition` (external flash, after MCUboot slots) |
+| **Entropy** | **Timer RNG workaround** in board conf (`CONFIG_TEST_RANDOM_GENERATOR` + `CONFIG_TIMER_RANDOM_GENERATOR`) — CM33 DTS has no `zephyr,entropy` node; see [RT1180 board configuration notes](#rt1180-board-configuration-notes) |
+| **MCUboot image key** | Host PEM at build time — **separate** from Mender device identity |
+| **Tenant token** | Kconfig at build time (`mender-local.conf`) — **separate** from device identity key |
+
+### Target architecture (ELE-backed device auth)
+
+| Layer | Target |
+|-------|--------|
+| **Key storage** | **PSA opaque keys** in ELE keystore — non-exportable private key; sign devauth/TLS payloads in-enclave |
+| **Entropy** | **ELE TRNG** for key generation when Zephyr wires `nxp,ele-trng` on RT118x CM33 DTS |
+| **Manufacturing** | **SPSDK** / [AN14861](https://docs.nxp.com/bundle/AN14861/page/topics/introduction.html) OEM provisioning; **EdgeLock 2GO** for fleet key management where applicable |
+| **Mender MCU** | Platform layer: storage + TLS signing via **PSA/ELE**, not plaintext DER in NVS — extension points `MENDER_PLATFORM_STORAGE_TYPE_WEAK`, `MENDER_PLATFORM_TLS_TYPE_WEAK` in [`modules/mender-mcu/`](modules/mender-mcu/) |
+| **Out of scope for identity key** | **MCUboot image signing key** (firmware authenticity) and **Hosted Mender tenant token** (server auth) remain separate credentials |
+
+Zephyr `SECURE_STORAGE` (encrypted flash ITS) is a weaker intermediate — still software-visible after decrypt; ELE opaque keys are the production target.
+
+### Phased security plan
+
+| Phase | Goal | Status |
+|-------|------|--------|
+| **S0 — Lab** | NVS auth keys + timer RNG; ELE ping via Zephyr SoC; Hosted Mender auth + OTA (`native_sim` Phase 0b, then EVK/FRDM Phase 1) | Phase 0b **done**; hardware **TBD** |
+| **S1 — ELE TRNG** | Enable hardware entropy when upstream adds `nxp,ele-trng` DTS binding and driver for RT118x CM33 (`CONFIG_ENTROPY_NXP_ELE_TRNG`); drop timer-RNG workaround | Blocked on upstream NXP/Zephyr |
+| **S2 — PSA crypto driver** | Zephyr PSA Crypto integration with NXP [`psa_crypto_driver`](https://github.com/NXP/psa_crypto_driver) (**ELE_S4XX** backend) | Not started |
+| **S3 — Mender platform** | Opaque ELE key storage + PSA sign for devauth in mender-mcu platform layer | Not started |
+| **S4 — Manufacturing** | AN14861 provisioning workflow, lifecycle policy, EdgeLock 2GO integration; remove timer RNG | Not started |
+
+S1–S4 are independent of the [Zephyr testing plan](#zephyr-testing-plan) OTA phases (0–4) but should complete before any production fleet rollout.
+
+### Warnings
+
+- **Lifecycle transitions are largely irreversible** — do not advance ELE provisioning, OEM key import, or secure-boot enablement on **sole lab boards** without explicit NXP guidance; a mis-step can brick secure-boot or key-storage paths on that unit.
+- **Do not experiment on your only EVK/FRDM** — keep spare units or documented rollback before provisioning trials.
+- **Secure boot vs Mender identity** — MCUboot **image signing key** and Mender **device identity key** (target: ELE) serve different roles; do not conflate or reuse.
+- **Tenant token** is server-side auth at build time — not a substitute for per-device ELE identity.
+
+### References
+
+| Topic | Link |
+|-------|------|
+| OEM key provisioning (RT1180) | [AN14861 — Secure OEM Key Provisioning](https://docs.nxp.com/bundle/AN14861/page/topics/introduction.html) |
+| NXP EdgeLock program | [EdgeLock Secure Enclave](https://www.nxp.com/products/nxp-product-information/nxp-product-programs/edgelock-secure-enclave:EDGELOCK-SECURE-ENCLAVE) |
+| NXP PSA crypto driver | [NXP/psa_crypto_driver](https://github.com/NXP/psa_crypto_driver) |
+| Zephyr EVK board | [mimxrt1180_evk](https://docs.zephyrproject.org/latest/boards/nxp/mimxrt1180_evk/doc/index.html) |
+| Zephyr FRDM board | [frdm_imxrt1186](https://docs.zephyrproject.org/latest/boards/nxp/frdm_imxrt1186/doc/index.html) |
+| Mender MCU module | [`modules/mender-mcu/README.md`](modules/mender-mcu/README.md) — platform auth, TLS, and storage extension points |
+
+## Cyber Resilience Act (CRA) — technical mapping
+
+**Disclaimer:** Engineering preparedness notes only — **not legal advice** and **not a conformity assessment or CE marking sign-off**. Product classification, support-period justification, technical documentation (Annex VII), and Article 14 incident reporting require qualified legal/regulatory review for your specific product and go-to-market.
+
+**Scope:** RT118x CM33 firmware built from this workspace (Zephyr + MCUboot + Mender MCU → Hosted Mender). Companion MPU Linux (e.g. i.MX 93 in HMS designs) is a separate software stack and OTA path.
+
+### Official references
+
+| Topic | Source |
+|-------|--------|
+| CRA regulation | [Regulation (EU) 2024/2847](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32024R2847) |
+| Essential requirements | [Annex I](https://www.craact.eu/regulation/cra/annex/0) (Part I product properties; Part II vulnerability handling) |
+| Manufacturer obligations | [Article 13](https://www.digitalacts.eu/regulation/cra/article/13/obligations-of-manufacturers) |
+| Vulnerability / incident reporting | [Article 14](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32024R2847) (see also [Zephyr CRA page — reporting timelines](https://docs.zephyrproject.org/latest/security/standards/cyber-resilience-act.html#what-are-the-vulnerability-reporting-obligations)) |
+| Zephyr integrator guidance | [EU Cyber Resilience Act (CRA) — Zephyr Project](https://docs.zephyrproject.org/latest/security/standards/cyber-resilience-act.html) |
+| Mender security model | [Security overview](https://docs.mender.io/overview/security) |
+| Mender OTA / deployments | [Deployment](https://docs.mender.io/overview/deployment), [Inventory](https://docs.mender.io/overview/inventory) |
+| Mender MCU (Zephyr) | [Mender MCU troubleshooting](https://docs.mender.io/troubleshoot/mender-mcu) |
+| Zephyr SBOM | [`west spdx`](https://docs.zephyrproject.org/latest/security/sbom.html) |
+| Zephyr CVE / PSIRT | [Security vulnerability reporting](https://docs.zephyrproject.org/latest/security/reporting.html), [Vulnerabilities](https://docs.zephyrproject.org/latest/security/vulnerabilities.html) |
+
+**Key CRA dates (manufacturers):** vulnerability/incident reporting obligations from **11 September 2026**; full essential-requirements application for products placed on the market from **11 December 2027** ([Zephyr CRA summary](https://docs.zephyrproject.org/latest/security/standards/cyber-resilience-act.html#overview)).
+
+### CRA obligations — technical summary (not legal interpretation)
+
+Annex I Part I expects products with digital elements to ship **secure by default** (sensible defaults, reset-to-secure-state where applicable), minimise attack surface, protect data in transit/at rest where relevant, and deliver **security updates** for a declared **support period** (typically **≥ 5 years** unless a shorter period is justified for the intended lifetime — [Recital / Art. 13(8)](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32024R2847)).
+
+Annex I Part II expects a **vulnerability handling process**: identify/document components (including **SBOM** in a commonly used machine-readable format), receive and remediate reports, distribute **security updates** without undue delay (free to users unless tailor-made B2B contract says otherwise), and separate security fixes from feature updates where technically feasible ([Annex I Part II](https://www.craact.eu/regulation/cra/annex/0)).
+
+**Article 14** adds **notification timelines** when you become aware of an **actively exploited vulnerability** or **severe incident** affecting your product (early warning **24 h**, follow-up **72 h**, final report per CRA — [Zephyr CRA table](https://docs.zephyrproject.org/latest/security/standards/cyber-resilience-act.html#what-are-the-vulnerability-reporting-obligations)). **Article 13(6)** also expects upstream reporting when you find issues in integrated components (e.g. Zephyr) and sharing fixes where you develop them.
+
+Classification of the **final product** (default vs important vs critical) drives conformity assessment depth; using networking/crypto in Zephyr does not by itself reclassify a product ([Zephyr CRA — core functionality](https://docs.zephyrproject.org/latest/security/standards/cyber-resilience-act.html#which-category-does-my-product-belong-to)). An industrial Ethernet edge device built on RT118x is likely **default** unless its *core* function matches an Annex III/IV category — confirm per product.
+
+### Current technical posture (this project)
+
+| Area | State | CRA relevance |
+|------|--------|---------------|
+| **OTA channel** | Hosted Mender US; TLS 1.2; device auth via generated keypair | Secure update distribution (Annex I Part II) |
+| **Phase 0b (`native_sim`)** | **Done** — client auth, inventory polling, noop deployment | Validates Mender integration only; **no** MCUboot / `zephyr-image` path |
+| **RT118x hardware OTA** | **TBD** (Phases 1–2) | MCUboot swap + signed `zephyr-image` not yet bench-proven on EVK/FRDM |
+| **Boot / image integrity** | MCUboot + RSA-2048 image signing; swap-with-move rollback | Addresses tampered firmware at boot; key is **demo** `root-rsa-2048.pem` |
+| **Mender artifact signing** | **Not supported** on Mender MCU client ([docs](https://docs.mender.io/troubleshoot/mender-mcu)) | Payload integrity relies on **MCUboot** signature, not Mender `ArtifactVerifyKey` |
+| **Device identity** | Lab: DER private key in **NVS** flash | Fails secure-by-default / key-protection expectations for production |
+| **Entropy** | `CONFIG_TEST_RANDOM_GENERATOR` + timer RNG workaround | Unacceptable for production TLS/keygen; blocks “state of the art” crypto claims |
+| **Inventory** | Mender client reports build/network attributes (`CONFIG_MENDER_CLIENT_INVENTORY_*`) | Fleet visibility; **not** a substitute for SBOM |
+| **SBOM** | Not generated in build scripts | Annex I Part II gap |
+| **Zephyr baseline** | Manifest pins **v4.4.0** ([`west.yml`](west.yml)) | Need LTS/backport policy aligned to declared support period |
+| **Support period / risk assessment / Art. 14 process** | Not documented for a shipping product | Organisational gaps |
+| **EdgeLock roadmap** | S0 lab → S4 manufacturing ([above](#security--edgelock)) | Production path for identity + TRNG |
+
+### Gap analysis matrix
+
+| CRA theme | What we have | Gap | Recommended action |
+|-----------|--------------|-----|-------------------|
+| **Secure by default** | MCUboot enforced boot; TLS to Mender; no open debug in `prj.conf` | Demo signing key; weak RNG; tenant token baked in Kconfig; NVS-exportable devauth key | Production MCUboot key in HSM/offline signer; **S1–S3** ELE TRNG + opaque devauth key; per-device or secure provisioning for tenant credentials |
+| **Security updates (OTA)** | Mender MCU + `zephyr-image` artifact pipeline; rollback via MCUboot | Hardware path unproven; Micro tier (no phased rollout) | Complete **Phase 2** on EVK/FRDM; document update SLO; upgrade Hosted tier or use API if staged rollout needed |
+| **Vulnerability handling** | Zephyr PSIRT/CVE exist; Mender security disclosure channel | No product process: triage, VEX, fix SLAs, customer comms | Register [Zephyr Vulnerability Alert Registry](https://docs.zephyrproject.org/latest/security/security-overview.html); define watch on Zephyr/NXP/Mender advisories; tie to Mender deployments |
+| **SBOM** | `west spdx` available upstream | No CI SBOM per release; MCUboot SBOM separate; raw SPDX lacks CPE/PURL | Add release job: `west spdx` on app **and** MCUboot builds; enrich IDs; archive per `CONFIG_MENDER_ARTIFACT_NAME` |
+| **Component / fleet inventory** | Mender inventory + device groups (`simulator`, `rt1180-lab`) | Inventory ≠ SBOM; limited on Micro tier | Publish `artifact_name`, Zephyr `KERNEL_VERSION`, git SHA via inventory; map to SBOM version |
+| **Incident / exploit reporting (Art. 14)** | — | No runbook or CSIRT contact | Legal + engineering runbook before **Sep 2026**; define “awareness” triggers |
+| **Support period** | — | Not stated | Document ≥5 y (or justified shorter) maintenance window; pin Zephyr LTS or explicit fork/backport policy |
+| **Upstream reporting (Art. 13(6))** | — | No formal Zephyr/NXP reporting path | Use [vulnerabilities@zephyrproject.org](https://docs.zephyrproject.org/latest/security/reporting.html) / NXP PSIRT as appropriate |
+| **Hardening / config review** | `CONFIG_ASSERT`, warnings-as-errors, Mbed TLS user config | No `west build -t hardenconfig`; no threat model | Run [hardenconfig](https://docs.zephyrproject.org/latest/security/hardening.html) on RT118x defconfig; record accepted risks |
+| **Wireless / RED** | RT118x port is **Ethernet (NETC)** only | RED radio cybersecurity is N/A for this MCU image; wireless on another SoC is out of scope here | Track radio module compliance separately if product includes Wi-Fi/BT |
+
+### How Mender helps (update & vulnerability **process** — not compliance by itself)
+
+Mender addresses CRA themes around **secure distribution** and **operational vulnerability response** when used as part of a broader ISMS — it does not satisfy SBOM, support-period declaration, or Article 14 reporting on its own.
+
+1. **Security updates without physical access** — Devices poll Hosted Mender (`CONFIG_MENDER_CLIENT_UPDATE_POLL_INTERVAL`); accepted devices receive `zephyr-image` deployments. Meets the *mechanism* side of Annex I Part II (“securely distribute updates”) once hardware OTA is validated.
+2. **Controlled rollout** — Device groups (`simulator`, `rt1180-lab`) and deploy targets (`device`, `device_type`, `group`) limit blast radius. **Phased rollout** needs Professional/Enterprise ([deployment docs](https://docs.mender.io/overview/deployment)); lab uses Micro + manual discipline (one deployment at a time).
+3. **Fleet inventory** — Periodic inventory ([docs](https://docs.mender.io/overview/inventory)) reports artifact name and build metadata — input to “which firmware is exposed?” during CVE triage. Extend with explicit `zephyr_version` / `sbom_id` attributes when SBOM pipeline exists.
+4. **Authenticated channel** — Per-device keypair + TLS to server ([security overview](https://docs.mender.io/overview/security)); pending-device acceptance reduces drive-by registration. Production must move keys to **ELE (S3)**.
+5. **Deployment evidence** — ISO8601 logs (`CONFIG_LOG_OUTPUT_FORMAT_ISO8601_TIMESTAMP`) support post-incident audit of update success/failure ([Mender deployment logs](https://docs.mender.io/overview/deployment)).
+6. **Signed firmware payload** — Mender MCU does **not** verify Mender artifact signatures; **MCUboot** verifies `zephyr.signed.bin`. Production requires non-demo `CONFIG_MCUBOOT_SIGNATURE_KEY_FILE` and offline signing.
+7. **CVE workflow (manufacturer-owned)** — Mender is not an SBOM/CVE scanner. Typical loop: SBOM + NVD/Zephyr advisory → impact analysis → build fixed Zephyr → new artifact → Mender deployment to affected `device_type`/group. Mender accelerates **remediation delivery**, not discovery.
+
+### Roadmap alignment (EdgeLock + Mender + Zephyr)
+
+| Track | Milestone | CRA-oriented outcome |
+|-------|-----------|----------------------|
+| **S0 (lab)** | `native_sim` OTA **done**; RT118x **Phase 2** OTA | Prove update path; not production security |
+| **S1** | ELE TRNG in Zephyr DTS | Remove timer RNG; credible key generation / TLS |
+| **S2** | PSA crypto driver on ELE | Hardware-backed crypto primitives |
+| **S3** | Mender platform: opaque ELE devauth signing | Meets device-identity protection expectations |
+| **S4** | AN14861 provisioning; lifecycle policy | Manufacturing-grade trust anchor |
+| **Mender** | Hardware `zephyr-image` deploy + swap test | Demonstrate security update delivery |
+| **Mender** | Inventory attributes ↔ release SBOM ID | Faster vulnerability impact assessment |
+| **Mender** | Optional: signed artifacts at CI + future MCU client support | Defence in depth on `.mender` wrapper (today: MCUboot only) |
+| **Zephyr** | Choose **LTS** or document backport policy for support period | Sustainable security fixes across 5+ years |
+| **Zephyr** | `west spdx` in release CI; MCUboot SBOM merged | Annex I Part II SBOM |
+| **Zephyr** | `hardenconfig` + PSIRT registry | Secure-by-default configuration baseline |
+| **Organisation** | Support period statement, risk assessment, Art. 14 runbook | CRA documentation and reporting readiness |
+
+### UK market — PSTI and RED (Ethernet-only note)
+
+- **EU RED (2014/53/EU)** applies to **radio** equipment. The RT118x CM33 images in this project use **wired Ethernet (NETC)** only — no on-chip Wi-Fi/BT in this firmware scope. RED cybersecurity articles matter when the *product* includes radio hardware (module or companion SoC), not for Ethernet-only MCU firmware alone.
+- **UK PSTI** ([Act 2022](https://www.legislation.gov.uk/ukpga/2022/46/contents)) applies to many **internet-connectable** consumer products — **including Ethernet** — with baseline duties (unique passwords, vulnerability contact, **minimum security update period**). PSTI is narrower than CRA but overlaps on updates and disclosure. A **B2B industrial** RT118x gateway may fall outside PSTI consumer scope — confirm per product; CRA/PSTI alignment is discussed in [Zephyr CRA](https://docs.zephyrproject.org/latest/security/standards/cyber-resilience-act.html) and UK [PSTI regulations](https://www.legislation.gov.uk/uksi/2023/1007/contents/made).
+- **Practical split:** treat this repo as the **MCU firmware CRA/PSTI technical baseline** (OTA + boot integrity + future ELE); treat **UK Statement of Compliance / CE marking** as product-line deliverables above this integration layer.
 
 ## Build outputs
 
@@ -138,7 +349,9 @@ west build -p --sysbuild \
 | `build/mender-mcu-integration/zephyr/zephyr.signed.bin` | MCUboot-signed app image (slot update payload) |
 | `build/mender-mcu-integration/zephyr/zephyr.mender` | Mender artifact (`zephyr-image`, name `dev-1`) for Hosted Mender upload |
 
-Artifact metadata from a successful host build: device type `mimxrt1180_evk`, artifact type `zephyr-image`.
+For FRDM builds, substitute `build-frdm-rt1186/` for `build/` in the paths above.
+
+Artifact metadata from a successful host build: device type `mimxrt1180_evk` (EVK) or `frdm_imxrt1186` (FRDM), artifact type `zephyr-image`.
 
 ## Flash
 
@@ -211,7 +424,7 @@ REST equivalent: `POST /api/management/v1/deployments/deployments/group/simulato
 
 ## Device groups — `mimxrt1180_evk` / `rt1180-lab`
 
-**Static group (inventory):** name **`rt1180-lab`**. Mender does not list empty groups — **`rt1180-lab` appears in the UI when the first accepted EVK device is assigned** (`PUT /api/management/v1/inventory/devices/{id}/group` with body `{"group": "rt1180-lab"}` or `PATCH .../groups/rt1180-lab/devices`). Until hardware arrives, only the **`simulator`** group is in use for Phase 0b (`native_sim`).
+**Static group (inventory):** name **`rt1180-lab`**. Mender does not list empty groups — **`rt1180-lab` appears in the UI when the first accepted RT118x lab device is assigned** (`PUT /api/management/v1/inventory/devices/{id}/group` with body `{"group": "rt1180-lab"}` or `PATCH .../groups/rt1180-lab/devices`). Until hardware arrives, only the **`simulator`** group is in use for Phase 0b (`native_sim`).
 
 **Deploy to the lab group** (after EVK build produces `build/mender-mcu-integration/zephyr/zephyr.mender`):
 
@@ -222,13 +435,13 @@ MENDER_DEPLOY_TARGET=group MENDER_DEVICE_GROUP=rt1180-lab ./scripts/create-rt118
 MENDER_DEPLOY_TARGET=device MENDER_DEVICE_ID=<uuid> ./scripts/create-rt1180-deployment.sh
 ```
 
-**When to use which group:** **`simulator`** — Zephyr `native_sim` noop-update smoke tests (no EVK). **`rt1180-lab`** — physical **MIMXRT1180-EVK** CM33 images (`zephyr-image` artifact from sysbuild). Do not mix device types in one static group.
+**When to use which group:** **`simulator`** — Zephyr `native_sim` noop-update smoke tests (no hardware). **`rt1180-lab`** — physical **RT118x CM33** images (`mimxrt1180_evk` or `frdm_imxrt1186` device types). Prefer **`MENDER_DEPLOY_TARGET=device_type`** or per-device UUID so EVK and FRDM artifacts are not conflated.
 
 REST equivalent: `POST /api/management/v1/deployments/deployments/group/rt1180-lab` with JSON `{ "name", "artifact_name", "force_installation" }`.
 
 ## RT1180 board configuration notes
 
-File: `mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.conf`
+Files: `mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.conf`, `mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33.conf` (same NETC/Mender/RNG settings; FRDM storage partition in `zephyr/boards/nxp/frdm_imxrt1186/frdm_imxrt1186.dtsi`)
 
 - **NETC Ethernet** — `CONFIG_ETH_NXP_IMX_NETC`, `CONFIG_NET_L2_ETHERNET`; `CONFIG_NET_IF_MAX_IPV4_COUNT=2` (EVK exposes multiple NETC interfaces; two suffices for host-port DHCP).
 - **MCUboot signing** — `CONFIG_MCUBOOT_SIGNATURE_KEY_FILE="bootloader/mcuboot/root-rsa-2048.pem"` (demo key from upstream tree).
@@ -268,7 +481,7 @@ Actionable validation checklist for RT1180 CM33 Mender bring-up and (separately)
 | Item | Requirement | Reference |
 |------|-------------|-----------|
 | West workspace | `west init -l mender-mcu-integration && west update` | [Workspace layout](#workspace-layout) |
-| Zephyr SDK | 0.17.4, `ZEPHYR_SDK_INSTALL_DIR` set | [Prerequisites](#prerequisites) |
+| Zephyr SDK | 1.0.x for v4.4.0, `ZEPHYR_SDK_INSTALL_DIR` set | [Prerequisites](#prerequisites) |
 | Python env | Zephyr venv active; `pyelftools`, `intelhex`, `cbor2` | MCUboot signing / artifacts |
 | Local secrets | `mender-mcu-integration/mender-local.conf` (gitignored) with tenant token | [Secrets](#secrets-do-not-commit) |
 | Board Kconfig fragment | Auto-applied: `mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.conf` | NETC, RNG workaround, Mender storage |
@@ -279,7 +492,7 @@ Actionable validation checklist for RT1180 CM33 Mender bring-up and (separately)
 
 ```bash
 export PATH="$(pwd)/.tools/bin:$PATH"
-export ZEPHYR_SDK_INSTALL_DIR="${ZEPHYR_SDK_INSTALL_DIR:-$HOME/zephyr-sdk-0.17.4}"
+export ZEPHYR_SDK_INSTALL_DIR="${ZEPHYR_SDK_INSTALL_DIR:-$HOME/zephyr-sdk-1.0.1}"
 ```
 
 | Check | Command | Pass |
@@ -327,7 +540,7 @@ west build -p --sysbuild \
   mender-mcu-integration \
   -- \
   -DEXTRA_CONF_FILE=mender-mcu-integration/mender-local.conf \
-  -DCONFIG_MENDER_ARTIFACT_NAME=dev-1
+  -DCONFIG_MENDER_ARTIFACT_NAME="dev-1"
 ```
 
 - [ ] **0.3** Build completes with MCUboot + app (no signing / artifact errors).
@@ -583,6 +796,37 @@ west flash -d build
 
 ---
 
+
+### Phase 1 — FRDM flash (CM33 Mender image)
+
+**Status: TBD — bench validation on FRDM-IMXRT1186.** Build scripts and board Kconfig fragment are in-tree; flash/Ethernet/Mender OTA on hardware not yet signed off.
+
+Goal: same as EVK Phase 1 — MCUboot + signed app, serial console, NETC DHCP before Hosted Mender.
+
+**Preconditions:** `west update` (Zephyr **v4.4.0**); Phase 0 sysbuild pattern; `mender-local.conf`; jumper **J60 = 1:OFF 2:OFF 3:ON** for CM33 ([programming section](https://docs.zephyrproject.org/latest/boards/nxp/frdm_imxrt1186/doc/index.html#programming-and-debugging)).
+
+- [ ] **1F.1** Build:
+
+```bash
+./scripts/build-rt1186-frdm.sh
+```
+
+- [ ] **1F.2** Flash and reset:
+
+```bash
+west flash -d build-frdm-rt1186
+```
+
+- [ ] **1F.3** Serial on **MCU-Link** @ **115200 8N1** — MCUboot then Zephyr/Mender logs.
+- [ ] **1F.4** Ethernet on **`swp0` or `swp2`** (1 Gbps TSN user ports); confirm DHCP (`net iface` / logs). Do not use DSA CPU/conduit ports (`swp4`, `eth0`).
+
+**Pass:** LinkServer or J-Link flash OK; CM33 console alive; `swp0` or `swp2` obtains IPv4.
+
+**Fail triage:** same NETC/RNG themes as EVK — see [RT1180 board configuration notes](#rt1180-board-configuration-notes); wrong port → try other TSN connector; CM7 debug → J60 must be CM33 position.
+
+**Mender:** device type **`frdm_imxrt1186`**; assign accepted device to **`rt1180-lab`**; deploy with `./scripts/create-rt1186-frdm-deployment.sh` or `MENDER_DEPLOY_TARGET=device_type ./scripts/create-rt1186-frdm-deployment.sh`.
+
+
 ### Phase 2 — Hosted Mender (CM33 OTA)
 
 Goal: device accepted, artifact deployed, inventory reported, MCUboot swap confirmed.
@@ -595,7 +839,7 @@ export MENDER_PAT="<your-hosted-mender-pat>"
 export PATH="$(pwd)/.tools/bin:$PATH"
 ```
 
-- [ ] **2.1** Boot device with network; within ~30–60 s device appears as **pending** (Micro tier, type `mimxrt1180_evk`).
+- [ ] **2.1** Boot device with network; within ~30–60 s device appears as **pending** (Micro tier; type `mimxrt1180_evk` or `frdm_imxrt1186` matching the flashed board).
 - [ ] **2.2** Accept pending device (REST — replace `DEVICE_ID` after listing):
 
 ```bash
@@ -712,6 +956,7 @@ Track progress with the **[Zephyr testing plan](#zephyr-testing-plan)** checkbox
 | `native_sim` Mender smoke + noop OTA | Phase 0b | **Done** (2026-06-13) — build, DHCP, accept, noop deploy |
 | vemu nRF5340 build/run (no network) | vemu | Done (limited — use Phase 0b for Hosted Mender) |
 | EVK flash + serial | Phase 1 | **TBD** — pending MIMXRT1180-EVK arrival |
+| FRDM flash + serial | Phase 1 | **TBD** — FRDM-IMXRT1186 (build scripts + board conf ready) |
 | Ethernet DHCP | Phase 1 | **TBD** — pending EVK |
 | Hosted Mender accept + OTA | Phase 2 | **TBD** — pending EVK |
 | MCUboot swap on deploy | Phase 2.6 | **TBD** — pending EVK |

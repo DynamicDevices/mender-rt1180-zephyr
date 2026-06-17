@@ -17,9 +17,9 @@ Zephyr Module, with configurations for some boards to choose from.
 ![Mender logo](https://github.com/mendersoftware/mender/raw/master/mender_logo.png)
 
 
-## i.MX RT1180 EVK (CM33) port
+## i.MX RT118x (CM33) port — EVK and FRDM
 
-Work-in-progress Mender OTA notes for the NXP RT1180 EVK are in [PROJECT-NOTES.md](PROJECT-NOTES.md) (build, flash, Hosted Mender, and status). For a fresh West workspace, see the [repo README](../README.md).
+Work-in-progress Mender OTA notes for **MIMXRT1180-EVK** and **FRDM-IMXRT1186** (CM33) are in [PROJECT-NOTES.md](PROJECT-NOTES.md) (build, flash, Hosted Mender, status, **EdgeLock ELE security roadmap**, and **[CRA technical mapping](PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping)** — engineering preparedness, not legal sign-off). For a fresh West workspace, see the [repo README](../README.md).
 
 ## Get started
 
@@ -137,3 +137,13 @@ with many contributions from the community. Thanks
 [everyone](https://github.com/mendersoftware/mender/graphs/contributors)!
 
 [Mender](https://mender.io) is sponsored by [Northern.tech AS](https://northern.tech).
+
+
+### FRDM-IMXRT1186 quick build
+
+```bash
+west update   # Zephyr v4.4.0+ required
+./scripts/build-rt1186-frdm.sh
+```
+
+Board: `frdm_imxrt1186/mimxrt1186/cm33`. See [FRDM vs EVK](PROJECT-NOTES.md#frdm-imxrt1186-vs-mimxrt1180-evk) in PROJECT-NOTES.
