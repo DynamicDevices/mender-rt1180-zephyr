@@ -112,7 +112,7 @@ When lab hardware is available, use **`scripts/create-rt1180-deployment.sh`** (E
 
 **Production security:** on-die **EdgeLock (ELE)** key storage is a project requirement for RT118x — lab uses NVS today; phased roadmap (S0–S4) in [PROJECT-NOTES — Security / EdgeLock](mender-mcu-integration/PROJECT-NOTES.md#security--edgelock).
 
-**EU Cyber Resilience Act (CRA):** technical gap analysis and Mender/Zephyr mapping (not legal compliance sign-off) — [PROJECT-NOTES — CRA technical mapping](mender-mcu-integration/PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping).
+**EU Cyber Resilience Act (CRA):** technical gap analysis — [CRA technical mapping](mender-mcu-integration/PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping); unified delivery plan — **[CRA compliance programme](mender-mcu-integration/PROJECT-NOTES.md#cra-compliance-programme-firmware-technical-baseline)** (engineering plan, not legal sign-off).
 
 ## What this repo contains
 
@@ -124,7 +124,7 @@ When lab hardware is available, use **`scripts/create-rt1180-deployment.sh`** (E
 | `mender-mcu-integration/west.yml` | West manifest (Zephyr v4.4.0 + mender-mcu fork @ `1b2d374`; FRDM board) |
 | `mender-mcu-integration/README.md` | Pointer to PROJECT-NOTES for RT118x |
 | `mender-mcu-integration/.gitignore` | Local secrets and build paths |
-| `scripts/` | Host helpers — Phase 0b: `build-native-sim.sh`, `run-native-sim-network.sh`, `test-mender-native-sim.sh`, `create-native-sim-deployment.sh`; RT118x CM33: `build-rt1180-evk.sh`, `build-rt1186-frdm.sh`, `create-rt1180-deployment.sh`, `create-rt1186-frdm-deployment.sh`; vemu: `test-vemu.sh` — see [PROJECT-NOTES — Scripts inventory](mender-mcu-integration/PROJECT-NOTES.md#scripts-inventory) |
+| `scripts/` | Host helpers — Phase 0b: `build-native-sim.sh`, `run-native-sim-network.sh`, `test-mender-native-sim.sh`, `create-native-sim-deployment.sh`; RT118x CM33: `build-rt1180-evk.sh`, `build-rt1186-frdm.sh`, `create-rt1180-deployment.sh`, `create-rt1186-frdm-deployment.sh`; CRA WS3: `generate-sbom.sh`; vemu: `test-vemu.sh` — see [PROJECT-NOTES — Scripts inventory](mender-mcu-integration/PROJECT-NOTES.md#scripts-inventory) |
 
 ## Secrets
 

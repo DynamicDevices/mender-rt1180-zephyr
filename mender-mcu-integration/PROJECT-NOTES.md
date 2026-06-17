@@ -1,12 +1,12 @@
 # Mender MCU OTA — i.MX RT118x family (Zephyr)
 
+Public repo: https://github.com/DynamicDevices/mender-rt1180-zephyr (GitHub name is historical EVK-first naming; this overlay covers the **RT118x** family — EVK and FRDM CM33).
+
 Project notes for Mender over-the-air updates on NXP **i.MX RT118x** boards: **MIMXRT1180-EVK** (`mimxrt1180_evk/mimxrt1189/cm33`) and **FRDM-IMXRT1186** (`frdm_imxrt1186/mimxrt1186/cm33`, CM33 only). This workspace is a West checkout of the upstream [mender-mcu-integration](mender-mcu-integration/) reference app with a local **RT118x overlay** (EVK + FRDM board configuration).
 
 Upstream getting-started and native_sim instructions remain in [mender-mcu-integration/README.md](mender-mcu-integration/README.md). Mender MCU module docs: [modules/mender-mcu/README.md](modules/mender-mcu/README.md).
 
 ## Purpose
-
-Public repo: https://github.com/DynamicDevices/mender-rt1180-zephyr
 
 Evaluate **Mender MCU OTA** on RT118x **CM33**: MCUboot + swap, Ethernet bring-up, Hosted Mender client, and automatic `zephyr-image` artifact generation at build time.
 
@@ -101,6 +101,7 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 | `scripts/create-native-sim-deployment.sh` | Build noop-update artifact (`device_type` `native_sim`) and create **one** Hosted Mender deployment (`MENDER_DEPLOY_TARGET=device` \| `device_type` \| `group`; default group **`simulator`**) |
 | `scripts/build-rt1180-evk.sh` | Sysbuild Mender for EVK CM33 (default `build-rt1180-evk/`) |
 | `scripts/build-rt1186-frdm.sh` | Sysbuild Mender for FRDM-IMXRT1186 CM33 (default `build-frdm-rt1186/`) |
+| `scripts/generate-sbom.sh` | Run `west spdx` for EVK and FRDM build trees (WS3; requires prior sysbuild) |
 | `scripts/create-rt1180-deployment.sh` | Upload `zephyr.mender` (default `device_type` `mimxrt1180_evk`, `build-rt1180-evk/`) — **one** deployment (default group **`rt1180-lab`**) |
 | `scripts/create-rt1186-frdm-deployment.sh` | Same as above for FRDM (`device_type` `frdm_imxrt1186`, `build-frdm-rt1186/`) |
 | `scripts/test-vemu.sh` | Build `hello_world` for nRF5340 and run headless **vemu** (or print browser load steps) |
@@ -438,6 +439,178 @@ Mender addresses CRA themes around **secure distribution** and **operational vul
 - **EU RED (2014/53/EU)** applies to **radio** equipment. The RT118x CM33 images in this project use **wired Ethernet (NETC)** only — no on-chip Wi-Fi/BT in this firmware scope. RED cybersecurity articles matter when the *product* includes radio hardware (module or companion SoC), not for Ethernet-only MCU firmware alone.
 - **UK PSTI** ([Act 2022](https://www.legislation.gov.uk/ukpga/2022/46/contents)) applies to many **internet-connectable** consumer products — **including Ethernet** — with baseline duties (unique passwords, vulnerability contact, **minimum security update period**). PSTI is narrower than CRA but overlaps on updates and disclosure. A **B2B industrial** RT118x gateway may fall outside PSTI consumer scope — confirm per product; CRA/PSTI alignment is discussed in [Zephyr CRA](https://docs.zephyrproject.org/latest/security/standards/cyber-resilience-act.html) and UK [PSTI regulations](https://www.legislation.gov.uk/uksi/2023/1007/contents/made).
 - **Practical split:** treat this repo as the **MCU firmware CRA/PSTI technical baseline** (OTA + boot integrity + future ELE); treat **UK Statement of Compliance / CE marking** as product-line deliverables above this integration layer.
+
+For the **unified delivery plan** (workstreams, milestones, checklists), see [CRA compliance programme](#cra-compliance-programme-firmware-technical-baseline) below.
+
+## CRA compliance programme (firmware technical baseline)
+
+**Disclaimer:** This section is an **engineering programme and project plan** for RT118x CM33 firmware technical readiness. It is **not legal advice**, **not a conformity assessment**, and **not CE marking or UKCA sign-off**. Product classification, support-period justification, Annex VII technical documentation, and Article 14 incident reporting require qualified legal/regulatory review for your specific product and go-to-market.
+
+**Goal:** Deliver a **CRA-ready RT118x CM33 firmware baseline** (Zephyr + MCUboot + Mender MCU → Hosted Mender) suitable for products **placed on the EU market from 11 December 2027**, with vulnerability-handling processes operational **before 11 September 2026**.
+
+**Key dates (manufacturers):**
+
+| Date | Obligation |
+|------|------------|
+| **11 September 2026** | Vulnerability and incident **reporting** obligations apply ([Article 14](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32024R2847); [Zephyr CRA summary](https://docs.zephyrproject.org/latest/security/standards/cyber-resilience-act.html#what-are-the-vulnerability-reporting-obligations)) |
+| **11 December 2027** | Full **essential requirements** (Annex I) for products placed on the market from this date |
+
+**Scope:** RT118x CM33 firmware from this workspace. Companion MPU Linux (e.g. i.MX 93 in HMS designs) is a separate stack and OTA path. Regulatory reference material and gap themes remain in [CRA technical mapping](#cyber-resilience-act-cra--technical-mapping) — do not duplicate the [gap analysis matrix](#gap-analysis-matrix) here.
+
+**Related plans (reference only):**
+
+| Document | Section |
+|----------|---------|
+| Gap themes and recommended actions | [Gap analysis matrix](#gap-analysis-matrix) |
+| ELE hardware entropy (S1) | [S1 — ELE TRNG remediation plan](#s1--ele-trng-remediation-plan-rt118x-cm33) |
+| Bench validation (Phases 0–4) | [Zephyr testing plan](#zephyr-testing-plan) |
+| EdgeLock phases S0–S4 | [Security / EdgeLock](#security--edgelock) |
+
+### Parallel workstreams
+
+Four tracks run in parallel. **Owner** is **TBD** until assigned.
+
+#### WS1 — OTA and update delivery
+
+**Definition of done:** Hardware-proven `zephyr-image` OTA on EVK and FRDM with MCUboot swap rollback; production MCUboot signing key in offline/HSM workflow; documented update SLO; Mender deployments used for security-patch delivery to fleet.
+
+| Milestone | Target | Status | Evidence |
+|-----------|--------|--------|----------|
+| Phase 0b — `native_sim` Mender smoke | 2026 Q2 | **Done** | Phase 0b checklist; noop deploy success |
+| Phase 0 — host sysbuild + artifact (EVK/FRDM) | 2026 Q2 | **Done** | `zephyr.mender` validate; builds @ mender-mcu `1b2d374` |
+| Phase 1 — EVK/FRDM flash + Ethernet | 2026 Q3 | **Open** | Serial boot log; DHCP on NETC port |
+| Phase 2 — Hosted Mender OTA + MCUboot swap | 2026 Q3–Q4 | **Open** | Deployment success; post-reboot new `artifact_name` |
+| Production MCUboot signing key | Pre-production | **Open** | Non-demo `CONFIG_MCUBOOT_SIGNATURE_KEY_FILE`; offline signer procedure |
+| CM7 OTA via CM33 (if in product scope) | 2027+ | **Future** | Phase 4 criteria in [Zephyr testing plan](#phase-4--cm7-ota-via-cm33-future) |
+
+#### WS2 — Cryptography and identity (EdgeLock S0–S4)
+
+**Definition of done:** No timer RNG in production images; device-auth private key non-exportable in ELE opaque storage; PSA signing for Mender devauth/TLS; manufacturing provisioning per AN14861 / EdgeLock 2GO where applicable.
+
+| Milestone | Target | Status | Evidence |
+|-----------|--------|--------|----------|
+| S0 — Lab NVS keys + timer RNG | Lab only | **Partial** | Phase 0b done; hardware S0 **TBD**; timer RNG documented waiver |
+| S1 — ELE TRNG in Zephyr | Pre-production | **Blocked** | `entropy/api` test PASS on RT118x CM33; no timer RNG Kconfig |
+| S2 — PSA crypto driver (ELE_S4XX) | Pre-production | **Open** | Zephyr PSA + NXP driver integrated build |
+| S3 — Mender platform opaque ELE signing | Pre-production | **Open** | Devauth without DER in NVS; sign-in-enclave |
+| S4 — Manufacturing provisioning | Pre-fleet | **Open** | AN14861 workflow doc; lifecycle policy signed off |
+
+#### WS3 — Supply chain and vulnerability
+
+**Definition of done:** SPDX SBOM archived per release; Zephyr PSIRT/CVE watch active; documented triage → fix → Mender deploy loop; upstream reporting path for integrated components.
+
+| Milestone | Target | Status | Evidence |
+|-----------|--------|--------|----------|
+| SBOM generation script | 2026 Q2 | **Open** | `./scripts/generate-sbom.sh` runs `west spdx` for EVK + FRDM build dirs |
+| SBOM per release (app + MCUboot) | 2026 Q3 | **Open** | SPDX files tagged with `CONFIG_MENDER_ARTIFACT_NAME` / git SHA |
+| Zephyr PSIRT / advisory watch | Before Sep 2026 | **Open** | Registry subscription + watch list documented |
+| Vulnerability triage process | Before Sep 2026 | **Open** | Process outline below; owner assigned |
+| Security fix via Mender deploy | With Phase 2 | **Open** | CVE fix build → artifact → deployment to affected `device_type`/group |
+
+**Vulnerability triage process (outline):**
+
+1. **Intake** — Monitor [Zephyr vulnerabilities](https://docs.zephyrproject.org/latest/security/vulnerabilities.html), NXP advisories, Mender security disclosures; customer reports via published contact.
+2. **Impact** — Map advisory to release SBOM + Mender inventory (`artifact_name`, Zephyr version, west manifest SHA).
+3. **Severity** — CVSS + exploitability + fleet exposure; escalate actively exploited issues per [Art. 14 runbook](#ws4--governance-and-documentation) draft.
+4. **Remediate** — Patch Zephyr/module pin → rebuild → `west spdx` → new artifact.
+5. **Deliver** — Mender deployment to affected devices; document in release notes.
+6. **Upstream** — Report/fix-share per Art. 13(6) where applicable ([Zephyr reporting](https://docs.zephyrproject.org/latest/security/reporting.html)).
+
+#### WS4 — Governance and documentation
+
+**Definition of done:** Declared support period; risk assessment on file; Art. 14 incident runbook; technical file checklist complete for product line legal review.
+
+| Milestone | Target | Status | Evidence |
+|-----------|--------|--------|----------|
+| Support period declaration | 2026 Q3 | **Open** | Template below filled and version-controlled |
+| Risk assessment | 2026 Q3 | **Open** | Placeholder → signed product risk register |
+| Art. 14 incident runbook | Before Sep 2026 | **Open** | Runbook outline below; CSIRT contacts |
+| Technical file checklist | Pre-production | **Open** | Checklist below; gaps tracked to workstreams |
+| `hardenconfig` baseline | Pre-production | **Open** | `west build -t hardenconfig` report for RT118x defconfig |
+
+**Support period declaration (template):**
+
+> Product line: _[name]_  
+> Firmware baseline: RT118x CM33 Zephyr image from this repo @ west manifest _[tag/SHA]_  
+> **Minimum security update period:** _[≥ 5 years from first placement unless justified shorter per Art. 13(8)]_  
+> **End date:** _[YYYY-MM-DD]_  
+> **Zephyr baseline policy:** _[LTS pin / explicit backport policy for forked modules]_  
+> **Vulnerability contact:** _[URL or email published to users]_
+
+**Art. 14 runbook (outline):**
+
+| Step | Action | Timeline |
+|------|--------|----------|
+| 1 | Detect / become aware of actively exploited vuln or severe incident | T+0 |
+| 2 | Internal escalation (engineering lead + legal/regulatory) | Immediate |
+| 3 | Early warning notification to authority | **24 h** |
+| 4 | Intermediate report | **72 h** |
+| 5 | Final report per CRA | As specified |
+| 6 | Customer comms + Mender remediation deploy | Without undue delay |
+
+**Risk assessment (placeholder):** Maintain a product-level risk register covering: network exposure (NETC Ethernet), OTA trust chain (MCUboot + Mender), key storage (NVS lab vs ELE production), third-party components (Zephyr, Mbed TLS, MCUboot, mender-mcu), and supply-chain update latency. Link mitigations to WS1–WS3 milestones. Legal review required before conformity claims.
+
+**Technical file checklist (Annex VII-oriented, firmware slice):**
+
+- [ ] Software bill of materials (SPDX) per shipped release
+- [ ] Description of secure boot and OTA architecture (MCUboot + Mender)
+- [ ] Cryptographic mechanisms and key lifecycle (ELE roadmap S0–S4)
+- [ ] Vulnerability handling process (WS3)
+- [ ] Support period declaration (WS4)
+- [ ] Test evidence: [Zephyr testing plan](#zephyr-testing-plan) phases complete for shipping configuration
+- [ ] Configuration baseline (`prj.conf`, board conf, `west.yml` pins) frozen per release tag
+
+### Unified milestone table
+
+| ID | Milestone | WS | Target | Status | Evidence artifact |
+|----|-----------|-----|--------|--------|-------------------|
+| M-001 | Phase 0b `native_sim` Mender smoke | WS1 | 2026 Q2 | **Done** | Phase 0b checklist; deployment success log |
+| M-002 | Phase 0 host sysbuild + `zephyr.mender` (EVK/FRDM) | WS1 | 2026 Q2 | **Done** | `mender-artifact validate`; build @ `1b2d374` |
+| M-003 | Phase 1 hardware flash + DHCP (EVK or FRDM) | WS1 | 2026 Q3 | **Open** | Serial + `net iface` IPv4 |
+| M-004 | Phase 2 OTA + MCUboot swap on hardware | WS1 | 2026 Q3–Q4 | **Open** | Mender deployment finished; reboot to `dev-2` |
+| M-005 | Production MCUboot signing key | WS1 | Pre-production | **Open** | Key ceremony doc; non-demo PEM/HSM |
+| M-006 | S1 ELE TRNG (drop timer RNG) | WS2 | Pre-production | **Blocked** | `tests/drivers/entropy/api` PASS |
+| M-007 | S3 opaque ELE devauth signing | WS2 | Pre-production | **Open** | No DER private key in NVS |
+| M-008 | S4 manufacturing provisioning | WS2 | Pre-fleet | **Open** | AN14861 / 2GO procedure |
+| M-009 | `generate-sbom.sh` + `west spdx` per board | WS3 | 2026 Q2 | **Open** | SPDX under `sbom/` per release |
+| M-010 | Vulnerability triage process documented | WS3 | Before Sep 2026 | **Open** | Process in WS3 + owner |
+| M-011 | Art. 14 incident runbook | WS4 | Before Sep 2026 | **Open** | Runbook + authority contacts |
+| M-012 | Support period declaration | WS4 | 2026 Q3 | **Open** | Signed template |
+| M-013 | Risk assessment (product-level) | WS4 | Pre-production | **Open** | Risk register |
+| M-014 | Technical file checklist complete | WS4 | Pre-production | **Open** | All boxes checked |
+| M-015 | `hardenconfig` on RT118x shipping defconfig | WS3/WS4 | Pre-production | **Open** | hardenconfig report |
+
+### Pre-hardware checklist
+
+Complete before first FRDM/EVK bench session (no board required):
+
+- [ ] West workspace: `west init -l mender-mcu-integration && west update` (Zephyr v4.4.0, mender-mcu @ `1b2d374`)
+- [ ] Zephyr SDK 1.0.1 installed; `ZEPHYR_SDK_INSTALL_DIR` set
+- [ ] Gitignored `mender-mcu-integration/mender-local.conf` (tenant token) and `mender-pat-local.conf` (workstation PAT)
+- [ ] `mender-artifact` and `mender-cli` @ 2.0.0 on `PATH` (`.tools/bin`)
+- [ ] Phase 0 host build passes for target board (`./scripts/build-rt1180-evk.sh` and/or `./scripts/build-rt1186-frdm.sh`)
+- [ ] `mender-artifact validate` on produced `zephyr.mender`
+- [ ] Phase 0b `native_sim` smoke complete (Mender auth baseline)
+- [ ] LinkServer or J-Link drivers installed; probe IDs noted for your boards
+- [ ] Lab network: DHCP path to Hosted Mender; static group **`rt1180-lab`** understood
+- [ ] Read [SW5 / J60](#hardware-setup-evk) core-select and Ethernet port guidance (EVK host port; FRDM `swp0`/`swp2`)
+
+### Pre-production checklist
+
+Must complete before fleet rollout or shipping firmware that claims CRA technical readiness:
+
+- [ ] **M-003, M-004** — Hardware OTA proven on shipping board variant(s)
+- [ ] **M-005** — Production MCUboot key; demo `root-rsa-2048.pem` removed from release builds
+- [ ] **M-006, M-007, M-008** — S1–S4 complete; no timer RNG; ELE opaque devauth
+- [ ] **M-009** — SBOM archived for each release artifact
+- [ ] **M-010** — Vulnerability triage process live; PSIRT watch active
+- [ ] **M-011** — Art. 14 runbook approved (legal + engineering)
+- [ ] **M-012** — Support period published to customers
+- [ ] **M-013** — Product risk assessment signed off
+- [ ] **M-014** — Technical file checklist complete for legal conformity review
+- [ ] **M-015** — `hardenconfig` gaps closed or explicitly accepted
+- [ ] Inventory attributes include `artifact_name`, Zephyr version, west/git SHA (and `sbom_id` when M-009 exists)
+- [ ] Tenant/server credentials provisioned per product policy (not lab Kconfig bake-in if inappropriate for production)
 
 ## Build outputs
 

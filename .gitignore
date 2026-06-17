@@ -15,6 +15,9 @@ build-frdm-rt1186/
 build-native_sim/
 build-*/
 
+# Generated SBOM output (scripts/generate-sbom.sh)
+sbom/
+
 # Secrets and local Kconfig
 mender-local.conf
 *-local.conf
