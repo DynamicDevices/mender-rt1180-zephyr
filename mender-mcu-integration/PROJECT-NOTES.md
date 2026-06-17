@@ -1,6 +1,6 @@
-# Mender MCU OTA — i.MX RT1180 (Zephyr)
+# Mender MCU OTA — i.MX RT118x family (Zephyr)
 
-Project notes for Mender over-the-air updates on NXP **i.MX RT118x** boards: **MIMXRT1180-EVK** (`mimxrt1180_evk/mimxrt1189/cm33`) and **FRDM-IMXRT1186** (`frdm_imxrt1186/mimxrt1186/cm33`, CM33 only). This workspace is a West checkout of the upstream [mender-mcu-integration](mender-mcu-integration/) reference app with a local RT1180 board configuration.
+Project notes for Mender over-the-air updates on NXP **i.MX RT118x** boards: **MIMXRT1180-EVK** (`mimxrt1180_evk/mimxrt1189/cm33`) and **FRDM-IMXRT1186** (`frdm_imxrt1186/mimxrt1186/cm33`, CM33 only). This workspace is a West checkout of the upstream [mender-mcu-integration](mender-mcu-integration/) reference app with a local **RT118x overlay** (EVK + FRDM board configuration).
 
 Upstream getting-started and native_sim instructions remain in [mender-mcu-integration/README.md](mender-mcu-integration/README.md). Mender MCU module docs: [modules/mender-mcu/README.md](modules/mender-mcu/README.md).
 
@@ -8,9 +8,9 @@ Upstream getting-started and native_sim instructions remain in [mender-mcu-integ
 
 Public repo: https://github.com/DynamicDevices/mender-rt1180-zephyr
 
-Evaluate **Mender MCU OTA** on the RT1180 CM33 core: MCUboot + swap, Ethernet bring-up, Hosted Mender client, and automatic `zephyr-image` artifact generation at build time.
+Evaluate **Mender MCU OTA** on RT118x **CM33**: MCUboot + swap, Ethernet bring-up, Hosted Mender client, and automatic `zephyr-image` artifact generation at build time.
 
-**Scope (CM33 vs CM7):** RT1180 is dual-core (Cortex-M33 + Cortex-M7). This port targets **CM33 only** — Mender MCU, MCUboot, and Zephyr networking. **CM7 is a separate phase** and out of scope for initial bring-up.
+**Scope (CM33 vs CM7):** RT118x crossover MCUs are dual-core (Cortex-M33 + Cortex-M7). This port targets **CM33 only** — Mender MCU, MCUboot, and Zephyr networking. **CM7 is a separate phase** and out of scope for initial bring-up.
 
 **Security (project requirement):** RT118x targets (**EVK** and **FRDM**) must support on-die **EdgeLock Secure Enclave (ELE)** for cryptographic device identity on the production path — not NVS-in-flash alone. Lab bring-up may use NVS auth keys temporarily; see [Security / EdgeLock](#security--edgelock).
 
@@ -63,7 +63,9 @@ West topdir is this directory (parent of `mender-mcu-integration/`). Manifest: `
 ├── scripts/                # Host helpers — see [Scripts inventory](#scripts-inventory)
 ├── tools/net-tools/          # Zephyr net-tools (manual `git clone`; gitignored)
 ├── .tools/bin/             # Local mender-artifact + mender-cli (gitignored)
-└── build/                  # Sysbuild output (gitignored)
+├── build-rt1180-evk/       # EVK sysbuild output (gitignored)
+├── build-frdm-rt1186/      # FRDM sysbuild output (gitignored)
+└── build-native_sim/       # native_sim output (gitignored)
 ```
 
 Fresh checkout:
@@ -72,6 +74,19 @@ Fresh checkout:
 west init -l mender-mcu-integration
 west update
 ```
+
+### Build directories
+
+Use **separate** `west build -d …` directories so EVK, FRDM, and `native_sim` trees do not overwrite each other:
+
+| Target | Default directory | Helper script |
+|--------|-------------------|---------------|
+| MIMXRT1180-EVK CM33 | `build-rt1180-evk/` | `./scripts/build-rt1180-evk.sh` |
+| FRDM-IMXRT1186 CM33 | `build-frdm-rt1186/` | `./scripts/build-rt1186-frdm.sh` |
+| `native_sim` (Phase 0b) | `build-native_sim/` | `./scripts/build-native-sim.sh` |
+
+Override with `BUILD_DIR=…` (build scripts) or `MENDER_BUILD_DIR=…` (deployment scripts). **Do not reuse** the legacy shared `build/` directory across boards — if you still have an old mixed tree, remove it: `rm -rf build` (outputs only — not tracked sources).
+
 
 ## Scripts inventory
 
@@ -84,9 +99,9 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 | `scripts/run-native-sim-network.sh` | Start/stop/status TAP + DHCP + NAT using `tools/net-tools/nat.conf` (`cd` into net-tools; `stop` passes `--config nat.conf`) |
 | `scripts/test-mender-native-sim.sh` | Build (optional) + run `zephyr.exe` Mender smoke test; expects TAP from `run-native-sim-network.sh` |
 | `scripts/create-native-sim-deployment.sh` | Build noop-update artifact (`device_type` `native_sim`) and create **one** Hosted Mender deployment (`MENDER_DEPLOY_TARGET=device` \| `device_type` \| `group`; default group **`simulator`**) |
-| `scripts/build-rt1180-evk.sh` | Sysbuild Mender for EVK CM33 (default `build/`) |
+| `scripts/build-rt1180-evk.sh` | Sysbuild Mender for EVK CM33 (default `build-rt1180-evk/`) |
 | `scripts/build-rt1186-frdm.sh` | Sysbuild Mender for FRDM-IMXRT1186 CM33 (default `build-frdm-rt1186/`) |
-| `scripts/create-rt1180-deployment.sh` | Upload `zephyr.mender` (default `device_type` `mimxrt1180_evk`, `build/`) — **one** deployment (default group **`rt1180-lab`**) |
+| `scripts/create-rt1180-deployment.sh` | Upload `zephyr.mender` (default `device_type` `mimxrt1180_evk`, `build-rt1180-evk/`) — **one** deployment (default group **`rt1180-lab`**) |
 | `scripts/create-rt1186-frdm-deployment.sh` | Same as above for FRDM (`device_type` `frdm_imxrt1186`, `build-frdm-rt1186/`) |
 | `scripts/test-vemu.sh` | Build `hello_world` for nRF5340 and run headless **vemu** (or print browser load steps) |
 | `scripts/run-vemu-demo.sh` | Build `hello_world` for nRF5340 and print vemulator.com load instructions |
@@ -124,6 +139,7 @@ From the West workspace root:
 ```bash
 west build -p --sysbuild \
   -b mimxrt1180_evk/mimxrt1189/cm33 \
+  -d build-rt1180-evk \
   mender-mcu-integration \
   -- \
   -DEXTRA_CONF_FILE=mender-local.conf \
@@ -143,7 +159,7 @@ west build -p --sysbuild \
 | SoC | MIMXRT1189 | MIMXRT1186 |
 | Mender device type | `mimxrt1180_evk` | `frdm_imxrt1186` |
 | Board conf (auto) | `boards/mimxrt1180_evk_mimxrt1189_cm33.conf` | `boards/frdm_imxrt1186_mimxrt1186_cm33.conf` |
-| Default build dir | `build/` | `build-frdm-rt1186/` |
+| Default build dir | `build-rt1180-evk/` | `build-frdm-rt1186/` |
 | LinkServer probe | `MIMXRT1189xxxxx:MIMXRT1180-EVK` | `MIMXRT1186xxxxx:FRDM-IMXRT1186` |
 | Console UART | LPUART1 (MCU-Link J53) | LPUART1 (on-board MCU-Link) |
 | Main RAM (CM33) | EVK HyperRAM layout | 8 MiB HyperRAM @ `0x38000000` (`zephyr,sram`) |
@@ -427,12 +443,12 @@ Mender addresses CRA themes around **secure distribution** and **operational vul
 
 | File | Role |
 |------|------|
-| `build/mcuboot/zephyr/zephyr.bin` | MCUboot bootloader image (flash at `boot_partition`) |
-| `build/mender-mcu-integration/zephyr/zephyr.bin` | Unsigned application (internal; slot payload before signing) |
-| `build/mender-mcu-integration/zephyr/zephyr.signed.bin` | MCUboot-signed app image (slot update payload) |
-| `build/mender-mcu-integration/zephyr/zephyr.mender` | Mender artifact (`zephyr-image`, name `dev-1`) for Hosted Mender upload |
+| `build-rt1180-evk/mcuboot/zephyr/zephyr.bin` | MCUboot bootloader image (flash at `boot_partition`) |
+| `build-rt1180-evk/mender-mcu-integration/zephyr/zephyr.bin` | Unsigned application (internal; slot payload before signing) |
+| `build-rt1180-evk/mender-mcu-integration/zephyr/zephyr.signed.bin` | MCUboot-signed app image (slot update payload) |
+| `build-rt1180-evk/mender-mcu-integration/zephyr/zephyr.mender` | Mender artifact (`zephyr-image`, name `dev-1`) for Hosted Mender upload |
 
-For FRDM builds, substitute `build-frdm-rt1186/` for `build/` in the paths above.
+For FRDM builds, substitute `build-frdm-rt1186/` for `build-rt1180-evk/` in the paths above.
 
 Artifact metadata from a successful host build: device type `mimxrt1180_evk` (EVK) or `frdm_imxrt1186` (FRDM), artifact type `zephyr-image`.
 
@@ -443,14 +459,14 @@ From workspace root after build:
 **Hardware (CM33):** set SW5 to **0100** before power-on. For LinkServer (default), leave JP5 uninstalled.
 
 ```bash
-west flash -d build
+west flash -d build-rt1180-evk
 ```
 
 - **Runner:** LinkServer (default; `MIMXRT1189xxxxx:MIMXRT1180-EVK`). J-Link also supported — see `zephyr/boards/nxp/mimxrt1180_evk/board.cmake`.
 - **Order:** MCUboot first, then signed application — separate partition images, **no merged/combined image**.
 - **Images:**
-  - `build/mcuboot/zephyr/zephyr.bin` → `boot_partition`
-  - `build/mender-mcu-integration/zephyr/zephyr.signed.bin` → slot partition
+  - `build-rt1180-evk/mcuboot/zephyr/zephyr.bin` → `boot_partition`
+  - `build-rt1180-evk/mender-mcu-integration/zephyr/zephyr.signed.bin` → slot partition
 - **pyOCD does not work** on this EVK (external flash programming unsupported); use LinkServer or J-Link.
 
 Reset the board after flash (SW3) and attach serial on MCU-Link (115200 8N1, J53).
@@ -463,7 +479,7 @@ Reset the board after flash (SW3) and attach serial on MCU-Link (115200 8N1, J53
 | Plan tier | Micro |
 | Device type | `mimxrt1180_evk` (Zephyr `BOARD` default) |
 | Update module | `zephyr-image` |
-| Artifact | Upload `build/mender-mcu-integration/zephyr/zephyr.mender` |
+| Artifact | Upload `build-rt1180-evk/mender-mcu-integration/zephyr/zephyr.mender` |
 
 Register the device after first boot with network connectivity; deploy the matching artifact name (e.g. `dev-1`).
 
@@ -509,7 +525,7 @@ REST equivalent: `POST /api/management/v1/deployments/deployments/group/simulato
 
 **Static group (inventory):** name **`rt1180-lab`**. Mender does not list empty groups — **`rt1180-lab` appears in the UI when the first accepted RT118x lab device is assigned** (`PUT /api/management/v1/inventory/devices/{id}/group` with body `{"group": "rt1180-lab"}` or `PATCH .../groups/rt1180-lab/devices`). Until hardware arrives, only the **`simulator`** group is in use for Phase 0b (`native_sim`).
 
-**Deploy to the lab group** (after EVK build produces `build/mender-mcu-integration/zephyr/zephyr.mender`):
+**Deploy to the lab group** (after EVK build produces `build-rt1180-evk/mender-mcu-integration/zephyr/zephyr.mender`):
 
 ```bash
 ./scripts/create-rt1180-deployment.sh
@@ -620,6 +636,7 @@ Goal: reproducible sysbuild and valid Mender artifact before touching hardware.
 ```bash
 west build -p --sysbuild \
   -b mimxrt1180_evk/mimxrt1189/cm33 \
+  -d build-rt1180-evk \
   mender-mcu-integration \
   -- \
   -DEXTRA_CONF_FILE=mender-local.conf \
@@ -630,16 +647,16 @@ west build -p --sysbuild \
 - [ ] **0.4** Outputs present:
 
 ```bash
-test -f build/mcuboot/zephyr/zephyr.bin
-test -f build/mender-mcu-integration/zephyr/zephyr.signed.bin
-test -f build/mender-mcu-integration/zephyr/zephyr.mender
+test -f build-rt1180-evk/mcuboot/zephyr/zephyr.bin
+test -f build-rt1180-evk/mender-mcu-integration/zephyr/zephyr.signed.bin
+test -f build-rt1180-evk/mender-mcu-integration/zephyr/zephyr.mender
 ```
 
 - [ ] **0.5** Validate artifact:
 
 ```bash
-mender-artifact validate build/mender-mcu-integration/zephyr/zephyr.mender
-mender-artifact read build/mender-mcu-integration/zephyr/zephyr.mender
+mender-artifact validate build-rt1180-evk/mender-mcu-integration/zephyr/zephyr.mender
+mender-artifact read build-rt1180-evk/mender-mcu-integration/zephyr/zephyr.mender
 ```
 
 **Pass:** `validate` exit 0; `read` shows device type `mimxrt1180_evk`, artifact name matches `CONFIG_MENDER_ARTIFACT_NAME` (e.g. `dev-1`), type `zephyr-image`.
@@ -708,7 +725,7 @@ If a previous run left `zeth` behind: `sudo ./scripts/run-native-sim-network.sh 
 
 Configure host NAT so the sim can reach Hosted Mender: [Setting up Zephyr and NAT/masquerading on host to access internet](https://docs.zephyrproject.org/latest/connectivity/networking/qemu_setup.html#setting-up-zephyr-and-nat-masquerading-on-host-to-access-internet).
 
-- [x] **0b.1** Pristine build (separate directory from EVK `build/`). **Recommended — one command, no failed link step:**
+- [x] **0b.1** Pristine build (separate directory from EVK `build-rt1180-evk/`). **Recommended — one command, no failed link step:**
 
 ```bash
 source zephyr/zephyr-env.sh
@@ -858,7 +875,7 @@ Goal: MCUboot + signed app on EVK; serial console and Ethernet link before Hoste
 - [ ] **1.1** Flash sysbuild output:
 
 ```bash
-west flash -d build
+west flash -d build-rt1180-evk
 ```
 
 - [ ] **1.2** Reset (SW3); attach serial on **J53** @ 115200 — expect MCUboot banner then Zephyr/Mender boot logs (no hard fault loop).
@@ -945,7 +962,7 @@ Alternatively use UI **Devices → Pending → Accept**, or `mender-cli` after `
 mender-cli artifacts upload \
   --server "${MENDER_SERVER_URL}" \
   --token-value "${MENDER_PAT}" \
-  build/mender-mcu-integration/zephyr/zephyr.mender
+  build-rt1180-evk/mender-mcu-integration/zephyr/zephyr.mender
 ```
 
 - [ ] **2.4** Create deployment to device group / single device; wait until **finished** / **successful** in UI or API.
@@ -1062,7 +1079,7 @@ Track progress with the **[Zephyr testing plan](#zephyr-testing-plan)** checkbox
 2. Complete **Phase 2** on RT1180 EVK (accept device, upload `zephyr.mender`, deploy, confirm swap). Phase 0b on `native_sim` already validated client auth and noop OTA on the host.
 3. When needed, run **Phase 3** in `build-mbox` — then reflash Mender image before resuming Phase 2.
 4. When FRDM hardware is available, run **Phase 1F** (flash, serial, Ethernet/DHCP) — host sysbuild already verified @ `1b2d374`.
-5. Push local commits when ready to share the RT1180 port upstream or to a fork remote.
+5. Push local commits when ready to share the RT118x port upstream or to a fork remote.
 
 ## Commits
 

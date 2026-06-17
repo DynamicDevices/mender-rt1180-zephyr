@@ -10,7 +10,7 @@ SERVER="${MENDER_SERVER_URL:-https://hosted.mender.io}"
 MENDER_CLI="${MENDER_CLI:-${ROOT}/.tools/bin/mender-cli}"
 export PATH="${ROOT}/.tools/bin:${PATH}"
 
-BUILD_DIR="${MENDER_BUILD_DIR:-build}"
+BUILD_DIR="${MENDER_BUILD_DIR:-build-rt1180-evk}"
 ARTIFACT_PATH="${MENDER_ARTIFACT_PATH:-${ROOT}/${BUILD_DIR}/mender-mcu-integration/zephyr/zephyr.mender}"
 DEVICE_TYPE="${MENDER_DEVICE_TYPE:-mimxrt1180_evk}"
 DEVICE_ID="${MENDER_DEVICE_ID:-}"
@@ -24,14 +24,15 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
 
-Upload build/mender-mcu-integration/zephyr/zephyr.mender (zephyr-image) to Hosted Mender US
+Upload build-rt1180-evk/mender-mcu-integration/zephyr/zephyr.mender (zephyr-image) to Hosted Mender US
 and create one deployment. EVK hardware and an accepted device are required for OTA to succeed.
 
 Options:
   -h, --help      Show this help
 
 Environment:
-  MENDER_ARTIFACT_PATH   Default: \${ROOT}/build/mender-mcu-integration/zephyr/zephyr.mender
+  MENDER_ARTIFACT_PATH   Default: \${ROOT}/build-rt1180-evk/mender-mcu-integration/zephyr/zephyr.mender
+  MENDER_BUILD_DIR       Default: build-rt1180-evk (FRDM: build-frdm-rt1186 via create-rt1186-frdm-deployment.sh)
   MENDER_DEVICE_TYPE     Default: mimxrt1180_evk (use frdm_imxrt1186 for FRDM build)
   MENDER_DEPLOY_TARGET   device | device_type | group (default: group)
   MENDER_DEVICE_GROUP    Default: rt1180-lab (EVK + FRDM CM33; separate device types, same lab group)
@@ -41,7 +42,7 @@ Environment:
 
 Build artifact (from West workspace root):
 
-  west build -d build -b mimxrt1180_evk/mimxrt1189/cm33 mender-mcu-integration \\
+  west build -d build-rt1180-evk -b mimxrt1180_evk/mimxrt1189/cm33 mender-mcu-integration \\
     --sysbuild -- -DCONFIG_MENDER_ARTIFACT_GENERATE=y
 
 Examples:

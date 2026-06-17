@@ -1,6 +1,7 @@
-# Mender OTA on NXP i.MX RT1180 (Zephyr)
+# Mender OTA on NXP i.MX RT118x family (Zephyr)
 
-Public repo: https://github.com/DynamicDevices/mender-rt1180-zephyr
+Public repo: https://github.com/DynamicDevices/mender-rt1180-zephyr  
+(GitHub name is historical EVK-first naming; this overlay covers the **RT118x** family — EVK and FRDM CM33.)
 
 Public overlay for [mender-mcu-integration](https://github.com/mendersoftware/mender-mcu-integration): RT118x CM33 board configuration (EVK + FRDM-IMXRT1186), build/flash notes, and Hosted Mender bring-up documentation.
 
@@ -23,7 +24,7 @@ mkdir mender-rt1180 && cd mender-rt1180
 # Upstream reference application + West manifest
 git clone https://github.com/mendersoftware/mender-mcu-integration.git mender-mcu-integration
 
-# RT1180 port files from this repo
+# RT118x port files from this repo
 git clone https://github.com/DynamicDevices/mender-rt1180-zephyr.git _rt1180
 cp -a _rt1180/mender-mcu-integration/. mender-mcu-integration/
 rm -rf _rt1180
@@ -34,9 +35,22 @@ west update
 
 Full procedure (SDK, secrets, build, flash, Mender): **[mender-mcu-integration/PROJECT-NOTES.md](mender-mcu-integration/PROJECT-NOTES.md)**.
 
+
+## West build directories
+
+Use a **separate** build directory per target (do not point EVK and FRDM at the same `-d` path — CMake caches board-specific configuration).
+
+| Target | Default `BUILD_DIR` | Build | Flash | Deploy |
+|--------|---------------------|-------|-------|--------|
+| MIMXRT1180-EVK CM33 | `build-rt1180-evk` | `./scripts/build-rt1180-evk.sh` | `west flash -d build-rt1180-evk` | `./scripts/create-rt1180-deployment.sh` |
+| FRDM-IMXRT1186 CM33 | `build-frdm-rt1186` | `./scripts/build-rt1186-frdm.sh` | `west flash -d build-frdm-rt1186` | `./scripts/create-rt1186-frdm-deployment.sh` |
+| `native_sim` (Phase 0b) | `build-native_sim` | `./scripts/build-native-sim.sh` | N/A (run `zephyr.exe`) | `./scripts/create-native-sim-deployment.sh` |
+
+If you previously used the legacy shared `build/` directory, remove it before rebuilding: `rm -rf build`.
+
 ## Simulator testing (Phase 0b)
 
-**Status: COMPLETE (2026-06-13; re-verified 2026-06-17 @ mender-mcu `1b2d374`).** Hosted Mender validation without RT1180 hardware: Zephyr `native_sim` with the noop-update module (no MCUboot, no `zephyr-image` OTA). Verified end-to-end: build, TAP/DHCP/NAT, accept pending device, noop deployment.
+**Status: COMPLETE (2026-06-13; re-verified 2026-06-17 @ mender-mcu `1b2d374`).** Hosted Mender validation without RT118x hardware: Zephyr `native_sim` with the noop-update module (no MCUboot, no `zephyr-image` OTA). Verified end-to-end: build, TAP/DHCP/NAT, accept pending device, noop deployment.
 
 From the West workspace root (after `west update` and local `mender-local.conf` — see PROJECT-NOTES):
 
@@ -104,11 +118,11 @@ When lab hardware is available, use **`scripts/create-rt1180-deployment.sh`** (E
 
 | Path | Purpose |
 |------|---------|
-| `mender-mcu-integration/PROJECT-NOTES.md` | RT1180 workspace, build, flash, and OTA notes |
+| `mender-mcu-integration/PROJECT-NOTES.md` | RT118x workspace, build, flash, and OTA notes |
 | `mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.conf` | EVK board Kconfig fragment |
 | `mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33.conf` | FRDM board Kconfig fragment |
 | `mender-mcu-integration/west.yml` | West manifest (Zephyr v4.4.0 + mender-mcu fork @ `1b2d374`; FRDM board) |
-| `mender-mcu-integration/README.md` | Pointer to PROJECT-NOTES for RT1180 |
+| `mender-mcu-integration/README.md` | Pointer to PROJECT-NOTES for RT118x |
 | `mender-mcu-integration/.gitignore` | Local secrets and build paths |
 | `scripts/` | Host helpers — Phase 0b: `build-native-sim.sh`, `run-native-sim-network.sh`, `test-mender-native-sim.sh`, `create-native-sim-deployment.sh`; RT118x CM33: `build-rt1180-evk.sh`, `build-rt1186-frdm.sh`, `create-rt1180-deployment.sh`, `create-rt1186-frdm-deployment.sh`; vemu: `test-vemu.sh` — see [PROJECT-NOTES — Scripts inventory](mender-mcu-integration/PROJECT-NOTES.md#scripts-inventory) |
 

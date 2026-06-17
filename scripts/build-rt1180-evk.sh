@@ -15,7 +15,7 @@ Usage: build-rt1180-evk.sh [--incremental] [extra west cmake args...]
 Sysbuild Mender MCU OTA for MIMXRT1180-EVK CM33 (mimxrt1180_evk/mimxrt1189/cm33).
 
 Environment:
-  BUILD_DIR              Default: build
+  BUILD_DIR              Default: build-rt1180-evk
   RT1180_BOARD           Default: mimxrt1180_evk/mimxrt1189/cm33
   CONFIG_MENDER_ARTIFACT_NAME  Default: dev-1
 
@@ -24,7 +24,7 @@ Examples (from West workspace root):
   ./scripts/build-rt1180-evk.sh --incremental
 
 Board fragment: mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.conf
-Flash: west flash -d build
+Flash: west flash -d build-rt1180-evk
 Deploy: ./scripts/create-rt1180-deployment.sh
 EOF
 }
@@ -41,7 +41,7 @@ if [[ -f zephyr/zephyr-env.sh ]]; then
 fi
 
 BOARD="${RT1180_BOARD:-mimxrt1180_evk/mimxrt1189/cm33}"
-BUILD_DIR="${BUILD_DIR:-build}"
+BUILD_DIR="${BUILD_DIR:-build-rt1180-evk}"
 ARTIFACT_NAME="${CONFIG_MENDER_ARTIFACT_NAME:-dev-1}"
 
 WEST_BUILD=(-p)
