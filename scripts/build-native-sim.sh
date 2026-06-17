@@ -11,6 +11,28 @@ if [[ -f zephyr/zephyr-env.sh ]]; then
   source zephyr/zephyr-env.sh
 fi
 
+usage() {
+  cat <<EOF
+Usage: build-native-sim.sh [--incremental] [extra west cmake args...]
+
+Phase 0b Mender smoke: Zephyr native_sim (requires gcc-11 + gcc-11-multilib).
+
+Environment:
+  BUILD_DIR              Default: build-native_sim
+
+Examples (from West workspace root):
+  ./scripts/build-native-sim.sh
+  ./scripts/build-native-sim.sh --incremental
+
+Run: ./build-native_sim/zephyr/zephyr.exe (or test-mender-native-sim.sh)
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
 if ! command -v gcc-11 >/dev/null 2>&1; then
   echo "gcc-11 required (with gcc-11-multilib for -m32 NSI link)." >&2
   echo "Install: sudo apt install gcc-11 g++-11 gcc-11-multilib" >&2
