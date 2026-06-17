@@ -112,7 +112,7 @@ When lab hardware is available, use **`scripts/create-rt1180-deployment.sh`** (E
 
 **Production security:** on-die **EdgeLock (ELE)** key storage is a project requirement for RT118x — lab uses NVS today; phased roadmap (S0–S4) in [PROJECT-NOTES — Security / EdgeLock](mender-mcu-integration/PROJECT-NOTES.md#security--edgelock).
 
-**EU Cyber Resilience Act (CRA):** technical gap analysis — [CRA technical mapping](mender-mcu-integration/PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping); unified delivery plan — **[CRA compliance programme](mender-mcu-integration/PROJECT-NOTES.md#cra-compliance-programme-firmware-technical-baseline)** (engineering plan, not legal sign-off).
+**EU Cyber Resilience Act (CRA):** technical gap analysis — [CRA technical mapping](mender-mcu-integration/PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping); unified delivery plan — **[CRA compliance programme](mender-mcu-integration/PROJECT-NOTES.md#cra-compliance-programme-firmware-technical-baseline)** (engineering plan, not legal sign-off). Open milestones: [GitHub issue tracker #1](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/1).
 
 ## What this repo contains
 

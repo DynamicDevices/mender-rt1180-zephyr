@@ -457,6 +457,11 @@ For the **unified delivery plan** (workstreams, milestones, checklists), see [CR
 
 **Scope:** RT118x CM33 firmware from this workspace. Companion MPU Linux (e.g. i.MX 93 in HMS designs) is a separate stack and OTA path. Regulatory reference material and gap themes remain in [CRA technical mapping](#cyber-resilience-act-cra--technical-mapping) — do not duplicate the [gap analysis matrix](#gap-analysis-matrix) here.
 
+**Programme tracker:**
+
+- **Tracker:** [GitHub issue #1](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/1) (meta issue linking #2–#12)
+- **Note:** M-001/M-002 **Done** — tracked in this programme section only (no GitHub issues)
+
 **Related plans (reference only):**
 
 | Document | Section |
@@ -561,6 +566,8 @@ Four tracks run in parallel. **Owner** is **TBD** until assigned.
 - [ ] Configuration baseline (`prj.conf`, board conf, `west.yml` pins) frozen per release tag
 
 ### Unified milestone table
+
+**Tracker:** [GitHub #1](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/1) (M-003–M-012 via linked issues; M-001/M-002 done — programme doc only)
 
 | ID | Milestone | WS | Target | Status | Evidence artifact |
 |----|-----------|-----|--------|--------|-------------------|
