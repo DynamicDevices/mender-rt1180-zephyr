@@ -5,6 +5,8 @@ manifest:
       url-base: https://github.com/zephyrproject-rtos
     - name: mender
       url-base: https://github.com/mendersoftware
+    - name: dynamicdevices
+      url-base: https://github.com/DynamicDevices
 
   projects:
     - name: zephyr
@@ -20,8 +22,8 @@ manifest:
           - hal_nordic
           - hal_espressif
     - name: mender-mcu
-      remote: mender
-      revision: main
+      remote: dynamicdevices
+      revision: 11b731d4940c9baaae496a617632f5b833011c72
       path: modules/mender-mcu
       import: true
 

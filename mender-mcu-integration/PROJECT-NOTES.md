@@ -154,6 +154,33 @@ west build -p --sysbuild \
 
 **Zephyr version:** upstream `frdm_imxrt1186` landed in Zephyr **v4.4.0**. This manifest pins **`revision: v4.4.0`** in `west.yml` (was v4.2.0 for EVK-only bring-up). Run `west update` after pulling manifest changes.
 
+### Mbed TLS 4.x / Zephyr 4.4 (mender-mcu device auth)
+
+Zephyr **v4.4.0** ships **Mbed TLS 4.1.0** plus a separate **TF-PSA-Crypto 1.1.0** west module. TLS and X.509 stay in `modules/crypto/mbedtls`; primitives (ECDSA, SHA, DRBG, PK parse/sign) moved to PSA/TF-PSA-Crypto. See the [Zephyr 4.4 migration guide](https://docs.zephyrproject.org/latest/releases/migration-guide-4.4.html) and upstream [TF-PSA-Crypto 1.0 migration guide](https://github.com/Mbed-TLS/TF-PSA-Crypto/blob/development/docs/1.0-migration-guide.md).
+
+**What broke (Zephyr 4.2 vs 4.4):** `mender-mcu` `src/platform/tls/generic/mbedtls/tls.c` on **`main`** (v1.0.0, README still lists Zephyr v4.2.0) targets Mbed TLS **3.x** APIs:
+
+- `mbedtls_pk_parse_key(..., f_rng, p_rng)` — **RNG arguments removed** in 4.x (`tf-psa-crypto/include/mbedtls/pk.h`).
+- `mbedtls_pk_sign(..., f_rng, p_rng)` — same; 4.x uses `(sig, sig_size, &sig_len)` only.
+- `mbedtls_pk_setup` / `mbedtls_pk_info_from_type` / `mbedtls_pk_ec` / `mbedtls_ecdsa_genkey` — legacy **ECKEY** keygen path; PK internals are PSA-backed and these helpers are not available the same way without legacy/private headers.
+
+Hosted Mender **HTTPS** (socket TLS) is largely unaffected; **device authentication** (generate/store/sign with `tls.c`) fails compile on 4.4 until adapted.
+
+**Kconfig (`prj.conf`):** Many `CONFIG_MBEDTLS_ECDSA_C`, `CONFIG_MBEDTLS_ECP_*`, etc. were **removed** in 4.4 — enable crypto via **`CONFIG_PSA_WANT_*`** (already in this repo’s `prj.conf`). Keep **`CONFIG_MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS=y`** only if you still compile legacy ECDSA includes (prefer removing that path on 4.x). **`CONFIG_MBEDTLS_CTR_DRBG_C=y`** remains needed for code paths that still seed CTR-DRBG (user-provided key helper). **`CONFIG_PSA_WANT_ALG_RSA_PKCS1V15_SIGN=y`** supports Amazon RSA roots / ECDHE-RSA cipher suites.
+
+**Upstream status (2026-06):** No merged Mbed TLS 4.x port on `mendersoftware/mender-mcu` `main`; open PR [#245](https://github.com/mendersoftware/mender-mcu/pull/245) bumps **posix** mbedTLS to 3.6.6 only. `mender-mcu-integration` upstream `west.yml` still pins Zephyr **v4.2.0**.
+
+**Fork pin (this workspace):** [`DynamicDevices/mender-mcu`](https://github.com/DynamicDevices/mender-mcu) branch `feature/zephyr-4.4-mbedtls4` (commit `11b731d`) — west manifest pins that SHA. Patches under `modules/mender-mcu/` — `tls.c` uses `#if MBEDTLS_VERSION_NUMBER >= 0x04000000` for PSA `psa_generate_key` + `mbedtls_pk_copy_from_psa`, and 4.x `mbedtls_pk_parse_key` / `mbedtls_pk_sign` signatures. Also Zephyr 4.4 API renames: `zephyr/kvss/nvs.h`, `PARTITION_ID` / `PARTITION_DEVICE` (storage + image update module). **Verified:** `west build` links `zephyr.elf` for FRDM with patched `tls.c` + updated `prj.conf` (set `CONFIG_MENDER_ARTIFACT_NAME` for artifact step).
+
+**Recommended actions:**
+
+1. Open upstream PR to Northern.tech / `mender-mcu` with the `tls.c` 4.x guards (mirror PR #24 style for 3.7).
+2. Until merged: **west manifest pin** `mender-mcu` to a fork/commit with the patch, or maintain a **`zephyr/module.yml` patch** / `west patch` — avoid silent edits on detached `main`.
+3. Extend CI matrix to **Zephyr v4.4.0** + `native_sim` and one hardware target; run auth keygen + sign smoke test.
+4. Do **not** downgrade Zephyr to 4.2 for FRDM — board requires 4.4.
+5. After upstream fix: drop `CONFIG_MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS` if unused; re-audit `PSA_WANT_*` against Hosted Mender roots only.
+
+
 ### Build (FRDM CM33)
 
 ```bash
@@ -215,10 +242,44 @@ Zephyr `SECURE_STORAGE` (encrypted flash ITS) is a weaker intermediate — still
 | Phase | Goal | Status |
 |-------|------|--------|
 | **S0 — Lab** | NVS auth keys + timer RNG; ELE ping via Zephyr SoC; Hosted Mender auth + OTA (`native_sim` Phase 0b, then EVK/FRDM Phase 1) | Phase 0b **done**; hardware **TBD** |
-| **S1 — ELE TRNG** | Enable hardware entropy when upstream adds `nxp,ele-trng` DTS binding and driver for RT118x CM33 (`CONFIG_ENTROPY_NXP_ELE_TRNG`); drop timer-RNG workaround | Blocked on upstream NXP/Zephyr |
+| **S1 — ELE TRNG** | Hardware entropy via ELE TRNG; drop timer-RNG workaround — see [S1 remediation plan](#s1--ele-trng-remediation-plan-rt118x-cm33) | Blocked on upstream NXP/Zephyr |
 | **S2 — PSA crypto driver** | Zephyr PSA Crypto integration with NXP [`psa_crypto_driver`](https://github.com/NXP/psa_crypto_driver) (**ELE_S4XX** backend) | Not started |
 | **S3 — Mender platform** | Opaque ELE key storage + PSA sign for devauth in mender-mcu platform layer | Not started |
 | **S4 — Manufacturing** | AN14861 provisioning workflow, lifecycle policy, EdgeLock 2GO integration; remove timer RNG | Not started |
+
+### S1 — ELE TRNG remediation plan (RT118x CM33)
+
+**Status:** Blocked on upstream NXP/Zephyr — a devicetree overlay alone is insufficient.
+
+**Root cause (Zephyr v4.4.0 audit):**
+
+- CM33 DTS has no `nxp,ele-trng` node and no `zephyr,entropy` in `chosen` (`zephyr/dts/arm/nxp/imxrt/nxp_rt118x.dtsi`, board CM33 `.dts`).
+- `entropy_nxp_ele.c` depends on `sss_crypto.h` / SSS SSCP; HAL only ships the **kw45_k4w1** port (`kType_SSS_Ele200`, ELEMU) — incompatible with RT118 **S3MU** (`MU_RT_S3MUA`, `fsl_ele_base_api`, **Ele400** class).
+- RT118 SoC driver handles ELE ping + TRDC only; SDK exposes `ELE_BaseAPI_StartRng()` but no byte-level RNG API in the base API — MCUX PSA/ELE_S4XX path is separate.
+
+**MCX reference (working in Zephyr):**
+
+- MCXW: `nxp,ele-trng` + `zephyr,entropy` in `nxp_mcxw7x_common.dtsi` → `CONFIG_ENTROPY_NXP_ELE_TRNG`.
+- MCXN: on-chip `nxp,els-trng` → `CONFIG_ENTROPY_NXP_ELS_TRNG` (different IP; not applicable to RT118).
+
+**Interim (lab S0):** Keep timer RNG in `boards/mimxrt1180_evk_mimxrt1189_cm33.conf` and `boards/frdm_imxrt1186_mimxrt1186_cm33.conf`. Document CRA waiver — not for production.
+
+**Upstream deliverables needed:**
+
+1. `trng { compatible = "nxp,ele-trng"; status = "okay"; }` in SoC or board DTS + `zephyr,entropy = &trng`.
+2. RT118 SSS port (`kType_SSS_Ele400`, S3MU) in `modules/hal/nxp/mcux/middleware/`, **or** new entropy driver on `fsl_ele_base_api`/PSA.
+3. Board YAML: add `entropy`; CI: `tests/drivers/entropy/api` on `mimxrt1180_evk/.../cm33`.
+
+**Local switch (after upstream):** Remove `CONFIG_TEST_RANDOM_GENERATOR` and `CONFIG_TIMER_RANDOM_GENERATOR`; rely on auto-selected `CONFIG_ENTROPY_NXP_ELE_TRNG`; keep `CONFIG_MBEDTLS_PSA_DRIVER_GET_ENTROPY=y`.
+
+**Verify:**
+
+1. `west build -p -b mimxrt1180_evk/mimxrt1189/cm33 zephyr/tests/drivers/entropy/api` → flash → PASS.
+2. Mender integration build without timer RNG Kconfig; TLS connect + device auth (no `sys_rand_get` / mbedtls entropy errors).
+
+**CRA:** Timer RNG fails secure-by-default for shipping firmware ([CRA mapping](#cyber-resilience-act-cra--technical-mapping) — Entropy row). S1 must complete before production fleet or conformity claims.
+
+**Track:** Zephyr GitHub issue/PR to NXP; reference NXP MCUX PSA/ELE_S4XX RT1180 examples and `NXP/psa_crypto_driver` (S2).
 
 S1–S4 are independent of the [Zephyr testing plan](#zephyr-testing-plan) OTA phases (0–4) but should complete before any production fleet rollout.
 
