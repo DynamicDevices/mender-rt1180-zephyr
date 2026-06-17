@@ -1006,6 +1006,15 @@ mender-cli login --password "$(cat mender-mcu-integration/mender-pat-local.conf)
 
 Use the **user-zephyr-docs** MCP server in Cursor for Zephyr Kconfig, devicetree, and API lookups while iterating on this port.
 
+## Upstream contribution
+
+This overlay workspace pins **Zephyr v4.4.0** and the [`DynamicDevices/mender-mcu`](https://github.com/DynamicDevices/mender-mcu) fork (`feature/zephyr-4.4-mbedtls4`) in [`west.yml`](west.yml) for FRDM-IMXRT1186 and Mbed TLS 4.x bring-up.
+
+The **module changes** intended for `mendersoftware/mender-mcu` are developed on that fork branch with **no breaking changes for Zephyr v4.2.0**: `storage.c` and `update-module.c` use `ZEPHYR_VERSION_CODE` guards (`fs/nvs.h` vs `kvss/nvs.h`, `FIXED_PARTITION_*` vs `PARTITION_*`); `tls.c` keeps `MBEDTLS_VERSION_NUMBER` guards for Mbed TLS 3.x and 4.x. Integration-app-only Kconfig (`PSA_WANT_*`, etc.) stays in this repo’s `prj.conf`, not in the module.
+
+Do not open an upstream PR from this workspace without explicit sign-off; when ready, target dual **v4.2 + v4.4** CI on Northern.tech’s integration app.
+
+
 ## Status
 
 Track progress with the **[Zephyr testing plan](#zephyr-testing-plan)** checkboxes.
