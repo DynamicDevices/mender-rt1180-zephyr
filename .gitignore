@@ -8,9 +8,11 @@ bootloader/
 .tools/
 .local/
 
-# Build outputs (per-target dirs: build-rt1180-evk/, build-frdm-rt1186/, build-native_sim/, …)
-# Legacy shared build/ — do not reuse across boards; rm -rf build if migrating from old mixed cache
+# Build outputs (per-target; rm -rf build if migrating from old mixed cache)
 build/
+build-rt1180-evk/
+build-frdm-rt1186/
+build-native_sim/
 build-*/
 
 # Secrets and local Kconfig
