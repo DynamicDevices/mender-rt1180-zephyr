@@ -19,7 +19,7 @@ Zephyr Module, with configurations for some boards to choose from.
 
 ## i.MX RT118x (CM33) port — EVK and FRDM
 
-Work-in-progress Mender OTA notes for **MIMXRT1180-EVK** and **FRDM-IMXRT1186** (CM33) are in [PROJECT-NOTES.md](PROJECT-NOTES.md) (build, flash, Hosted Mender, **mender-mcu fork pin @ `1b2d374`**, expected build warnings, status, **EdgeLock ELE security roadmap**, **[CRA technical mapping](PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping)**, and **[CRA compliance programme](PROJECT-NOTES.md#cra-compliance-programme-firmware-technical-baseline)** — engineering preparedness, not legal sign-off). Requires **Zephyr v4.4.0** and **SDK 1.0.1**. For a fresh West workspace, see the [repo README](../README.md).
+Work-in-progress Mender OTA notes for **MIMXRT1180-EVK** and **FRDM-IMXRT1186** (CM33) are in [PROJECT-NOTES.md](PROJECT-NOTES.md) (build, flash, Hosted Mender, **stable lab MAC / device identity** via board overlays, **mender-mcu fork pin @ `1b2d374`**, expected build warnings, status, **EdgeLock ELE security roadmap**, **[CRA technical mapping](PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping)**, and **[CRA compliance programme](PROJECT-NOTES.md#cra-compliance-programme-firmware-technical-baseline)** — engineering preparedness, not legal sign-off). Requires **Zephyr v4.4.0** and **SDK 1.0.1**. For a fresh West workspace, see the [repo README](../README.md).
 
 ## Get started
 

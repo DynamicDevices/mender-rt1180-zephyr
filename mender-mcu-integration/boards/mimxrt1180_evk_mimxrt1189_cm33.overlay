@@ -1,0 +1,39 @@
+/*
+ * Stable locally-administered MACs for Mender device identity (lab fleet).
+ * Upstream EVK DTS sets zephyr,random-mac-address on NETC switch ports — identity
+ * would change every boot (mender-mcu-integration reads MAC from first-up iface).
+ * Production: per-unit identity from EdgeLock/OTP (S2 roadmap), not lab MACs.
+ */
+
+&enetc_psi0 {
+	local-mac-address = [02 11 80 00 00 10];
+};
+
+&enetc_psi1 {
+	local-mac-address = [02 11 80 00 00 11];
+};
+
+&switch_port0 {
+	/delete-property/ zephyr,random-mac-address;
+	local-mac-address = [02 11 80 00 00 01];
+};
+
+&switch_port1 {
+	/delete-property/ zephyr,random-mac-address;
+	local-mac-address = [02 11 80 00 00 02];
+};
+
+&switch_port2 {
+	/delete-property/ zephyr,random-mac-address;
+	local-mac-address = [02 11 80 00 00 03];
+};
+
+&switch_port3 {
+	/delete-property/ zephyr,random-mac-address;
+	local-mac-address = [02 11 80 00 00 04];
+};
+
+&switch_port4 {
+	/delete-property/ zephyr,random-mac-address;
+	local-mac-address = [02 11 80 00 00 05];
+};

@@ -1,0 +1,22 @@
+/*
+ * Stable locally-administered MACs for Mender device identity (lab fleet).
+ * Upstream FRDM DTS uses placeholder 00:00:00:01:xx:xx MACs — override with
+ * board-distinct locally-administered addresses (02:11:86:… = RT1186).
+ * Production: per-unit identity from EdgeLock/OTP (S2 roadmap), not lab MACs.
+ */
+
+&enetc_psi1 {
+	local-mac-address = [02 11 86 00 00 10];
+};
+
+&switch_port0 {
+	local-mac-address = [02 11 86 00 00 01];
+};
+
+&switch_port2 {
+	local-mac-address = [02 11 86 00 00 02];
+};
+
+&switch_port4 {
+	local-mac-address = [02 11 86 00 00 05];
+};

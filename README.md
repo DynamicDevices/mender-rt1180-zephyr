@@ -95,6 +95,8 @@ From the **West workspace root** (this repo when used as the top-level checkout)
 
 **Hardware (Phase 1):** for CM33 debug/flash, set jumper **J60** to **1:OFF 2:OFF 3:ON** ([Zephyr board doc](https://docs.zephyrproject.org/latest/boards/nxp/frdm_imxrt1186/doc/index.html)). Connect a **1 Gbps** Ethernet cable to a TSN switch port (`swp0` or `swp2` per upstream doc); expect DHCP on those interfaces. Lab static Mender group: **`rt1180-lab`** (shared name with EVK — use `device_type` or per-device deploy targets so EVK and FRDM artifacts are not mixed).
 
+**Device identity:** board overlays fix locally-administered MACs so Mender does not re-register every boot (EVK **02:11:80:00:00:01**, FRDM **02:11:86:00:00:01** on `swp0`). See [PROJECT-NOTES — Device identity](mender-mcu-integration/PROJECT-NOTES.md#device-identity-stable-mac). Production: EdgeLock per-unit identity (S2 roadmap), not shared lab MACs.
+
 Manual build (equivalent to the script):
 
 ```bash
@@ -124,7 +126,9 @@ When lab hardware is available, use **`scripts/create-rt1180-deployment.sh`** (E
 |------|---------|
 | `mender-mcu-integration/PROJECT-NOTES.md` | RT118x workspace, build, flash, and OTA notes |
 | `mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.conf` | EVK board Kconfig fragment |
+| `mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.overlay` | EVK stable lab MAC (NETC) |
 | `mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33.conf` | FRDM board Kconfig fragment |
+| `mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33.overlay` | FRDM stable lab MAC (NETC) |
 | `mender-mcu-integration/west.yml` | West manifest (Zephyr v4.4.0 + mender-mcu fork @ `1b2d374`; FRDM board) |
 | `mender-mcu-integration/README.md` | Pointer to PROJECT-NOTES for RT118x |
 | `mender-mcu-integration/.gitignore` | Local secrets and build paths |

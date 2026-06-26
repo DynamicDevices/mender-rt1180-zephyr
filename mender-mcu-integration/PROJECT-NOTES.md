@@ -160,6 +160,8 @@ west build -p --sysbuild \
 | SoC | MIMXRT1189 | MIMXRT1186 |
 | Mender device type | `mimxrt1180_evk` | `frdm_imxrt1186` |
 | Board conf (auto) | `boards/mimxrt1180_evk_mimxrt1189_cm33.conf` | `boards/frdm_imxrt1186_mimxrt1186_cm33.conf` |
+| Board overlay (auto) | `boards/mimxrt1180_evk_mimxrt1189_cm33.overlay` | `boards/frdm_imxrt1186_mimxrt1186_cm33.overlay` |
+| Lab Mender identity MAC | **02:11:80:00:00:01** (typ. first-up `swp0`; see [Device identity](#device-identity-stable-mac)) | **02:11:86:00:00:01** (typ. `swp0`) |
 | Default build dir | `build-rt1180-evk/` | `build-frdm-rt1186/` |
 | LinkServer probe | `MIMXRT1189xxxxx:MIMXRT1180-EVK` | `MIMXRT1186xxxxx:FRDM-IMXRT1186` |
 | Console UART | LPUART1 (MCU-Link J53) | LPUART1 (on-board MCU-Link) |
@@ -171,6 +173,22 @@ west build -p --sysbuild \
 | Lab Mender group | **`rt1180-lab`** (shared name; **do not** mix device types in one deployment target) | Same group name OK if deployments target **`device_type`** or per-device UUID |
 
 **Zephyr version:** upstream `frdm_imxrt1186` landed in Zephyr **v4.4.0**. This manifest pins **`revision: v4.4.0`** in `west.yml` (was v4.2.0 for EVK-only bring-up). Run `west update` after pulling manifest changes.
+
+### Device identity (stable MAC)
+
+Hosted Mender registers devices by **identity** JSON from the integration app: `{"mac": "…"}` — MAC of the **first-up** Ethernet interface (`netup_get_mac_address()` in `src/utils/netup.c` after `netup_wait_for_network()`).
+
+| Board | Why overlay | Lab identity MAC (typical) |
+|-------|-------------|----------------------------|
+| **EVK** | Upstream sets `zephyr,random-mac-address` on NETC switch ports → new pending device every boot | **02:11:80:00:00:01** on `swp0` (cable to host port) |
+| **FRDM** | Upstream uses shared placeholder `00:00:00:01:xx:xx` MACs — not fleet-safe | **02:11:86:00:00:01** on `swp0` |
+| **native_sim** | TAP MAC fixed in Kconfig | **02:00:5e:00:53:31** (unchanged) |
+
+**Overlay wiring:** Zephyr auto-applies `boards/<board>_<soc>_<core>.overlay` from the app tree — no `DTC_OVERLAY_FILE` in build scripts. Pattern follows Josef’s RT1064 `local-mac-address` on the Ethernet node; RT118x uses NETC (`enetc_psi*`, `switch_port*`) instead of legacy ENET.
+
+**Why MAC overlay (not hwinfo):** Mender MCU exposes only a `get_identity` callback; the integration app hard-codes MAC-from-interface. `hwinfo` (SoC UID) or a custom identity key would need application changes and server-side acceptance rules — reasonable for production (ELE/OTP, S2), but MAC overlay is zero code churn for lab fleet stability.
+
+**Caveats:** Identity follows whichever interface is **first up** at check-in (usually `swp0` when cabled). Multiple lab boards of the same type need **unique** MACs per unit before accept. Production must use **EdgeLock / per-unit provisioning** (S2–S4), not shared lab MACs.
 
 ### Mbed TLS 4.x / Zephyr 4.4 (mender-mcu device auth)
 
@@ -247,7 +265,7 @@ After sysbuild, from workspace root:
 west flash -d build-frdm-rt1186
 ```
 
-Use LinkServer (default) or J-Link per `zephyr/boards/nxp/frdm_imxrt1186/board.cmake`. Reset after flash; serial **115200 8N1** on MCU-Link. CM33: jumper **J60** = **1:OFF 2:OFF 3:ON**. Ethernet: cable to **`swp0` or `swp2`** (not `eth0`/`swp4`). No devicetree overlay is required for Mender storage — upstream `storage_partition` matches the EVK sizing model.
+Use LinkServer (default) or J-Link per `zephyr/boards/nxp/frdm_imxrt1186/board.cmake`. Reset after flash; serial **115200 8N1** on MCU-Link. CM33: jumper **J60** = **1:OFF 2:OFF 3:ON**. Ethernet: cable to **`swp0` or `swp2`** (not `eth0`/`swp4`). Board overlay (`boards/frdm_imxrt1186_mimxrt1186_cm33.overlay`) fixes lab MAC identity only; Mender `storage_partition` needs no overlay.
 
 ## Security / EdgeLock
 
@@ -729,12 +747,29 @@ REST equivalent: `POST /api/management/v1/deployments/deployments/group/rt1180-l
 
 ## RT1180 board configuration notes
 
-Files: `mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.conf`, `mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33.conf` (same NETC/Mender/RNG settings; FRDM storage partition in `zephyr/boards/nxp/frdm_imxrt1186/frdm_imxrt1186.dtsi`)
+Files: `mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.conf`, `mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33.conf`, and matching `.overlay` (same NETC/Mender/RNG settings; FRDM storage partition in `zephyr/boards/nxp/frdm_imxrt1186/frdm_imxrt1186.dtsi`)
 
 - **NETC Ethernet** — `CONFIG_ETH_NXP_IMX_NETC`, `CONFIG_NET_L2_ETHERNET`; `CONFIG_NET_IF_MAX_IPV4_COUNT=2` (EVK exposes multiple NETC interfaces; two suffices for host-port DHCP).
+- **NETC download tuning** — RX ring 16, net_buf/pkt pools and TCP windows per [Pre-hardware NETC download tuning](#pre-hardware-netc-download-tuning) (lab defaults).
 - **MCUboot signing** — `CONFIG_MCUBOOT_SIGNATURE_KEY_FILE="bootloader/mcuboot/root-rsa-2048.pem"` (demo key from upstream tree).
 - **Mender storage** — `CONFIG_MENDER_STORAGE_PARTITION_STORAGE_PARTITION=y` maps to `storage_partition` in `zephyr/boards/nxp/mimxrt1180_evk/mimxrt1180_evk.dtsi` (after slot0/slot1 in external flash).
 - **RNG workaround** — RT1180 CM33 DTS has no `zephyr,entropy` yet; `CONFIG_TEST_RANDOM_GENERATOR` + `CONFIG_TIMER_RANDOM_GENERATOR` satisfy `sys_rand_get` for networking/TLS until hardware entropy is wired up.
+
+### Pre-hardware NETC download tuning
+
+**Status:** applied in both board confs (lab defaults; bench may tune further). Reference: Josef Holzmayr [`mimxrt1064_evk.conf`](https://github.com/TheYoctoJester/mender-mcu-integration/blob/imxrt1064-evk-support/boards/mimxrt1064_evk.conf); NETC Kconfig: [`zephyr/drivers/ethernet/nxp_imx_netc/Kconfig`](https://github.com/zephyrproject-rtos/zephyr/blob/v4.4.0/drivers/ethernet/nxp_imx_netc/Kconfig).
+
+| Layer | Kconfig | Value |
+|-------|---------|-------|
+| NETC DMA ring | `CONFIG_ETH_NXP_IMX_RX_RING_LEN` | `16` |
+| TCP / net_buf | `CONFIG_NET_PKT_{RX,TX}_COUNT` | `40` / `40` |
+| | `CONFIG_NET_BUF_{RX,TX}_COUNT` | `120` / `120` |
+| | `CONFIG_NET_BUF_DATA_SIZE` | `256` |
+| | `CONFIG_NET_TCP_MAX_{RECV,SEND}_WINDOW_SIZE` | `8192` |
+
+**Also in tree:** HyperRAM staging in mender-mcu `update-module.c` (Josef cherry-pick); shared TLS/DNS in `prj.conf` (`MBEDTLS_SSL_MAX_CONTENT_LEN=16384`, `CONFIG_DNS_NUM_CONCUR_QUERIES=5`).
+
+**Defer until hardware:** NETC port selection, throughput/ring sizing (>16 if needed), HyperRAM staging log check, `MENDER_ARTIFACT_DOWNLOAD_RANGES`, mender-mcu HTTP recv buf (512 B, fork-only).
 
 ## CM7 boot and OTA
 
