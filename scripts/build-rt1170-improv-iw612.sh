@@ -12,6 +12,12 @@ if [[ ! -d "${ROOT}/modules/improv-zephyr" ]]; then
   exit 1
 fi
 
+PATCH="${ROOT}/mender-mcu-integration/patches/improv-zephyr-active-esl-claim.patch"
+if [[ -f "${PATCH}" ]] && ! grep -q 'mint_claim_token' "${ROOT}/modules/improv-zephyr/src/improv_handler.c" 2>/dev/null; then
+  echo "Applying ${PATCH##*/} to modules/improv-zephyr..."
+  git -C "${ROOT}/modules/improv-zephyr" apply "${PATCH}"
+fi
+
 exec "${ROOT}/scripts/build-rt1170-evk.sh" \
   "$@" \
   -DZEPHYR_EXTRA_MODULES="${ROOT}/modules/improv-zephyr" \

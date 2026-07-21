@@ -52,6 +52,7 @@ Use a **separate** build directory per target (do not point EVK and FRDM at the 
 | MIMXRT1170-EVK CM7 | `build-rt1170-evk` | `./scripts/build-rt1170-evk.sh` | `west flash -d build-rt1170-evk` | `./scripts/create-rt1170-deployment.sh` |
 | MIMXRT1170-EVKB CM7 + IW612 Improv | `build-rt1170-improv-iw612` | `./scripts/build-rt1170-improv-iw612.sh` | `west flash -d build-rt1170-improv-iw612` | Hardware validation TBD |
 | `native_sim` + Improv (serial, emulated) | `build-native_sim-improv` | `./scripts/build-native-sim-improv.sh` | N/A (run `zephyr.exe`) | `./scripts/create-native-sim-deployment.sh` |
+| `native_sim` + Improv (BLE, emulated) | `build-native_sim-improv-ble` | `./scripts/build-native-sim-improv-ble.sh` | N/A (run `zephyr.exe --bt-dev=hciN`) | `./scripts/create-native-sim-deployment.sh` |
 
 If you previously used the legacy shared `build/` directory, remove it before rebuilding: `rm -rf build`.
 
@@ -63,7 +64,7 @@ From the West workspace root (after `west update` and local `mender-local.conf` 
 
 | Terminal | Command |
 |----------|---------|
-| 1 (leave running) | `sudo ./scripts/run-native-sim-network.sh start` |
+| 1 (leave running) | `./scripts/run-native-sim-network.sh start` (after one-time `sudo ./scripts/setup-native-sim-tap.sh install`) |
 | 2 | `./scripts/build-native-sim.sh` |
 | 2 | `./scripts/test-mender-native-sim.sh --run-only` |
 | 2 (after accept in UI) | `./scripts/create-native-sim-deployment.sh` |
@@ -144,7 +145,8 @@ west blobs fetch hal_nxp
 ./scripts/build-rt1170-improv-iw612.sh
 ```
 
-The build pins `improv-zephyr` at `b65d2aaa39d48ec0fee11aa3eecd0609bbe30f3c`,
+Advertises as **`eink-1170`** with an Active ESL claim redirect URL so the
+Active ESL app can onboard it as `imx93-jaguar-eink` (lab spoof). The build pins `improv-zephyr` at `b65d2aaa39d48ec0fee11aa3eecd0609bbe30f3c`,
 starts BLE provisioning before Mender waits for IPv4, persists Wi-Fi credentials
 in Zephyr settings/NVS, and emits the normal signed image plus
 `zephyr.mender`. The EVKB M.2 Wi-Fi path shares USDHC1 with the SD-card socket,
@@ -168,7 +170,8 @@ using the real pinned `improv-zephyr` protocol/serial code.
 
 ```bash
 west update                                   # fetch improv-zephyr
-sudo ./scripts/run-native-sim-network.sh start  # TAP + DHCP + NAT (terminal 1)
+sudo ./scripts/setup-native-sim-tap.sh install  # once per machine (user-owned zeth)
+./scripts/run-native-sim-network.sh start       # no sudo after install (terminal 1)
 ./scripts/build-native-sim-improv.sh          # build (terminal 2)
 ./build-native_sim-improv/zephyr/zephyr.exe   # run; prints "connected to pseudotty: /dev/pts/N"
 # terminal 3 — drive provisioning over that PTY (Chrome Web Serial cannot see a PTY):
@@ -180,6 +183,43 @@ runs on `zeth0` and the Mender client authenticates against Hosted Mender. Only
 the radio association itself is stubbed — SDIO enumeration, IW612 firmware load,
 and real scan/associate remain hardware-only. `CONFIG_APP_WIFI_SIM` must **never**
 be enabled on real hardware.
+
+#### Over BLE instead of serial
+
+The same emulated loop runs over **BLE** — provisioned from a phone Improv app
+or Chrome Web Bluetooth ([improv-wifi.com/ble](https://www.improv-wifi.com/ble/))
+instead of a serial PTY. `native_sim` has no radio of its own, so it borrows the
+**host's** Bluetooth adapter through Zephyr's HCI User Channel driver. Two
+consequences, both kernel-imposed:
+
+* the sim **takes the adapter away from BlueZ** while it runs (your desktop
+  Bluetooth — mice/headphones — drops until the sim exits), and
+* opening the user-channel socket needs **`CAP_NET_ADMIN`** (sudo, or a one-off
+  `setcap` on the built binary) — unlike the TAP owner trick, this cannot be
+  avoided.
+
+```bash
+west update
+sudo ./scripts/setup-native-sim-tap.sh install   # once per machine (user-owned zeth)
+./scripts/run-native-sim-network.sh start        # data path (terminal 1)
+./scripts/build-native-sim-improv-ble.sh         # build (terminal 2)
+# optional: grant the capability once so the run needs no sudo (re-run after each build)
+./scripts/run-native-sim-improv-ble.sh setcap
+./scripts/run-native-sim-improv-ble.sh           # powers down hci0, advertises "eink-51F0"
+```
+
+The target **spoofs an Active ESL e-ink board**: it advertises as **`eink-51F0`**
+(so the Active ESL Flutter app's `eink-XXXX` filter accepts it) and on success
+returns a claim redirect URL
+`https://active-esl-onboard.active-esl.workers.dev?ip_address={ip}&token={token}`
+with a freshly minted token — same contract as the real e-ink
+`onboarding-server.py`. Open the Active ESL app (or
+[improv-wifi.com/ble](https://www.improv-wifi.com/ble/)), connect to
+**eink-51F0**, submit Wi-Fi credentials, and complete claim as `imx93-jaguar-eink`
+/ board id `51F0`. Wi-Fi association is still simulated; DHCPv4 runs on `zeth0`.
+No pairing / physical-presence gate — lab only. Do **not** claim into a
+production tenant you care about without cleaning up afterwards.
+
 
 ## Hardware bringup (Phase 1+)
 
@@ -204,11 +244,13 @@ When lab hardware is available, use **`scripts/create-rt1180-deployment.sh`** (E
 | `mender-mcu-integration/boards/mimxrt1170_evk_mimxrt1176_cm7.overlay` | RT1170 EVK stable lab MAC (ENET) |
 | `mender-mcu-integration/boards/*_improv_iw612.conf` / `.overlay` | RT1170-EVKB IW612 Wi-Fi/BLE Improv configuration and USDHC1 mapping |
 | `mender-mcu-integration/improv-native-sim.conf` | `native_sim` Improv (serial) + simulated Wi-Fi Kconfig fragment |
+| `mender-mcu-integration/improv-native-sim-ble.conf` | `native_sim` Improv (BLE) + simulated Wi-Fi Kconfig fragment (host HCI User Channel) |
+| `mender-mcu-integration/patches/improv-zephyr-active-esl-claim.patch` | Local `improv-zephyr` patch: `{token}` claim URL, larger RPC buffer, RPC write-without-response |
 | `mender-mcu-integration/src/net/wifi_sim.c` | Management-only simulated Wi-Fi driver for `native_sim` (`CONFIG_APP_WIFI_SIM`) |
 | `mender-mcu-integration/west.yml` | West manifest (Zephyr v4.4.0 + mender-mcu fork @ `1b2d374`; FRDM board) |
 | `mender-mcu-integration/README.md` | Pointer to PROJECT-NOTES for RT118x |
 | `mender-mcu-integration/.gitignore` | Local secrets and build paths |
-| `scripts/` | Host helpers — Phase 0b: `build-native-sim.sh`, `run-native-sim-network.sh`, `test-mender-native-sim.sh`, `create-native-sim-deployment.sh`; RT118x CM33: `build-rt1180-evk.sh`, `build-rt1186-frdm.sh`, `create-rt1180-deployment.sh`, `create-rt1186-frdm-deployment.sh`; RT1170: `build-rt1170-evk.sh`, `build-rt1170-improv-iw612.sh`, `create-rt1170-deployment.sh`; Improv emulator: `build-native-sim-improv.sh`, `improv-serial-provision.py`; CRA WS3: `generate-sbom.sh`; vemu: `test-vemu.sh` — see [PROJECT-NOTES — Scripts inventory](mender-mcu-integration/PROJECT-NOTES.md#scripts-inventory) |
+| `scripts/` | Host helpers — Phase 0b: `build-native-sim.sh`, `run-native-sim-network.sh`, `test-mender-native-sim.sh`, `create-native-sim-deployment.sh`; RT118x CM33: `build-rt1180-evk.sh`, `build-rt1186-frdm.sh`, `create-rt1180-deployment.sh`, `create-rt1186-frdm-deployment.sh`; RT1170: `build-rt1170-evk.sh`, `build-rt1170-improv-iw612.sh`, `create-rt1170-deployment.sh`; Improv emulator: `build-native-sim-improv.sh`, `improv-serial-provision.py`, `build-native-sim-improv-ble.sh`, `run-native-sim-improv-ble.sh`, `setup-native-sim-tap.sh`, `native-sim-tap/`; CRA WS3: `generate-sbom.sh`; vemu: `test-vemu.sh` — see [PROJECT-NOTES — Scripts inventory](mender-mcu-integration/PROJECT-NOTES.md#scripts-inventory) |
 
 ## Secrets
 

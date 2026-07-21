@@ -1,0 +1,22 @@
+[Unit]
+Description=Zephyr native_sim TAP (zeth) + DHCP + NAT
+Documentation=man:ip-tuntap(8)
+After=network-online.target NetworkManager.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=ZETH_IFACE=zeth
+Environment=ZETH_USER=__ZETH_USER__
+Environment=ZETH_GROUP=__ZETH_GROUP__
+Environment=ZETH_HOST_V4=192.0.2.2/24
+Environment=ZETH_HWADDR=00:00:5e:00:53:ff
+Environment=ZETH_NAT_SRC=192.0.2.0/24
+Environment=ZETH_DNSMASQ_CONF=/etc/native-sim-zeth/dnsmasq.conf
+Environment=ZETH_DNSMASQ_PID=/run/dnsmasq_zeth.pid
+ExecStart=/usr/local/libexec/native-sim-zeth/zeth-start.sh
+ExecStop=/usr/local/libexec/native-sim-zeth/zeth-stop.sh
+
+[Install]
+WantedBy=multi-user.target

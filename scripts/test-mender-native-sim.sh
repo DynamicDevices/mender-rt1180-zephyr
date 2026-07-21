@@ -29,7 +29,7 @@ Usage: $(basename "$0") [OPTIONS]
 
 Hosted Mender check-in needs TAP + DHCP + NAT (root):
 
-  Terminal 1: sudo ./scripts/run-native-sim-network.sh start
+  Terminal 1: ./scripts/run-native-sim-network.sh start  # after one-time setup-native-sim-tap.sh install
   Terminal 2: ./scripts/test-mender-native-sim.sh --run-only
 
 Expect: DHCP address on zeth0, then "Mender client activated and running!"
@@ -110,7 +110,7 @@ fi
 
 if ! ip link show zeth &>/dev/null || ! ip link show zeth | grep -q 'state UP'; then
   echo "warning: zeth is not UP — Mender will hang at 'Waiting for network up...'" >&2
-  echo "Start network (sudo): ${NET_SCRIPT} start" >&2
+  echo "Start network: ${NET_SCRIPT} start  (one-time: sudo ./scripts/setup-native-sim-tap.sh install)" >&2
   "${NET_SCRIPT}" status >&2 || true
 fi
 

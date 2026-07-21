@@ -97,9 +97,14 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 |--------|------|
 | `scripts/build-native-sim.sh` | Pristine/incremental `native_sim` build; pins NSI to **GCC 11** via `fix-native-sim-link.sh`. Honours `NATIVE_SIM_EXTRA_CONF` / `NATIVE_SIM_EXTRA_MODULES` env for wrapper targets |
 | `scripts/build-native-sim-improv.sh` | `native_sim` Improv (serial) target; adds `improv-native-sim.conf` + `improv-zephyr` module (default `build-native_sim-improv/`) |
+| `scripts/build-native-sim-improv-ble.sh` | `native_sim` Improv (**BLE**) target; adds `improv-native-sim-ble.conf` + `improv-zephyr` module (default `build-native_sim-improv-ble/`) |
+| `scripts/run-native-sim-improv-ble.sh` | Run the BLE emulator against a host adapter (HCI User Channel): powers down `hci0`, handles `CAP_NET_ADMIN` (sudo or `setcap`), restores BlueZ on exit |
+| `mender-mcu-integration/patches/improv-zephyr-active-esl-claim.patch` | Local patch on pinned `improv-zephyr` (`{token}` claim URL, larger buffers, write-without-response); auto-applied by BLE build wrappers |
 | `scripts/improv-serial-provision.py` | Host-side Improv serial provisioner for the native_sim console PTY (Chrome Web Serial can't see a PTY) |
+| `scripts/setup-native-sim-tap.sh` | **One-time** root install of user-owned `zeth` + systemd DHCP/NAT + polkit (then day-to-day no sudo) |
+| `scripts/native-sim-tap/` | Helpers/unit files installed by `setup-native-sim-tap.sh` |
+| `scripts/run-native-sim-network.sh` | Start/stop/status for `zeth` (prefers systemd unit; legacy net-tools fallback still needs sudo) |
 | `scripts/fix-native-sim-link.sh` | Repair NSI link after a failed pristine configure (sets `NSI_CC` to `gcc-11`); honours `BUILD_DIR` |
-| `scripts/run-native-sim-network.sh` | Start/stop/status TAP + DHCP + NAT using `tools/net-tools/nat.conf` (`cd` into net-tools; `stop` passes `--config nat.conf`) |
 | `scripts/test-mender-native-sim.sh` | Build (optional) + run `zephyr.exe` Mender smoke test; expects TAP from `run-native-sim-network.sh` |
 | `scripts/create-native-sim-deployment.sh` | Build noop-update artifact (`device_type` `native_sim`) and create **one** Hosted Mender deployment (`MENDER_DEPLOY_TARGET=device` \| `device_type` \| `group`; default group **`simulator`**) |
 | `scripts/build-rt1180-evk.sh` | Sysbuild Mender for EVK CM33 (default `build-rt1180-evk/`) |
@@ -352,7 +357,8 @@ authenticates** — with only the radio association stubbed.
 
 ```bash
 west update                                       # fetch improv-zephyr
-sudo ./scripts/run-native-sim-network.sh start    # TAP + DHCP + NAT (terminal 1)
+sudo ./scripts/setup-native-sim-tap.sh install    # once: user-owned zeth + DHCP/NAT service
+./scripts/run-native-sim-network.sh start         # no sudo after install (terminal 1)
 ./scripts/build-native-sim-improv.sh              # terminal 2
 ./build-native_sim-improv/zephyr/zephyr.exe       # prints "connected to pseudotty: /dev/pts/N"
 python3 scripts/improv-serial-provision.py /dev/pts/N --ssid <SSID> --psk <8+ chars>  # terminal 3
@@ -366,13 +372,74 @@ the Improv serial framing from `modules/improv-zephyr/src/improv.c`).
 **Host-run status (2026-07-21):** **done** — verified `AUTHORIZED →
 PROVISIONING → PROVISIONED`, device-info RPC, and `wifi_sim` starting DHCPv4 on
 `zeth0`. Wi-Fi PSKs shorter than 8 bytes are correctly rejected by Zephyr's
-`wifi_mgmt` validation. Full DHCP + Mender check-in requires the sudo TAP
-(`run-native-sim-network.sh start`); without it `zeth` fails to create
-(`Operation not permitted`).
+`wifi_mgmt` validation. Full DHCP + Mender check-in needs the host TAP up
+(`./scripts/run-native-sim-network.sh start` after the one-time
+`setup-native-sim-tap.sh install`). Without a user-owned `zeth`, `eth_tap`
+fails with `Operation not permitted` when run as a normal user.
 
 **What is NOT covered:** IW612 SDIO enumeration, firmware-blob load, and real
 scan/associate/DHCP — all hardware-only. `CONFIG_APP_WIFI_SIM` must never be
 enabled on real hardware.
+
+### Improv in the emulator over BLE (`native_sim`)
+
+`build-native_sim-improv-ble` runs the **same pinned `improv-zephyr` BLE (GATT)
+transport** on the host, provisioned from a real BLE central — a phone Improv app
+or Chrome/Edge Web Bluetooth at <https://www.improv-wifi.com/ble/>. The Wi-Fi
+side is unchanged from the serial target: `CONFIG_APP_WIFI_SIM`
+(`src/net/wifi_sim.c`) fakes association and starts DHCPv4 on the native TAP
+interface (`zeth0`), so the causal loop is identical — **Improv (over BLE) →
+TAP link up → Mender authenticates** — with only the radio stubbed.
+
+`native_sim` has no radio, so it borrows the **host's** controller via Zephyr's
+**HCI User Channel** driver (`bt_hci_userchan`, the board's default
+`zephyr,bt-hci`). Enabled with `CONFIG_BT=y` + `CONFIG_BT_PERIPHERAL=y` +
+`CONFIG_IMPROV_BLE=y` (see `improv-native-sim-ble.conf`; `CONFIG_BT_USERCHAN`
+auto-selects on `native_sim`). Two kernel-imposed constraints, distinct from the
+serial/TAP path:
+
+* **Adapter takeover.** The user channel binds the chosen adapter exclusively, so
+  BlueZ must release it first (the run script does `bluetoothctl power off`) and
+  the host's normal Bluetooth (mice/headphones) drops until the sim exits, when
+  the script powers it back on.
+* **`CAP_NET_ADMIN`.** Opening an `HCI_CHANNEL_USER` socket requires it — there is
+  **no** owner/polkit trick as there is for the persistent TAP. Either run under
+  `sudo`, or `run-native-sim-improv-ble.sh setcap` once per build to grant
+  `cap_net_admin+ep` on `zephyr.exe` (needs sudo once; lost on rebuild).
+
+```bash
+west update
+sudo ./scripts/setup-native-sim-tap.sh install    # once: user-owned zeth (data path)
+./scripts/run-native-sim-network.sh start          # terminal 1
+./scripts/build-native-sim-improv-ble.sh           # terminal 2
+./scripts/run-native-sim-improv-ble.sh setcap      # optional: avoid sudo on the run (per build)
+./scripts/run-native-sim-improv-ble.sh             # advertises "eink-51F0" on hci0
+# then connect + submit credentials from the Web Bluetooth installer or a phone app
+```
+
+Override the adapter with `--dev hciN` or `BT_DEV=hciN`. On this workstation the
+only adapter is `hci0` (Intel AX210), which is also the desktop's BT — expect it
+to drop while the sim runs.
+
+**Active ESL app alignment (path A, 2026-07-21):** advertises as **`eink-51F0`**
+(matches the app's `^eink-([0-9a-fA-F]{4})$` filter) and returns the Active ESL
+claim redirect URL with a minted `{token}` (local patch on pinned
+`improv-zephyr`: `{token}` substitution, larger URL buffer, RPC Command
+write-without-response). Build wrappers auto-apply
+`mender-mcu-integration/patches/improv-zephyr-active-esl-claim.patch` when needed; after `west update` the next BLE build re-applies it.
+Claims land as model `imx93-jaguar-eink` / board id `51F0` — lab spoof only.
+RT1170 IW612 Improv target uses the same pattern as **`eink-1170`**.
+
+**Build status (2026-07-21):** BLE target **builds green** on `native_sim`
+(Bluetooth host stack + `transport_ble.c` link into `zephyr.exe`). Over-the-air
+provisioning from a phone/browser is **not yet bench-verified** here because
+grabbing `hci0` interrupts the workstation's own Bluetooth; run it when a spare
+adapter (or an acceptable interruption window) is available.
+
+**Security:** as on hardware, the Improv BLE transport has **no pairing or
+physical-presence gate** — anyone in range can drive provisioning. Lab only;
+gate before any field use. `CONFIG_APP_WIFI_SIM` must never ship on real hardware.
+
 
 ## Security / EdgeLock
 
@@ -1007,7 +1074,7 @@ Goal: exercise the Mender MCU client, TLS, and Hosted Mender polling on the host
 | Step | Result |
 |------|--------|
 | Build | `./scripts/build-native-sim.sh` — GCC 11 NSI fix; outputs `build-native_sim/zephyr/zephyr.exe` |
-| Network | `./scripts/run-native-sim-network.sh start` — `nat.conf`; stop uses `--config nat.conf` |
+| Network | `./scripts/run-native-sim-network.sh start` after one-time `setup-native-sim-tap.sh install` (user-owned `zeth`; no sudo day-to-day) |
 | Run | `./scripts/test-mender-native-sim.sh` — DHCP **192.0.2.24** on `zeth0`; Mender client init; device type **`native_sim`** |
 | First check-in | HTTP **401** until device **accepted** in Hosted Mender UI (pending device, MAC **02:00:5e:00:53:31**) |
 | Auth OK | After accept: log line **"No deployment available"** = tenant token auth working |
@@ -1021,7 +1088,7 @@ Goal: exercise the Mender MCU client, TLS, and Hosted Mender polling on the host
 |------|-------------|
 | Host GCC 11 + multilib | `sudo apt install gcc-11 g++-11 gcc-11-multilib` (alternative: `gcc-multilib` / `g++-multilib` for default GCC 13 if you prefer not to use GCC 11) |
 | `net-tools` | Clone [zephyrproject-rtos/net-tools](https://github.com/zephyrproject-rtos/net-tools) to `tools/net-tools` at the workspace root (not in this West manifest). |
-| TAP / net setup | `./scripts/run-native-sim-network.sh start` (recommended), or manual `tools/net-tools/net-setup.sh --config nat.conf` from `tools/net-tools/` — see [Scripts inventory](#scripts-inventory). Without DHCP on `zeth`, the client stays on “Waiting for network up…”. |
+| TAP / net setup | **One-time:** `sudo ./scripts/setup-native-sim-tap.sh install` (user-owned `zeth` + systemd DHCP/NAT + polkit). **Day-to-day (no sudo):** `./scripts/run-native-sim-network.sh start`. Without DHCP on `zeth`, the client stays on “Waiting for network up…”. |
 | Secrets | Same gitignored `mender-mcu-integration/mender-local.conf` (tenant token + `CONFIG_MENDER_SERVER_HOST_US=y`). |
 
 All paths below are from the **West workspace root** (directory that contains `mender-mcu-integration/` and `.west/`).
@@ -1035,24 +1102,31 @@ git clone https://github.com/zephyrproject-rtos/net-tools.git tools/net-tools
 test -x tools/net-tools/net-setup.sh || chmod +x tools/net-tools/net-setup.sh
 ```
 
-In a **separate terminal**, start TAP (needs root; leave running while `zephyr.exe` runs):
+In a **separate terminal**, bring up TAP + DHCP + NAT. After the one-time
+install, this needs **no sudo**, and `zephyr.exe` can attach to the user-owned
+`zeth` without `CAP_NET_ADMIN`:
 
 ```bash
 cd /path/to/your/west/workspace
-sudo ./scripts/run-native-sim-network.sh start
-# stop when done: sudo ./scripts/run-native-sim-network.sh stop
+sudo ./scripts/setup-native-sim-tap.sh install   # once per machine
+./scripts/run-native-sim-network.sh start         # no sudo after install
+# stop when done: ./scripts/run-native-sim-network.sh stop
 ```
 
-**Recommended wrapper** — `run-native-sim-network.sh` `cd`s into `tools/net-tools` and passes `--config nat.conf` on both start and stop (cleans `dnsmasq` + NAT rules). Manual equivalent:
+`start`/`stop` drive the `native-sim-zeth.service` systemd unit (polkit allows
+your user to manage it without a password). The unit creates `zeth` owned by
+you, configures `192.0.2.2/24`, enables MASQUERADE + `ip_forward`, and starts
+`dnsmasq` for DHCP on the TAP.
+
+**Legacy fallback** (sudo every session; still creates a user-owned TAP so the
+sim itself stays unsudo'd):
 
 ```bash
-cd tools/net-tools
-sudo ./net-setup.sh --config nat.conf
+# only if setup-native-sim-tap.sh is not installed
+sudo ./scripts/run-native-sim-network.sh start   # wraps net-tools nat.conf + user/group
 ```
 
-**This blocks — that is normal.** With no `start`/`stop` argument, the script creates `zeth`, sources the config, then sleeps until you press **Ctrl-C**. Run `./scripts/test-mender-native-sim.sh --run-only` (or `./build-native_sim/zephyr/zephyr.exe`) in **another** terminal.
-
-If a previous run left `zeth` behind: `sudo ./scripts/run-native-sim-network.sh stop`, or `sudo ip link delete zeth`.
+If a previous run left `zeth` behind: `./scripts/run-native-sim-network.sh stop` (or `sudo ip link delete zeth` if the unit is not installed).
 
 Configure host NAT so the sim can reach Hosted Mender: [Setting up Zephyr and NAT/masquerading on host to access internet](https://docs.zephyrproject.org/latest/connectivity/networking/qemu_setup.html#setting-up-zephyr-and-nat-masquerading-on-host-to-access-internet).
 
