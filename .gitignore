@@ -1,11 +1,17 @@
 # West workspace dependencies (west update — do not commit)
+# Trailing-slash rules ignore directories; bare names also cover shared symlinks in worktrees.
 zephyr/
 modules/
 bootloader/
 .west/
+zephyr
+modules
+bootloader
+.west
 
 # Local tooling and caches
 .tools/
+.tools
 .local/
 
 # Build outputs (per-target; rm -rf build if migrating from old mixed cache)

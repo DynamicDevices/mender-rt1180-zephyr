@@ -5,7 +5,7 @@ Public repo: https://github.com/DynamicDevices/mender-rt1180-zephyr
 
 ## About
 
-Mender MCU OTA overlay for NXP i.MX RT118x on Zephyr — **MIMXRT1180-EVK** and **FRDM-IMXRT1186** CM33, `native_sim` lab validation, and EdgeLock / EU Cyber Resilience Act (CRA) programme tracking. Engineering programme and milestones: [PROJECT-NOTES](mender-mcu-integration/PROJECT-NOTES.md) · tracker [issue #1](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/1).
+Mender MCU OTA overlay for NXP i.MX RT crossover MCUs on Zephyr — primarily **RT118x** (**MIMXRT1180-EVK**, **FRDM-IMXRT1186** CM33), plus **MIMXRT1170-EVK** CM7 host-build support, `native_sim` lab validation, and EdgeLock / EU Cyber Resilience Act (CRA) programme tracking. Engineering programme and milestones: [PROJECT-NOTES](mender-mcu-integration/PROJECT-NOTES.md) · tracker [issue #1](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/1).
 
 Public overlay for [mender-mcu-integration](https://github.com/mendersoftware/mender-mcu-integration): RT118x CM33 board configuration (EVK + FRDM-IMXRT1186), build/flash notes, and Hosted Mender bring-up documentation.
 
@@ -49,6 +49,7 @@ Use a **separate** build directory per target (do not point EVK and FRDM at the 
 | MIMXRT1180-EVK CM33 | `build-rt1180-evk` | `./scripts/build-rt1180-evk.sh` | `west flash -d build-rt1180-evk` | `./scripts/create-rt1180-deployment.sh` |
 | FRDM-IMXRT1186 CM33 | `build-frdm-rt1186` | `./scripts/build-rt1186-frdm.sh` | `west flash -d build-frdm-rt1186` | `./scripts/create-rt1186-frdm-deployment.sh` |
 | `native_sim` (Phase 0b) | `build-native_sim` | `./scripts/build-native-sim.sh` | N/A (run `zephyr.exe`) | `./scripts/create-native-sim-deployment.sh` |
+| MIMXRT1170-EVK CM7 | `build-rt1170-evk` | `./scripts/build-rt1170-evk.sh` | `west flash -d build-rt1170-evk` | `./scripts/create-rt1170-deployment.sh` |
 
 If you previously used the legacy shared `build/` directory, remove it before rebuilding: `rm -rf build`.
 
@@ -110,6 +111,26 @@ west build -p --sysbuild \
 ```
 
 
+
+
+## MIMXRT1170-EVK (Cortex-M7)
+
+Zephyr board: `mimxrt1170_evk/mimxrt1176/cm7` (default revision **B**). Mender **device type**: `mimxrt1170_evk`.
+
+This path is the **standard MIMXRT1170-EVK** (MIMXRT1176 silicon) for Mender MCU OTA bring-up. It does **not** include NXP EdgeReady **RT117H/F** face/gesture runtime libraries — those SKUs need NXP’s EdgeReady SDK/licence flow outside this overlay.
+
+**Host build verified** with Zephyr v4.4.0 + SDK 1.0.1 + mender-mcu `@1dbc35b`. Hardware flash/Ethernet/OTA is **TBD** until an EVK is on the bench.
+
+| Step | Command |
+|------|---------|
+| Sysbuild (MCUboot + Mender app) | `./scripts/build-rt1170-evk.sh` |
+| Incremental rebuild | `./scripts/build-rt1170-evk.sh --incremental` |
+| Flash CM7 | `west flash -d build-rt1170-evk` |
+| Serial console | On-board debug USB, **115200 8N1** (LPUART1) |
+| Upload OTA artifact | `./scripts/create-rt1170-deployment.sh` |
+
+Lab identity MAC: **02:11:70:00:00:01** on the 10/100 ENET iface. Lab group: **`rt1170-lab`**.
+
 ## Hardware bringup (Phase 1+)
 
 **Status: TBD on hardware.** EVK pending arrival; **MIMXRT1180-EVK** and **FRDM-IMXRT1186** host sysbuild verified @ mender-mcu `1b2d374` (Zephyr v4.4.0, SDK 1.0.1). Phase 0b (`native_sim`) is complete; **Phase 1+ on physical RT118x boards has not been completed on the bench.** Flash, Ethernet, Hosted Mender OTA, and CM7 phases will be run when the board is available. See **[PROJECT-NOTES — Phase 1](mender-mcu-integration/PROJECT-NOTES.md#phase-1--evk-flash-cm33-mender-image)** and **[Upstream contribution](mender-mcu-integration/PROJECT-NOTES.md#upstream-contribution)**.
@@ -129,10 +150,12 @@ When lab hardware is available, use **`scripts/create-rt1180-deployment.sh`** (E
 | `mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.overlay` | EVK stable lab MAC (NETC) |
 | `mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33.conf` | FRDM board Kconfig fragment |
 | `mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33.overlay` | FRDM stable lab MAC (NETC) |
+| `mender-mcu-integration/boards/mimxrt1170_evk_mimxrt1176_cm7.conf` | RT1170 EVK board Kconfig fragment |
+| `mender-mcu-integration/boards/mimxrt1170_evk_mimxrt1176_cm7.overlay` | RT1170 EVK stable lab MAC (ENET) |
 | `mender-mcu-integration/west.yml` | West manifest (Zephyr v4.4.0 + mender-mcu fork @ `1b2d374`; FRDM board) |
 | `mender-mcu-integration/README.md` | Pointer to PROJECT-NOTES for RT118x |
 | `mender-mcu-integration/.gitignore` | Local secrets and build paths |
-| `scripts/` | Host helpers — Phase 0b: `build-native-sim.sh`, `run-native-sim-network.sh`, `test-mender-native-sim.sh`, `create-native-sim-deployment.sh`; RT118x CM33: `build-rt1180-evk.sh`, `build-rt1186-frdm.sh`, `create-rt1180-deployment.sh`, `create-rt1186-frdm-deployment.sh`; CRA WS3: `generate-sbom.sh`; vemu: `test-vemu.sh` — see [PROJECT-NOTES — Scripts inventory](mender-mcu-integration/PROJECT-NOTES.md#scripts-inventory) |
+| `scripts/` | Host helpers — Phase 0b: `build-native-sim.sh`, `run-native-sim-network.sh`, `test-mender-native-sim.sh`, `create-native-sim-deployment.sh`; RT118x CM33: `build-rt1180-evk.sh`, `build-rt1186-frdm.sh`, `create-rt1180-deployment.sh`, `create-rt1186-frdm-deployment.sh`; RT1170: `build-rt1170-evk.sh`, `create-rt1170-deployment.sh`; CRA WS3: `generate-sbom.sh`; vemu: `test-vemu.sh` — see [PROJECT-NOTES — Scripts inventory](mender-mcu-integration/PROJECT-NOTES.md#scripts-inventory) |
 
 ## Secrets
 

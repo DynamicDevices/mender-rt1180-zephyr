@@ -84,6 +84,7 @@ Use **separate** `west build -d …` directories so EVK, FRDM, and `native_sim` 
 | MIMXRT1180-EVK CM33 | `build-rt1180-evk/` | `./scripts/build-rt1180-evk.sh` |
 | FRDM-IMXRT1186 CM33 | `build-frdm-rt1186/` | `./scripts/build-rt1186-frdm.sh` |
 | `native_sim` (Phase 0b) | `build-native_sim/` | `./scripts/build-native-sim.sh` |
+| MIMXRT1170-EVK CM7 | `build-rt1170-evk/` | `./scripts/build-rt1170-evk.sh` |
 
 Override with `BUILD_DIR=…` (build scripts) or `MENDER_BUILD_DIR=…` (deployment scripts). **Do not reuse** the legacy shared `build/` directory across boards — if you still have an old mixed tree, remove it: `rm -rf build` (outputs only — not tracked sources).
 
@@ -266,6 +267,37 @@ west flash -d build-frdm-rt1186
 ```
 
 Use LinkServer (default) or J-Link per `zephyr/boards/nxp/frdm_imxrt1186/board.cmake`. Reset after flash; serial **115200 8N1** on MCU-Link. CM33: jumper **J60** = **1:OFF 2:OFF 3:ON**. Ethernet: cable to **`swp0` or `swp2`** (not `eth0`/`swp4`). Board overlay (`boards/frdm_imxrt1186_mimxrt1186_cm33.overlay`) fixes lab MAC identity only; Mender `storage_partition` needs no overlay.
+
+## MIMXRT1170-EVK (CM7) — Mender MCU OTA
+
+**Goal:** host-buildable Mender MCU image for the standard **MIMXRT1170-EVK** so lab bring-up can start as soon as hardware arrives.
+
+| Topic | Value |
+|-------|-------|
+| Zephyr board | `mimxrt1170_evk/mimxrt1176/cm7` (rev B default) |
+| SoC | MIMXRT1176 (CM7 @ up to 1 GHz + CM4 companion; this port targets **CM7 only**) |
+| Mender device type | `mimxrt1170_evk` |
+| Board conf / overlay | `boards/mimxrt1170_evk_mimxrt1176_cm7.conf` / `.overlay` |
+| Default build dir | `build-rt1170-evk/` |
+| Ethernet | Classic ENET 10/100 (KSZ8081); Gigabit ENET1G left disabled upstream |
+| Lab MAC | **02:11:70:00:00:01** |
+| Lab group | **`rt1170-lab`** |
+| Flash layout | Upstream DTS: 128 KiB MCUboot + 7 MiB ×2 slots + ~2 MiB storage (same shape as RT118x) |
+
+### Scope / non-goals
+
+- **In scope:** MCUboot + Zephyr + Mender MCU on CM7, Hosted Mender `zephyr-image` artifact, ENET DHCP path.
+- **Out of scope (for now):** CM4 companion firmware; NXP EdgeReady **RT117H / RT117F / RT117T / RT117C** vision/voice runtime licences (those need EdgeReady silicon + NXP SDK, not this generic EVK board target).
+
+### Build / flash / deploy
+
+```bash
+./scripts/build-rt1170-evk.sh
+west flash -d build-rt1170-evk
+./scripts/create-rt1170-deployment.sh
+```
+
+**Status:** host sysbuild + `zephyr.mender` validate **done**; hardware Phase 1–2 **TBD**.
 
 ## Security / EdgeLock
 
@@ -1289,6 +1321,9 @@ Track progress with the **[Zephyr testing plan](#zephyr-testing-plan)** checkbox
 | `native_sim` Mender smoke + noop OTA | Phase 0b | **Done** (2026-06-13; re-verified 2026-06-17 @ `1b2d374`) — build, DHCP, accept, noop deploy |
 | vemu nRF5340 build/run (no network) | vemu | Done (limited — use Phase 0b for Hosted Mender) |
 | FRDM host sysbuild + artifact | Phase 0 / 1F | **Done** (2026-06-17 @ `1b2d374`) — `./scripts/build-rt1186-frdm.sh` links; hardware flash **TBD** |
+| RT1170 host sysbuild + artifact | Phase 0 / 1170 | **Done** — `./scripts/build-rt1170-evk.sh` links; hardware flash **TBD** |
+| RT1170 flash + serial + DHCP | Phase 1 / 1170 | **TBD** — pending MIMXRT1170-EVK |
+| RT1170 Hosted Mender OTA | Phase 2 / 1170 | **TBD** — pending MIMXRT1170-EVK |
 | EVK flash + serial | Phase 1 | **TBD** — pending MIMXRT1180-EVK arrival |
 | FRDM flash + serial | Phase 1 | **TBD** — host build verified; bench not started |
 | Ethernet DHCP | Phase 1 | **TBD** — pending EVK |
