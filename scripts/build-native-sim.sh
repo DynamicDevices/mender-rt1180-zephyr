@@ -61,9 +61,15 @@ if [[ -n "${NATIVE_SIM_EXTRA_MODULES:-}" ]]; then
   EXTRA_MODULE_ARGS=(-DZEPHYR_EXTRA_MODULES="${NATIVE_SIM_EXTRA_MODULES}")
 fi
 
+EXTRA_CMAKE=()
+if [[ -n "${NATIVE_SIM_EXTRA_CMAKE_ARGS:-}" ]]; then
+  # shellcheck disable=SC2206
+  EXTRA_CMAKE=(${NATIVE_SIM_EXTRA_CMAKE_ARGS})
+fi
+
 west build "${WEST_BUILD[@]}" -d "${BUILD_DIR}" --board native_sim mender-mcu-integration \
   "${WEST_CMAKE_ONLY[@]}" -- \
-  -DEXTRA_CONF_FILE="${EXTRA_CONF}" "${EXTRA_MODULE_ARGS[@]}" "$@"
+  -DEXTRA_CONF_FILE="${EXTRA_CONF}" "${EXTRA_MODULE_ARGS[@]}" "${EXTRA_CMAKE[@]}" "$@"
 
 "${ROOT}/scripts/fix-native-sim-link.sh"
 

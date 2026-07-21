@@ -21,6 +21,7 @@ manifest:
           - hal_nxp
           - hal_nordic
           - hal_espressif
+          - littlefs
     - name: mender-mcu
       remote: dynamicdevices
       revision: 1dbc35b

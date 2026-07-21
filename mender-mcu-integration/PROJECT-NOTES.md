@@ -441,6 +441,136 @@ physical-presence gate** — anyone in range can drive provisioning. Lab only;
 gate before any field use. `CONFIG_APP_WIFI_SIM` must never ship on real hardware.
 
 
+## E-ink display and scheduler (Zephyr)
+
+Portable contract for the Zephyr e-ink stack. Linux reference implementations remain
+the source of behaviour: [`eink-scheduler-rust`](../../../../esl/eink-scheduler-rust)
+(schedule/telemetry) and [`eink-spectra6`](../../../../esl/eink-spectra6) (EL133UF1 SPI).
+Do **not** port subprocess/`systemd`/sysfs details — preserve the product invariants below.
+
+### Language
+
+Bring-up is **C only**. Zephyr Rust (`zephyr-lang-rust`) is experimental, application-only,
+and not a first-class path for `native_sim` / RT1170 CM7. Keep the Linux Rust scheduler as the
+**reference contract**. Design the C scheduler decision core as pure logic (clock/schedule in →
+action out) so a future shared `no_std` Rust core remains possible without touching I/O layers.
+
+### Panel geometry (EL133UF1 Spectra 6)
+
+| Property | Value |
+|----------|--------|
+| Logical size | 1200 × 1600 (portrait) |
+| Controllers | Dual (left / right), each 600 × 1600 |
+| Pixel format | 4 bpp indexed (`PIXEL_FORMAT_L_4`), high nibble = left pixel of pair |
+| Payload | 960 000 bytes = 480 000 (CS0 left) + 480 000 (CS1 right) |
+| Palette indices | 0 Black, 1 White, 2 Yellow, 3 Red, 5 Blue, 6 Green |
+| SPI | Mode 0, single-SPI (`SPIM=0x00`), ~5 MHz lab default |
+| Refresh | Full-frame only in v1; PON → DTM×2 → DRF (both CS) → POF; ~20–60 s |
+
+### Packed-frame file format (`ES6F` v1)
+
+Little-endian header (32 bytes) + payload:
+
+| Offset | Size | Field |
+|--------|------|--------|
+| 0 | 4 | magic `ES6F` |
+| 4 | 2 | version (=1) |
+| 6 | 2 | width (1200) |
+| 8 | 2 | height (1600) |
+| 10 | 1 | pixel_format (=1 → Spectra6 L_4) |
+| 11 | 1 | orientation (0/90/180/270 degrees / 90) |
+| 12 | 2 | flags (0) |
+| 14 | 4 | payload_len (must be 960000 for full panel) |
+| 18 | 4 | crc32 of payload (IEEE) |
+| 22 | 10 | reserved (0) |
+| 32 | payload_len | packed pixels |
+
+Reject frames with bad magic/version/geometry/CRC/`payload_len` before display.
+JPEG/PNG are **not** accepted on-device in v1 — convert host-side to `ES6F`.
+
+### Display commands
+
+| Command | Behaviour |
+|---------|-----------|
+| `show <path>` | Validate frame, queue one refresh, return success/failure |
+| `clear` | Solid white (or panel clear sequence) full refresh |
+| `status` | idle / refreshing / last result / last job id |
+
+Single active refresh; long waits run on a **dedicated** display workqueue, never the
+Mender/system workqueue.
+
+### Scheduler invariants (match Rust)
+
+1. Cron: parse `minute hour …` UTC only (same as `cron.rs`).
+2. Among jobs with `now >= next_run`, display **only the latest** overdue job.
+3. Skip if `job_id == last_displayed_job_id`.
+4. On display **failure**, do **not** advance persisted state (retry while overdue).
+5. Persist `last_displayed_job_id` only after successful show.
+6. Local fixture mode: rotate packed frames on a fixed interval without cloud.
+
+### Cloud contracts (do not conflate)
+
+| Path | Role |
+|------|------|
+| Active ESL onboard (Improv + claim) | App/fleet identity — **no** schedules |
+| e-tabelone HTTP | `GET …/config`, image URL download, `POST …/telemetry` (native_sim 2026-07-21: large HTTPS config with ~2 KiB S3 URLs parses; telemetry OK; cloud assets are JPEG/PNG so rejected until ES6F is published) |
+
+Credentials for e-tabelone live in Bitwarden / device settings — never commit tokens.
+Shell: `eink creds <base> <device_id> <token>` then `eink sync` (token `none`/`-` = omit Bearer).
+
+### Hardware discussion spec (document control)
+
+Active-ESL custom-board requirements for Michael/Ollie are controlled in the
+**`active-esl/specifications`** repo (not in this firmware tree):
+
+- **Document ID:** `AESL-HW-RT1170-EINK-SPEC`
+- **Canonical:** [`active-esl/specifications` → `hw/AESL-HW-RT1170-EINK-SPEC/`](https://github.com/active-esl/specifications/tree/main/hw/AESL-HW-RT1170-EINK-SPEC)
+- **Procedure:** [DOCUMENT-CONTROL.md](https://github.com/active-esl/specifications/blob/main/DOCUMENT-CONTROL.md)
+- **Local clone:** `/data_drive/esl/specifications`
+- **Collaborator mirror:** Google Doc Rev **0.2** — see Document Control for the current link
+- **Pointer in this tree:** [`docs/DOCUMENT-CONTROL.md`](docs/DOCUMENT-CONTROL.md)
+
+Do not treat ad-hoc Drive drafts as the master. Bump the revision table when architecture decisions change.
+
+### Battery-first streaming implementation (2026-07-21)
+
+| Piece | Status |
+|-------|--------|
+| Chunked ES6F validation / accept-temp | Done (`eink_frame_stream_*`, `eink_store_accept_temp_image`) |
+| Streaming display (no production FB) | Done (`el133uf1_stream_write`, SDL row seeks) |
+| EVK full-FB profile | `CONFIG_APP_EINK_FULL_FRAMEBUFFER` |
+| OCRAM / dual-FlexSPI / IW612 confs | Scaffold overlays + confs under `boards/` |
+| SNVS / CM4 power contract | `eink_power.*` + `docs/POWER-HARDWARE-CONTRACT.md` |
+| Cold-boot wake machine | `CONFIG_APP_EINK_BATTERY_DUTY_CYCLE` + `eink_wake.*` |
+| FlexSPI2 OTA staging | Scaffold `eink_ota_stage.*` (install `-ENOTSUP` until DTS) |
+| native_sim proof | `./scripts/build-native-sim-eink.sh` + `eink-verify-sim.sh` OK; no `eink_fb`/`validate_buf` symbols |
+
+### Storage / RAM
+
+| Target | Working FB | Persist frames + schedule |
+|--------|------------|---------------------------|
+| `native_sim` | heap / static | 32 MiB simulated NOR; 17.75 MiB e-ink LittleFS at `/lfs1` |
+| RT1170 EVKB | static 960 KB in **SDRAM** | Existing EVK remains 16 MiB NOR; do not apply the custom-board map |
+| Custom RT1170 board (provisional) | static 960 KB in **SDRAM** | 32 MiB XIP NOR: 128 KiB MCUboot + 7 MiB A/B slots + 128 KiB Mender NVS + 17.75 MiB e-ink LittleFS |
+
+The provisional 32 MiB map holds about 19 raw 960,032-byte ES6F files before
+filesystem overhead, satisfying the current 4–16 frame target. Mender NVS and
+LittleFS use separate partitions. The simulator's file-backed flash persists
+across restarts; pass `--flash_erase` to reset it. The custom-board DTS must not
+be finalised until hardware selects a compatible 32 MiB XIP NOR and confirms its
+erase/program geometry.
+
+### Build / run (simulator)
+
+```bash
+./scripts/build-native-sim-eink.sh
+./scripts/gen-eink-frame.py --solid white -o /tmp/white.es6f
+./build-native_sim-eink/zephyr/zephyr.exe
+# shell: eink show /tmp/white.es6f
+# e-tabelone (after DHCP): eink creds https://api.dev.e-tabelone.com <id> <token> && eink sync
+```
+
+
 ## Security / EdgeLock
 
 Both **MIMXRT1180-EVK** and **FRDM-IMXRT1186** share the same on-die **EdgeLock Secure Enclave (ELE)** subsystem (RT1180 family) — not the separate **HSE** block on some other NXP MCUs. **Board choice does not change the security roadmap.**
@@ -1492,3 +1622,19 @@ Track progress with the **[Zephyr testing plan](#zephyr-testing-plan)** checkbox
 ## Commits
 
 Track overlay-repo history on [DynamicDevices/mender-rt1180-zephyr](https://github.com/DynamicDevices/mender-rt1180-zephyr). Module changes belong on the [mender-mcu fork](https://github.com/DynamicDevices/mender-mcu/tree/feature/zephyr-4.4-mbedtls4) branch — do not commit `modules/mender-mcu/` in this overlay (west-managed checkout).
+
+
+### E-ink verification gates
+
+| Gate | Status | How |
+|------|--------|-----|
+| Simulator selftest (CRC, latest-overdue, cron) | **Proven** | `./scripts/eink-verify-sim.sh` → `eink selftest OK` |
+| Headless display path (`dummy_dc` 1200×1600) | **Proven** | `eink display ready (dummy_dc)` |
+| Packed-frame fixtures (size/CRC) | **Proven** | `scripts/gen-eink-frame.py` |
+| EL133 driver sequence invariants (mock) | **Proven** | `scripts/eink-check-el133-driver.py` |
+| SDL visual colour/split | Optional | Needs 32-bit SDL2; `native_sim_eink_sdl.overlay` |
+| e-tabelone `file://` fixture HTTP | Implemented | Local JSON under store root |
+| EVK SPI wiring | **Pending schematic** | Overlay pins are placeholders (`*_eink_el133.overlay`) |
+| EVK solid/bars/LR/full refresh | Pending | After wiring: reset/init → solid → bars → LR → BUSY → scheduler |
+
+Physical panel proof is tracked separately from simulator proof.

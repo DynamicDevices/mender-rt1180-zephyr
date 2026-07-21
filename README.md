@@ -53,6 +53,7 @@ Use a **separate** build directory per target (do not point EVK and FRDM at the 
 | MIMXRT1170-EVKB CM7 + IW612 Improv | `build-rt1170-improv-iw612` | `./scripts/build-rt1170-improv-iw612.sh` | `west flash -d build-rt1170-improv-iw612` | Hardware validation TBD |
 | `native_sim` + Improv (serial, emulated) | `build-native_sim-improv` | `./scripts/build-native-sim-improv.sh` | N/A (run `zephyr.exe`) | `./scripts/create-native-sim-deployment.sh` |
 | `native_sim` + Improv (BLE, emulated) | `build-native_sim-improv-ble` | `./scripts/build-native-sim-improv-ble.sh` | N/A (run `zephyr.exe --bt-dev=hciN`) | `./scripts/create-native-sim-deployment.sh` |
+| `native_sim` + e-ink (dummy_dc; optional SDL) | `build-native_sim-eink` | `./scripts/build-native-sim-eink.sh` / `eink-verify-sim.sh` | N/A (`eink show <es6f>`) | N/A |
 
 If you previously used the legacy shared `build/` directory, remove it before rebuilding: `rm -rf build`.
 
@@ -219,6 +220,32 @@ with a freshly minted token — same contract as the real e-ink
 / board id `51F0`. Wi-Fi association is still simulated; DHCPv4 runs on `zeth0`.
 No pairing / physical-presence gate — lab only. Do **not** claim into a
 production tenant you care about without cleaning up afterwards.
+
+
+### E-ink display / scheduler (`native_sim`)
+
+Simulator-first port of the Linux Spectra-6 / scheduler contracts (C). See
+[docs/EINK-CONTRACT.md](mender-mcu-integration/docs/EINK-CONTRACT.md) and
+[PROJECT-NOTES — E-ink](mender-mcu-integration/PROJECT-NOTES.md#e-ink-display-and-scheduler-zephyr).
+
+**Headless (CI / default):** `dummy_dc` on 32-bit `native_sim` — no SDL.
+
+```bash
+./scripts/build-native-sim-eink.sh
+./scripts/gen-eink-frame.py --lr red blue -o /tmp/eink-zephyr/images/lr.es6f
+./build-native_sim-eink/zephyr/zephyr.exe
+# shell: eink show /tmp/eink-zephyr/images/lr.es6f
+```
+
+**Visual SDL window:** use 64-bit `native_sim/native/64` so the host amd64 SDL2 links
+(the default 32-bit NSI build cannot). Needs `DISPLAY` / X11.
+
+```bash
+./scripts/build-native-sim-eink-sdl.sh
+./build-native_sim-eink-sdl/zephyr/zephyr.exe
+# shell: eink show /tmp/eink-zephyr/images/lr.es6f
+# window title: "Zephyr EL133UF1 sim" (1200×1600 @ 25% zoom)
+```
 
 
 ## Hardware bringup (Phase 1+)

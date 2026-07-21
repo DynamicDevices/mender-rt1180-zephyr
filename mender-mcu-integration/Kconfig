@@ -44,6 +44,106 @@ endif # WIFI
 			When in combination with MENDER_SERVER_HOST_ON_PREM, the Mender Reference App
 			will add this credential as the MENDER_NET_CA_CERTIFICATE_TAG_PRIMARY.
 
+	config APP_EINK
+		bool "E-ink display + scheduler"
+		default n
+		help
+			Enable packed-frame e-ink display service and scheduler
+			(native_sim first; EL133UF1 SPI on RT1170 later).
+
+if APP_EINK
+
+	config APP_EINK_SHELL
+		bool "E-ink shell commands"
+		default y
+		depends on SHELL
+
+	config APP_EINK_HTTP
+		bool "e-tabelone HTTP client"
+		default y
+		select HTTP_CLIENT
+		select DNS_RESOLVER
+		select NET_SOCKETS
+		help
+		  Fetch schedule/config, download packed ES6F frames, and post
+		  telemetry to the e-tabelone API (or file:// fixtures).
+
+	config APP_EINK_HTTP_ENABLE
+		bool "Enable e-tabelone HTTP sync at boot"
+		default n
+		depends on APP_EINK_HTTP
+		help
+		  When set, start periodic sync after network is up. Requires
+		  device id / token (Kconfig defaults or runtime credentials).
+
+	config APP_EINK_HTTP_BASE_URL
+		string "e-tabelone API base URL"
+		depends on APP_EINK_HTTP
+		default "https://api.dev.e-tabelone.com"
+
+	config APP_EINK_HTTP_DEVICE_ID
+		string "e-tabelone device id"
+		depends on APP_EINK_HTTP
+		default ""
+
+	config APP_EINK_HTTP_AUTH_TOKEN
+		string "e-tabelone Bearer token (dev only; prefer runtime settings)"
+		depends on APP_EINK_HTTP
+		default ""
+		help
+		  Do not commit real tokens. Prefer Bitwarden-backed runtime
+		  provisioning via eink_http_set_credentials().
+
+	config APP_EINK_HTTP_POLL_INTERVAL
+		int "e-tabelone poll interval (seconds)"
+		depends on APP_EINK_HTTP
+		default 300
+		range 30 86400
+
+	config APP_EINK_HTTP_SNTP_SERVER
+		string "SNTP server for wall-clock (S3 pre-signed URLs)"
+		depends on APP_EINK_HTTP && SNTP
+		default "pool.ntp.org"
+		help
+		  Pre-signed S3 image URLs require a correct wall clock. When
+		  CONFIG_SNTP is enabled, sync runs SNTP if time looks unset.
+
+	config APP_EINK_STORE_ROOT
+		string "Host/FS root for frames and state"
+		default "/tmp/eink-zephyr"
+
+	config APP_EINK_FULL_FRAMEBUFFER
+		bool "EVK panel-debug full framebuffer (960 KB)"
+		default n
+		help
+		  Allocate one full Spectra-6 payload buffer for EL133 electrical
+		  bring-up on the RT1170 EVK (typically placed in SDRAM). Must
+		  remain disabled on the custom-board production / OCRAM-only
+		  profile.
+
+	config APP_EINK_BATTERY_DUTY_CYCLE
+		bool "Cold-boot duty-cycle wake machine (SNVS field mode)"
+		default n
+		help
+		  Run one sync/display/OTA transaction then request main-rail-off
+		  sleep instead of polling forever. Production battery boards
+		  should enable this.
+
+	config APP_EINK_OTA_FLASH_STAGING
+		bool "Stage Mender artifacts on FlexSPI2 data NOR"
+		default n
+		depends on APP_EINK
+		help
+		  Download/validate OTA on FlexSPI2 staging partition, then copy
+		  to FlexSPI1 slot1 with the radio gated and flash-critical code
+		  in internal RAM.
+
+	config APP_EINK_SELFTEST
+		bool "Run e-ink unit self-tests at boot"
+		default n
+
+endif # APP_EINK
+
 endmenu
 
 source "Kconfig.zephyr"

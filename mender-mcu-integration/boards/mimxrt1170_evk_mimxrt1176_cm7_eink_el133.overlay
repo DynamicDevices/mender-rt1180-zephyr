@@ -1,0 +1,32 @@
+/*
+ * PLACEHOLDER pins for EL133UF1 on RT1170 EVK LPSPI1 / Arduino-style headers.
+ * Replace GPIO numbers from the real schematic before hardware bring-up.
+ *
+ * Dual CS is driver-owned (cs0/cs1); SPI CS from controller is unused.
+ */
+&lpspi1 {
+	status = "okay";
+	pinctrl-0 = <&pinmux_lpspi1>;
+	pinctrl-names = "default";
+};
+
+/ {
+	chosen {
+		zephyr,display = &el133uf1;
+	};
+
+	el133uf1: el133uf1 {
+		compatible = "eink,el133uf1";
+		status = "disabled"; /* enable when wiring confirmed */
+		spi-dev = <&lpspi1>;
+		spi-max-frequency = <5000000>;
+		/* TODO: map from schematic */
+		busy-gpios = <&gpio1 0 GPIO_ACTIVE_HIGH>;
+		cs0-gpios = <&gpio1 1 GPIO_ACTIVE_LOW>;
+		cs1-gpios = <&gpio1 2 GPIO_ACTIVE_LOW>;
+		dc-gpios = <&gpio1 3 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&gpio1 4 GPIO_ACTIVE_LOW>;
+		width = <1200>;
+		height = <1600>;
+	};
+};
