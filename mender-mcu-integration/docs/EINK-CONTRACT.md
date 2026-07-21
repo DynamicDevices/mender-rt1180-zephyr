@@ -53,6 +53,11 @@ eink sync
 Local cleartext fixture (host TAP gateway): `http://192.0.2.2:8765` with an
 HTTP/1.0 fixture server. `file://` fixtures remain supported.
 
+Cron fields are **numeric `minute hour` only** (no `*`); fixture schedules
+should use an overdue wall time such as `0 0 * * *`.
+
+Verify gate: `./scripts/eink-verify-sim.sh` (selftest + `file://` sync/show).
+
 TLS note (Zephyr 4.4 / Mbed TLS 4.x): enable the ECDHE-RSA AES-GCM ciphersuite
 Kconfigs (pulls in `PSA_WANT_ALG_TLS12_PRF` / HMAC) and X25519
 (`PSA_WANT_ECC_MONTGOMERY_255`) — see `prj.conf`. Without those, handshakes
