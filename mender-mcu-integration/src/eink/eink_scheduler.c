@@ -98,6 +98,24 @@ int eink_scheduler_tick(void)
 	return 1;
 }
 
+int eink_scheduler_due_image(char *out, size_t cap)
+{
+	struct eink_sched_decision d;
+
+	if (out == NULL || cap == 0) {
+		return -EINVAL;
+	}
+	out[0] = '\0';
+	k_mutex_lock(&mu, K_FOREVER);
+	d = eink_scheduler_decide(&sched, now_unix(), last_job);
+	if (d.action == EINK_SCHED_SHOW) {
+		strncpy(out, sched.jobs[d.job_index].image_id, cap - 1);
+		out[cap - 1] = '\0';
+	}
+	k_mutex_unlock(&mu);
+	return d.action == EINK_SCHED_SHOW ? 1 : 0;
+}
+
 void eink_scheduler_get_last_job(char *out, size_t cap)
 {
 	k_mutex_lock(&mu, K_FOREVER);

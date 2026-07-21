@@ -247,6 +247,20 @@ Simulator-first port of the Linux Spectra-6 / scheduler contracts (C). See
 # window title: "Zephyr EL133UF1 sim" (1200×1600 @ 25% zoom)
 ```
 
+**Live e-tabelone schedule:** the development service currently publishes
+JPEG/PNG assets, while production firmware deliberately accepts packed ES6F
+only. A simulator-only host bridge converts those assets and leaves the
+production boundary unchanged:
+
+```bash
+./scripts/run-native-sim-etabelone.sh <device_id>        # headless proof
+./scripts/run-native-sim-etabelone.sh <device_id> --sdl  # visual scheduled image
+```
+
+The one-command run fetches the live config, selects the current scheduled
+job, converts/downloads only that due image, streams it into `dummy_dc`/SDL,
+and posts telemetry back to e-tabelone.
+
 
 ## Hardware bringup (Phase 1+)
 

@@ -213,26 +213,27 @@ main(void) {
     }
 #endif
 
-    netup_get_mac_address(mender_identity.value);
+    if (IS_ENABLED(CONFIG_APP_MENDER_CLIENT_ENABLE)) {
+        netup_get_mac_address(mender_identity.value);
 
-    /* Initialize mender-client */
-    mender_client_config_t    mender_client_config    = { .device_type = CONFIG_MENDER_DEVICE_TYPE, .recommissioning = false };
-    mender_client_callbacks_t mender_client_callbacks = { .network_connect        = mender_network_connect_cb,
-                                                          .network_release        = mender_network_release_cb,
-                                                          .deployment_status      = mender_deployment_status_cb,
-                                                          .restart                = mender_restart_cb,
-                                                          .get_identity           = mender_get_identity_cb,
-                                                          .get_user_provided_keys = NULL };
+        /* Initialize mender-client */
+        mender_client_config_t    mender_client_config    = { .device_type = CONFIG_MENDER_DEVICE_TYPE, .recommissioning = false };
+        mender_client_callbacks_t mender_client_callbacks = { .network_connect        = mender_network_connect_cb,
+                                                              .network_release        = mender_network_release_cb,
+                                                              .deployment_status      = mender_deployment_status_cb,
+                                                              .restart                = mender_restart_cb,
+                                                              .get_identity           = mender_get_identity_cb,
+                                                              .get_user_provided_keys = NULL };
 
-    LOG_INF("Initializing Mender Client with:");
-    LOG_INF("   Device type:   '%s'", mender_client_config.device_type);
-    LOG_INF("   Identity:      '{\"%s\": \"%s\"}'", mender_identity.name, mender_identity.value);
+        LOG_INF("Initializing Mender Client with:");
+        LOG_INF("   Device type:   '%s'", mender_client_config.device_type);
+        LOG_INF("   Identity:      '{\"%s\": \"%s\"}'", mender_identity.name, mender_identity.value);
 
-    if (MENDER_OK != mender_client_init(&mender_client_config, &mender_client_callbacks)) {
-        LOG_ERR("Failed to initialize the client");
-        goto END;
-    }
-    LOG_INF("Mender client initialized");
+        if (MENDER_OK != mender_client_init(&mender_client_config, &mender_client_callbacks)) {
+            LOG_ERR("Failed to initialize the client");
+            goto END;
+        }
+        LOG_INF("Mender client initialized");
 
 #ifdef CONFIG_MENDER_ZEPHYR_IMAGE_UPDATE_MODULE
     if (MENDER_OK != mender_zephyr_image_register_update_module()) {
@@ -258,18 +259,21 @@ main(void) {
     LOG_INF("Update Module 'test-update' initialized");
 #endif /* BUILD_INTEGRATION_TESTS */
 
-    if (MENDER_OK != mender_inventory_add_callback(persistent_inventory_cb, true)) {
-        LOG_ERR("Failed to add inventory callback");
-        goto END;
-    }
-    LOG_INF("Mender inventory callback added");
+        if (MENDER_OK != mender_inventory_add_callback(persistent_inventory_cb, true)) {
+            LOG_ERR("Failed to add inventory callback");
+            goto END;
+        }
+        LOG_INF("Mender inventory callback added");
 
-    /* Finally activate mender client */
-    if (MENDER_OK != mender_client_activate()) {
-        LOG_ERR("Unable to activate the client");
-        goto END;
+        /* Finally activate mender client */
+        if (MENDER_OK != mender_client_activate()) {
+            LOG_ERR("Unable to activate the client");
+            goto END;
+        }
+        LOG_INF("Mender client activated and running!");
+    } else {
+        LOG_INF("Mender client disabled for focused simulator profile");
     }
-    LOG_INF("Mender client activated and running!");
 
 END:
     k_sleep(K_FOREVER);

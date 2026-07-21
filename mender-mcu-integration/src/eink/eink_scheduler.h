@@ -14,6 +14,9 @@ int eink_scheduler_tick(void);
 /** Replace in-memory schedule (fixture / HTTP). Recomputes next_run from cron. */
 int eink_scheduler_set_schedule(const struct eink_schedule *in, int64_t now_unix);
 
+/** Return 1 and copy the currently due image id, 0 if no display is due. */
+int eink_scheduler_due_image(char *out, size_t cap);
+
 void eink_scheduler_get_last_job(char *out, size_t cap);
 
 #endif

@@ -1012,7 +1012,7 @@ int eink_http_download_image(const char *image_id, const char *url)
 {
 	char path[300];
 	char tmp_path[384];
-	size_t n;
+	size_t n = 0;
 	int ret;
 	uint8_t magic[8];
 
@@ -1211,6 +1211,7 @@ static int eink_http_sync_once_inner(void)
 	size_t image_count = 0;
 	int orientation = 0;
 	char last_job[EINK_ID_MAX];
+	char due_image[EINK_ID_MAX];
 	int64_t now;
 	int ret;
 
@@ -1227,18 +1228,41 @@ static int eink_http_sync_once_inner(void)
 		return ret;
 	}
 
-	for (size_t i = 0; i < image_count; i++) {
-		ret = eink_http_download_image(images[i].image_id, images[i].url);
-		if (ret) {
-			LOG_WRN("image %s download failed: %d", images[i].image_id, ret);
-			/* Keep going; scheduler may still use previously cached frames. */
-		}
-	}
-
 	now = (int64_t)time(NULL);
 	ret = eink_scheduler_set_schedule(&sched, now);
 	if (ret) {
 		return ret;
+	}
+
+	/*
+	 * Fetch the frame that is due now, not every gallery asset. This bounds
+	 * network-on time and gets the scheduled image onto the panel first.
+	 * Previously cached frames remain available for offline/display-only wakes.
+	 */
+	ret = eink_scheduler_due_image(due_image, sizeof(due_image));
+	if (ret < 0) {
+		return ret;
+	}
+	if (ret > 0) {
+		bool found = false;
+
+		for (size_t i = 0; i < image_count; i++) {
+			if (strcmp(images[i].image_id, due_image) != 0) {
+				continue;
+			}
+			found = true;
+			ret = eink_http_download_image(images[i].image_id, images[i].url);
+			if (ret) {
+				LOG_WRN("due image %s download failed: %d; trying cache",
+					images[i].image_id, ret);
+			}
+			break;
+		}
+		if (!found) {
+			LOG_WRN("due image %s missing from config", due_image);
+		}
+	} else {
+		LOG_INF("no new scheduled image due");
 	}
 
 	LOG_INF("scheduler tick after sync");

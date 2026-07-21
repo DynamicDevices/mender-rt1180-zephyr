@@ -25,6 +25,14 @@ endif # WIFI
 			your update module, as an alternative to the built-in zephyr-image Update module configured
 			with MENDER_ZEPHYR_IMAGE_UPDATE_MODULE
 
+	config APP_MENDER_CLIENT_ENABLE
+		bool "Start the Mender client"
+		default y
+		help
+			Disable only in focused native_sim profiles that exercise another
+			long-running network client. Mender integration profiles keep this
+			enabled.
+
 	config APP_WIFI_SIM
 		bool "Simulated Wi-Fi management interface (native_sim only)"
 		default n

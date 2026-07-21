@@ -513,7 +513,7 @@ Mender/system workqueue.
 | Path | Role |
 |------|------|
 | Active ESL onboard (Improv + claim) | App/fleet identity — **no** schedules |
-| e-tabelone HTTP | `GET …/config`, image URL download, `POST …/telemetry` (native_sim 2026-07-21: large HTTPS config with ~2 KiB S3 URLs parses; telemetry OK; cloud assets are JPEG/PNG so rejected until ES6F is published) |
+| e-tabelone HTTP | `GET …/config`, due-image download, `POST …/telemetry` (native_sim 2026-07-21: live 7-job config parsed; JPEG/PNG converted by simulator-only bridge; scheduled ES6F streamed to SDL/dummy display; telemetry accepted) |
 
 Credentials for e-tabelone live in Bitwarden / device settings — never commit tokens.
 Shell: `eink creds <base> <device_id> <token>` then `eink sync` (token `none`/`-` = omit Bearer).
@@ -543,7 +543,7 @@ Do not treat ad-hoc Drive drafts as the master. Bump the revision table when arc
 | SNVS / CM4 power contract | `eink_power.*` + `docs/POWER-HARDWARE-CONTRACT.md` |
 | Cold-boot wake machine | `CONFIG_APP_EINK_BATTERY_DUTY_CYCLE` + `eink_wake.*` |
 | FlexSPI2 OTA staging | Scaffold `eink_ota_stage.*` (install `-ENOTSUP` until DTS) |
-| native_sim proof | `./scripts/build-native-sim-eink.sh` + `eink-verify-sim.sh` OK; no `eink_fb`/`validate_buf` symbols |
+| native_sim proof | `eink-verify-sim.sh` fixture gate + `run-native-sim-etabelone.sh <device> [--sdl]` live schedule/display/telemetry proof; no `eink_fb`/`validate_buf` symbols |
 
 ### Storage / RAM
 
