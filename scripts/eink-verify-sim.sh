@@ -26,4 +26,8 @@ echo "OK: selftest + display init + 32 MiB LittleFS"
 
 python3 scripts/eink-check-el133-driver.py
 
+# End-to-end: file:// config → import ES6F → schedule show (streaming, no FB)
+python3 scripts/eink-sim-sync-probe.py
+echo "OK: file:// sync + scheduled show"
+
 echo "OK: eink simulator verification gate"
