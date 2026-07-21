@@ -49,9 +49,21 @@ if [[ "${1:-}" == "--incremental" ]]; then
   shift
 fi
 
+# Optional extra Kconfig fragments (semicolon-separated) appended after
+# mender-local.conf, and extra Zephyr modules (e.g. improv-zephyr). Used by
+# wrapper scripts such as build-native-sim-improv.sh.
+EXTRA_CONF="mender-local.conf"
+if [[ -n "${NATIVE_SIM_EXTRA_CONF:-}" ]]; then
+  EXTRA_CONF="${EXTRA_CONF};${NATIVE_SIM_EXTRA_CONF}"
+fi
+EXTRA_MODULE_ARGS=()
+if [[ -n "${NATIVE_SIM_EXTRA_MODULES:-}" ]]; then
+  EXTRA_MODULE_ARGS=(-DZEPHYR_EXTRA_MODULES="${NATIVE_SIM_EXTRA_MODULES}")
+fi
+
 west build "${WEST_BUILD[@]}" -d "${BUILD_DIR}" --board native_sim mender-mcu-integration \
   "${WEST_CMAKE_ONLY[@]}" -- \
-  -DEXTRA_CONF_FILE=mender-local.conf "$@"
+  -DEXTRA_CONF_FILE="${EXTRA_CONF}" "${EXTRA_MODULE_ARGS[@]}" "$@"
 
 "${ROOT}/scripts/fix-native-sim-link.sh"
 

@@ -51,6 +51,7 @@ Use a **separate** build directory per target (do not point EVK and FRDM at the 
 | `native_sim` (Phase 0b) | `build-native_sim` | `./scripts/build-native-sim.sh` | N/A (run `zephyr.exe`) | `./scripts/create-native-sim-deployment.sh` |
 | MIMXRT1170-EVK CM7 | `build-rt1170-evk` | `./scripts/build-rt1170-evk.sh` | `west flash -d build-rt1170-evk` | `./scripts/create-rt1170-deployment.sh` |
 | MIMXRT1170-EVKB CM7 + IW612 Improv | `build-rt1170-improv-iw612` | `./scripts/build-rt1170-improv-iw612.sh` | `west flash -d build-rt1170-improv-iw612` | Hardware validation TBD |
+| `native_sim` + Improv (serial, emulated) | `build-native_sim-improv` | `./scripts/build-native-sim-improv.sh` | N/A (run `zephyr.exe`) | `./scripts/create-native-sim-deployment.sh` |
 
 If you previously used the legacy shared `build/` directory, remove it before rebuilding: `rm -rf build`.
 
@@ -155,6 +156,31 @@ Follow the NXP/Embedded Artists module wiring and EVKB hardware-rework guidance.
 The current Improv BLE transport has no pairing or physical-presence gate, so
 this configuration is for lab evaluation only—not production provisioning.
 
+### Improv in the emulator (`native_sim`)
+
+You can exercise the Improv provisioning flow **without hardware** on
+`native_sim`. Zephyr has no emulated Wi-Fi radio, so a small management-only
+simulated Wi-Fi interface (`CONFIG_APP_WIFI_SIM`, `src/net/wifi_sim.c`) stands in
+for one: on "connect" it reports association success and starts DHCPv4 on the
+native TAP Ethernet interface, which carries the Mender traffic. The result is a
+genuine loop — **Improv provisioning → network up over TAP → Mender connects** —
+using the real pinned `improv-zephyr` protocol/serial code.
+
+```bash
+west update                                   # fetch improv-zephyr
+sudo ./scripts/run-native-sim-network.sh start  # TAP + DHCP + NAT (terminal 1)
+./scripts/build-native-sim-improv.sh          # build (terminal 2)
+./build-native_sim-improv/zephyr/zephyr.exe   # run; prints "connected to pseudotty: /dev/pts/N"
+# terminal 3 — drive provisioning over that PTY (Chrome Web Serial cannot see a PTY):
+python3 scripts/improv-serial-provision.py /dev/pts/N --ssid <SSID> --psk <8+ char PSK>
+```
+
+The device transitions `AUTHORIZED → PROVISIONING → PROVISIONED`; DHCPv4 then
+runs on `zeth0` and the Mender client authenticates against Hosted Mender. Only
+the radio association itself is stubbed — SDIO enumeration, IW612 firmware load,
+and real scan/associate remain hardware-only. `CONFIG_APP_WIFI_SIM` must **never**
+be enabled on real hardware.
+
 ## Hardware bringup (Phase 1+)
 
 **Status: TBD on hardware.** EVK pending arrival; **MIMXRT1180-EVK** and **FRDM-IMXRT1186** host sysbuild verified @ mender-mcu `1b2d374` (Zephyr v4.4.0, SDK 1.0.1). Phase 0b (`native_sim`) is complete; **Phase 1+ on physical RT118x boards has not been completed on the bench.** Flash, Ethernet, Hosted Mender OTA, and CM7 phases will be run when the board is available. See **[PROJECT-NOTES — Phase 1](mender-mcu-integration/PROJECT-NOTES.md#phase-1--evk-flash-cm33-mender-image)** and **[Upstream contribution](mender-mcu-integration/PROJECT-NOTES.md#upstream-contribution)**.
@@ -177,10 +203,12 @@ When lab hardware is available, use **`scripts/create-rt1180-deployment.sh`** (E
 | `mender-mcu-integration/boards/mimxrt1170_evk_mimxrt1176_cm7.conf` | RT1170 EVK board Kconfig fragment |
 | `mender-mcu-integration/boards/mimxrt1170_evk_mimxrt1176_cm7.overlay` | RT1170 EVK stable lab MAC (ENET) |
 | `mender-mcu-integration/boards/*_improv_iw612.conf` / `.overlay` | RT1170-EVKB IW612 Wi-Fi/BLE Improv configuration and USDHC1 mapping |
+| `mender-mcu-integration/improv-native-sim.conf` | `native_sim` Improv (serial) + simulated Wi-Fi Kconfig fragment |
+| `mender-mcu-integration/src/net/wifi_sim.c` | Management-only simulated Wi-Fi driver for `native_sim` (`CONFIG_APP_WIFI_SIM`) |
 | `mender-mcu-integration/west.yml` | West manifest (Zephyr v4.4.0 + mender-mcu fork @ `1b2d374`; FRDM board) |
 | `mender-mcu-integration/README.md` | Pointer to PROJECT-NOTES for RT118x |
 | `mender-mcu-integration/.gitignore` | Local secrets and build paths |
-| `scripts/` | Host helpers — Phase 0b: `build-native-sim.sh`, `run-native-sim-network.sh`, `test-mender-native-sim.sh`, `create-native-sim-deployment.sh`; RT118x CM33: `build-rt1180-evk.sh`, `build-rt1186-frdm.sh`, `create-rt1180-deployment.sh`, `create-rt1186-frdm-deployment.sh`; RT1170: `build-rt1170-evk.sh`, `build-rt1170-improv-iw612.sh`, `create-rt1170-deployment.sh`; CRA WS3: `generate-sbom.sh`; vemu: `test-vemu.sh` — see [PROJECT-NOTES — Scripts inventory](mender-mcu-integration/PROJECT-NOTES.md#scripts-inventory) |
+| `scripts/` | Host helpers — Phase 0b: `build-native-sim.sh`, `run-native-sim-network.sh`, `test-mender-native-sim.sh`, `create-native-sim-deployment.sh`; RT118x CM33: `build-rt1180-evk.sh`, `build-rt1186-frdm.sh`, `create-rt1180-deployment.sh`, `create-rt1186-frdm-deployment.sh`; RT1170: `build-rt1170-evk.sh`, `build-rt1170-improv-iw612.sh`, `create-rt1170-deployment.sh`; Improv emulator: `build-native-sim-improv.sh`, `improv-serial-provision.py`; CRA WS3: `generate-sbom.sh`; vemu: `test-vemu.sh` — see [PROJECT-NOTES — Scripts inventory](mender-mcu-integration/PROJECT-NOTES.md#scripts-inventory) |
 
 ## Secrets
 

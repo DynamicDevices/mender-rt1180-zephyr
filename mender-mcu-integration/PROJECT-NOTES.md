@@ -95,8 +95,10 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 
 | Script | Role |
 |--------|------|
-| `scripts/build-native-sim.sh` | Pristine/incremental `native_sim` build; pins NSI to **GCC 11** via `fix-native-sim-link.sh` |
-| `scripts/fix-native-sim-link.sh` | Repair NSI link after a failed pristine configure (sets `NSI_CC` to `gcc-11`) |
+| `scripts/build-native-sim.sh` | Pristine/incremental `native_sim` build; pins NSI to **GCC 11** via `fix-native-sim-link.sh`. Honours `NATIVE_SIM_EXTRA_CONF` / `NATIVE_SIM_EXTRA_MODULES` env for wrapper targets |
+| `scripts/build-native-sim-improv.sh` | `native_sim` Improv (serial) target; adds `improv-native-sim.conf` + `improv-zephyr` module (default `build-native_sim-improv/`) |
+| `scripts/improv-serial-provision.py` | Host-side Improv serial provisioner for the native_sim console PTY (Chrome Web Serial can't see a PTY) |
+| `scripts/fix-native-sim-link.sh` | Repair NSI link after a failed pristine configure (sets `NSI_CC` to `gcc-11`); honours `BUILD_DIR` |
 | `scripts/run-native-sim-network.sh` | Start/stop/status TAP + DHCP + NAT using `tools/net-tools/nat.conf` (`cd` into net-tools; `stop` passes `--config nat.conf`) |
 | `scripts/test-mender-native-sim.sh` | Build (optional) + run `zephyr.exe` Mender smoke test; expects TAP from `run-native-sim-network.sh` |
 | `scripts/create-native-sim-deployment.sh` | Build noop-update artifact (`device_type` `native_sim`) and create **one** Hosted Mender deployment (`MENDER_DEPLOY_TARGET=device` \| `device_type` \| `group`; default group **`simulator`**) |
@@ -335,6 +337,42 @@ combination.
 without pairing and has no physical-presence/provisioning-window gate. Treat
 this as a lab target only. Production requires a bounded, physically authorised
 provisioning mode and review of BLE credential confidentiality.
+
+### Improv in the emulator (`native_sim`)
+
+The `build-native_sim-improv` target runs the **same pinned `improv-zephyr`
+protocol/serial code** on the host so the provisioning flow can be exercised
+without hardware. Because Zephyr provides **no emulated Wi-Fi radio**, a
+management-only simulated Wi-Fi interface (`CONFIG_APP_WIFI_SIM`,
+`src/net/wifi_sim.c`) is registered: it answers `scan`/`connect`/`iface_status`,
+reports association success asynchronously, and — critically — starts DHCPv4 on
+the native TAP Ethernet interface (`zeth0`), which carries all Mender traffic.
+This yields a real causal loop: **Improv provisioning → TAP link up → Mender
+authenticates** — with only the radio association stubbed.
+
+```bash
+west update                                       # fetch improv-zephyr
+sudo ./scripts/run-native-sim-network.sh start    # TAP + DHCP + NAT (terminal 1)
+./scripts/build-native-sim-improv.sh              # terminal 2
+./build-native_sim-improv/zephyr/zephyr.exe       # prints "connected to pseudotty: /dev/pts/N"
+python3 scripts/improv-serial-provision.py /dev/pts/N --ssid <SSID> --psk <8+ chars>  # terminal 3
+```
+
+The serial transport binds `zephyr,console`, so provisioning shares the
+native_sim console PTY. Chrome Web Serial does **not** enumerate Linux PTYs, so
+`scripts/improv-serial-provision.py` drives the handshake instead (it implements
+the Improv serial framing from `modules/improv-zephyr/src/improv.c`).
+
+**Host-run status (2026-07-21):** **done** — verified `AUTHORIZED →
+PROVISIONING → PROVISIONED`, device-info RPC, and `wifi_sim` starting DHCPv4 on
+`zeth0`. Wi-Fi PSKs shorter than 8 bytes are correctly rejected by Zephyr's
+`wifi_mgmt` validation. Full DHCP + Mender check-in requires the sudo TAP
+(`run-native-sim-network.sh start`); without it `zeth` fails to create
+(`Operation not permitted`).
+
+**What is NOT covered:** IW612 SDIO enumeration, firmware-blob load, and real
+scan/associate/DHCP — all hardware-only. `CONFIG_APP_WIFI_SIM` must never be
+enabled on real hardware.
 
 ## Security / EdgeLock
 

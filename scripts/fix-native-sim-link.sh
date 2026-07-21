@@ -3,7 +3,7 @@
 # Manual repair if nsi_config was already generated with host gcc-13.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-NSI_CONFIG="${ROOT}/build-native_sim/zephyr/NSI/nsi_config"
+NSI_CONFIG="${ROOT}/${BUILD_DIR:-build-native_sim}/zephyr/NSI/nsi_config"
 
 if [[ ! -f "${NSI_CONFIG}" ]]; then
   echo "Missing ${NSI_CONFIG} — configure native_sim first (./scripts/build-native-sim.sh)." >&2

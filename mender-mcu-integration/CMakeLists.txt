@@ -26,6 +26,10 @@ if(CONFIG_MENDER_APP_NOOP_UPDATE_MODULE MATCHES "y")
     target_sources(app PRIVATE src/modules/noop-update-module.c)
 endif()
 
+if(CONFIG_APP_WIFI_SIM)
+    target_sources(app PRIVATE src/net/wifi_sim.c)
+endif()
+
 option(BUILD_INTEGRATION_TESTS "Enable integration tests" OFF)
 
 if(BUILD_INTEGRATION_TESTS)

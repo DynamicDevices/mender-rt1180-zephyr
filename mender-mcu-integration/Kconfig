@@ -25,6 +25,18 @@ endif # WIFI
 			your update module, as an alternative to the built-in zephyr-image Update module configured
 			with MENDER_ZEPHYR_IMAGE_UPDATE_MODULE
 
+	config APP_WIFI_SIM
+		bool "Simulated Wi-Fi management interface (native_sim only)"
+		default n
+		depends on WIFI && NET_L2_WIFI_MGMT
+		select WIFI_USE_NATIVE_NETWORKING
+		help
+			Registers a management-only Wi-Fi interface for the native_sim emulator so
+			the improv-zephyr provisioning handshake can run end-to-end without a real
+			radio. On "connect" it reports success and starts DHCPv4 on the native TAP
+			Ethernet interface, which carries the Mender client's traffic. Do not enable
+			on real hardware.
+
 	config MENDER_APP_SERVER_HOST_ON_PREM_CERT
 		string "Path to the DER formatted Mender Server Certificate. Relative to mender-mcu-integration"
 		default ""
