@@ -299,6 +299,43 @@ west flash -d build-rt1170-evk
 
 **Status:** host sysbuild + `zephyr.mender` validate **done**; hardware Phase 1–2 **TBD**.
 
+### Improv BLE provisioning with IW612
+
+The optional `build-rt1170-improv-iw612` target combines the Mender image with:
+
+- Embedded Artists **2EL M.2** radio (**NXP IW612**);
+- Improv Web Bluetooth provisioning via pinned Apache-2.0
+  `improv-zephyr@b65d2aaa39d48ec0fee11aa3eecd0609bbe30f3c`;
+- NXP IW61x Wi-Fi over the EVKB's USDHC1 SDIO route;
+- persistent credentials through Zephyr `wifi_credentials` + settings/NVS.
+
+```bash
+west update
+west blobs fetch hal_nxp
+./scripts/build-rt1170-improv-iw612.sh
+west flash -d build-rt1170-improv-iw612
+```
+
+The application starts Improv before blocking for an IPv4 address. Stored
+credentials reconnect automatically; on an unprovisioned device the BLE service
+remains available while Mender waits for provisioning.
+
+**Host-build status:** **done** (MCUboot + application + signed binary +
+`zephyr.mender`, Zephyr v4.4.0). Application footprint: 1,731,704 bytes flash
+and 894,512 bytes RAM in the host link report.
+
+**Hardware status:** **TBD.** Upstream Zephyr does not provide the missing
+RT1170 M.2 Wi-Fi mapping, so the application overlay maps the EVKB's shared
+USDHC1 interface and disables its SD-card child. Do not insert an SD card while
+using M.2 Wi-Fi. Validate SDIO enumeration, IW612 firmware load, scan/connect,
+BLE provisioning, reboot reconnect, and Mender OTA on the actual EVKB/2EL
+combination.
+
+**Security limitation:** the pinned community Improv BLE transport advertises
+without pairing and has no physical-presence/provisioning-window gate. Treat
+this as a lab target only. Production requires a bounded, physically authorised
+provisioning mode and review of BLE credential confidentiality.
+
 ## Security / EdgeLock
 
 Both **MIMXRT1180-EVK** and **FRDM-IMXRT1186** share the same on-die **EdgeLock Secure Enclave (ELE)** subsystem (RT1180 family) — not the separate **HSE** block on some other NXP MCUs. **Board choice does not change the security roadmap.**

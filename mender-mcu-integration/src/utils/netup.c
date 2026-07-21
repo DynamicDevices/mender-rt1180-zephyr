@@ -41,7 +41,7 @@ static K_SEM_DEFINE(network_ready_sem, 0, 1);
 
 static struct net_mgmt_event_callback mgmt_cb;
 
-#if defined(CONFIG_WIFI)
+#if defined(CONFIG_WIFI) && !defined(CONFIG_IMPROV_WIFI)
 
 static struct wifi_connect_req_params cnx_params = {
     .ssid        = CONFIG_MENDER_APP_WIFI_SSID,
@@ -71,7 +71,7 @@ wifi_connect(struct net_if *iface) {
     }
 }
 
-#endif
+#endif /* CONFIG_WIFI && !CONFIG_IMPROV_WIFI */
 
 static void
 event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event, struct net_if *iface) {
@@ -105,18 +105,36 @@ netup_wait_for_network(void) {
     net_mgmt_init_event_callback(&mgmt_cb, event_handler, NET_EVENT_IPV4_ADDR_ADD);
     net_mgmt_add_event_callback(&mgmt_cb);
 
-    /* Assume that there is only one network interface, having two or more will just pick up
-    the default and and continue blindly */
+    /* Prefer the provisioned interface when both Wi-Fi and Ethernet exist. */
+#if defined(CONFIG_WIFI)
+    struct net_if *iface = net_if_get_first_wifi();
+    if (NULL == iface) {
+        iface = net_if_get_default();
+    }
+#else
     struct net_if *iface = net_if_get_default();
+#endif
     LOG_INF("Using net interface %s, index=%d", net_if_get_device(iface)->name, net_if_get_by_iface(iface));
 
 #if defined(CONFIG_WIFI)
+#if !defined(CONFIG_IMPROV_WIFI)
     wifi_connect(iface);
+#endif
 #else
     /* For WIFI, it is expected that the dhcp client is started somehow by the network management.
     This is the case for example for ESP32-S3 with configuration option WIFI_STA_AUTO_DHCPV4 */
     net_dhcpv4_start(iface);
 #endif
+
+    /*
+     * Improv may have connected using stored credentials before this callback
+     * was registered. Register first, then check the current state so the
+     * IPv4 event cannot be missed between the check and the wait.
+     */
+    if (NULL != net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED)) {
+        LOG_INF("Network already has a preferred IPv4 address");
+        return 0;
+    }
 
     // Wait for network
     LOG_INF("Waiting for network up...");

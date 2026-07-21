@@ -26,6 +26,10 @@ manifest:
       revision: 1dbc35b
       path: modules/mender-mcu
       import: true
+    - name: improv-zephyr
+      url: https://github.com/beriberikix/improv-zephyr
+      revision: b65d2aaa39d48ec0fee11aa3eecd0609bbe30f3c
+      path: modules/improv-zephyr
 
   self:
     path: mender-mcu-integration

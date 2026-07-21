@@ -17,6 +17,7 @@ Sysbuild Mender MCU OTA for MIMXRT1170-EVK CM7 (mimxrt1170_evk/mimxrt1176/cm7).
 Environment:
   BUILD_DIR              Default: build-rt1170-evk
   RT1170_BOARD           Default: mimxrt1170_evk/mimxrt1176/cm7
+  RT1170_EXTRA_CONF_FILE Additional app conf (semicolon-separated)
   CONFIG_MENDER_ARTIFACT_NAME  Default: dev-1
 
 Examples (from West workspace root):
@@ -60,6 +61,14 @@ if [[ -f mender-mcu-integration/mender-local.conf ]]; then
 elif [[ -f mender-mcu-integration/mender-local.conf.example ]]; then
   echo "warning: mender-local.conf missing; build may fail at compile if token required" >&2
   EXTRA_CONF=""
+fi
+
+if [[ -n "${RT1170_EXTRA_CONF_FILE:-}" ]]; then
+  if [[ -n "${EXTRA_CONF}" ]]; then
+    EXTRA_CONF="${EXTRA_CONF};${RT1170_EXTRA_CONF_FILE}"
+  else
+    EXTRA_CONF="${RT1170_EXTRA_CONF_FILE}"
+  fi
 fi
 
 CMAKE_EXTRA=(-DCONFIG_MENDER_ARTIFACT_NAME="\"${ARTIFACT_NAME}\"")

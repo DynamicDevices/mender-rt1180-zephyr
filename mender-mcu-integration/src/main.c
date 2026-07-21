@@ -39,6 +39,10 @@ LOG_MODULE_REGISTER(mender_app, LOG_LEVEL_DBG);
 #include "modules/noop-update-module.h"
 #endif /* CONFIG_MENDER_APP_NOOP_UPDATE_MODULE */
 
+#if defined(CONFIG_IMPROV_WIFI)
+#include <improv/improv_wifi.h>
+#endif
+
 #ifdef CONFIG_MENDER_CLIENT_INVENTORY_DISABLE
 #error Mender MCU integration app requires the inventory feature
 #endif /* CONFIG_MENDER_CLIENT_INVENTORY_DISABLE */
@@ -94,6 +98,17 @@ persistent_inventory_cb(mender_keystore_t **keystore, uint8_t *keystore_len) {
 int
 main(void) {
     printf("Hello World! %s\n", CONFIG_BOARD_TARGET);
+
+#if defined(CONFIG_IMPROV_WIFI)
+    /*
+     * Improv loads persisted Wi-Fi credentials and starts the BLE/serial
+     * provisioning transports before Mender waits for an IPv4 address.
+     */
+    if (0 != improv_wifi_init()) {
+        LOG_ERR("Failed to initialize Improv Wi-Fi provisioning");
+        goto END;
+    }
+#endif
 
     netup_wait_for_network();
 
