@@ -45,10 +45,10 @@ def main() -> int:
 
     fixture_dir = Path("/tmp/eink-fixture")
     fixture_dir.mkdir(exist_ok=True)
-    # Cron is minute+hour numeric only (no '*'); 00:00 UTC is always overdue.
+    # Single always-overdue job so wall-clock RTC (not epoch) still shows a
+    # deterministic primary image. Bars stays in images[] for gallery cache.
     bars = Path("/tmp/eink-zephyr/images/bars.es6f")
     if not bars.is_file():
-        # verify gate generates bars; fall back to white-only if absent
         bars = image
     cfg = {
         "images": [
@@ -66,11 +66,6 @@ def main() -> int:
                 "job_id": "j1",
                 "image_id": "white",
                 "cron": "0 0 * * *",
-            },
-            {
-                "job_id": "j2",
-                "image_id": "bars",
-                "cron": "0 18 * * *",
             },
         ],
         "orientation": 0,
