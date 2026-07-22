@@ -25,12 +25,19 @@ RT1170_DIR="${RT1170_BUILD_DIR:-build-rt1170-evk}"
 OUT_DIR="${SBOM_OUT_DIR:-sbom}"
 ARTIFACT_NAME="${CONFIG_MENDER_ARTIFACT_NAME:-dev-1}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+ARCHIVE_RC=0
+RC_NAME="${SBOM_RC_NAME:-}"
 
 usage() {
   cat <<EOF
-Usage: generate-sbom.sh [--evk-only | --frdm-only | --rt1170-only]
+Usage: generate-sbom.sh [--evk-only | --frdm-only | --rt1170-only] [--archive-rc [NAME]]
 
 Run west spdx for Mender sysbuild output directories (app + MCUboot child images).
+
+Options:
+  --archive-rc [NAME]  After SPDX generation, copy outputs into
+                       sbom/rc/<NAME>/ (default NAME=ARTIFACT_NAME-STAMP)
+                       and write MANIFEST.txt for the release-candidate gate.
 
 Environment:
   EVK_BUILD_DIR          Default: build-rt1180-evk
@@ -38,31 +45,47 @@ Environment:
   RT1170_BUILD_DIR       Default: build-rt1170-evk
   SBOM_OUT_DIR           Default: sbom (created under workspace root)
   CONFIG_MENDER_ARTIFACT_NAME  Label for output filenames (default: dev-1)
+  SBOM_RC_NAME           Override archive directory name when using --archive-rc
 
 Prerequisite:
   1. west spdx --init -d <sysbuild-dir>   # once, before west build
   2. matching build script completed
   3. pip install reuse   # for the same Python that runs west
 
-See mender-mcu-integration/docs/CRA-COMPLIANCE.md (WS3).
+See mender-mcu-integration/docs/CRA-COMPLIANCE.md (WS3) and
+mender-mcu-integration/docs/CRA-ADVISORY-WATCH.md (RC ship gate).
 EOF
 }
 
 TARGETS=(evk frdm rt1170)
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
-elif [[ "${1:-}" == "--evk-only" ]]; then
-  TARGETS=(evk)
-elif [[ "${1:-}" == "--frdm-only" ]]; then
-  TARGETS=(frdm)
-elif [[ "${1:-}" == "--rt1170-only" ]]; then
-  TARGETS=(rt1170)
-elif [[ -n "${1:-}" ]]; then
-  echo "error: unknown option: $1" >&2
-  usage >&2
-  exit 1
-fi
+ARGS=("$@")
+i=0
+while [[ $i -lt ${#ARGS[@]} ]]; do
+  a="${ARGS[$i]}"
+  case "$a" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --evk-only) TARGETS=(evk) ;;
+    --frdm-only) TARGETS=(frdm) ;;
+    --rt1170-only) TARGETS=(rt1170) ;;
+    --archive-rc)
+      ARCHIVE_RC=1
+      next="${ARGS[$((i + 1))]:-}"
+      if [[ -n "$next" && "$next" != -* ]]; then
+        RC_NAME="$next"
+        i=$((i + 1))
+      fi
+      ;;
+    *)
+      echo "error: unknown option: $a" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+  i=$((i + 1))
+done
 
 if ! python3 -c 'import reuse' 2>/dev/null; then
   echo "error: Python package 'reuse' is required for west spdx" >&2
@@ -71,6 +94,7 @@ if ! python3 -c 'import reuse' 2>/dev/null; then
 fi
 
 mkdir -p "${OUT_DIR}"
+GENERATED=()
 
 run_spdx() {
   local label="$1"
@@ -103,6 +127,7 @@ run_spdx() {
   fi
 
   echo "    outputs under ${dest}/"
+  GENERATED+=("${dest}")
 }
 
 for t in "${TARGETS[@]}"; do
@@ -114,3 +139,30 @@ for t in "${TARGETS[@]}"; do
 done
 
 echo "OK: SBOM files written under ${OUT_DIR}/"
+
+if [[ "${ARCHIVE_RC}" -eq 1 ]]; then
+  if [[ ${#GENERATED[@]} -eq 0 ]]; then
+    echo "error: --archive-rc requested but no SBOM outputs were produced" >&2
+    exit 1
+  fi
+  if [[ -z "${RC_NAME}" ]]; then
+    RC_NAME="${ARTIFACT_NAME}-${STAMP}"
+  fi
+  RC_DIR="${OUT_DIR}/rc/${RC_NAME}"
+  mkdir -p "${RC_DIR}"
+  {
+    echo "SBOM release-candidate archive"
+    echo "created_utc=${STAMP}"
+    echo "artifact_name=${ARTIFACT_NAME}"
+    echo "rc_name=${RC_NAME}"
+    echo "targets=${TARGETS[*]}"
+    echo "sources:"
+    for d in "${GENERATED[@]}"; do
+      base="$(basename "${d}")"
+      cp -a "${d}" "${RC_DIR}/"
+      echo "  - ${base}"
+    done
+  } | tee "${RC_DIR}/MANIFEST.txt"
+  echo "OK: RC archive ${RC_DIR}/ (see MANIFEST.txt)"
+  echo "Ship gate checklist: mender-mcu-integration/docs/CRA-ADVISORY-WATCH.md §3"
+fi

@@ -4,7 +4,7 @@
 **Date:** 2026-07-22  
 **Product line:** Active ESL (13.3" Spectra 6 / EL133) on **i.MX RT1170**  
 **Firmware tree:** [`/data_drive/dd/mender`](file:///data_drive/dd/mender) (`feat/rt1170-evk`)  
-**Related:** [PROJECT-NOTES — CRA mapping](../PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping) (RT118x ELE programme), [SECURITY.md](../../SECURITY.md), [CRA-ARTICLE-14-RUNBOOK.md](CRA-ARTICLE-14-RUNBOOK.md), [MCUBOOT-KEY-CEREMONY.md](MCUBOOT-KEY-CEREMONY.md)
+**Related:** [PROJECT-NOTES — CRA mapping](../PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping) (RT118x ELE programme), [SECURITY.md](../../SECURITY.md), [CRA-ARTICLE-14-RUNBOOK.md](CRA-ARTICLE-14-RUNBOOK.md), [CRA-ADVISORY-WATCH.md](CRA-ADVISORY-WATCH.md), [MCUBOOT-KEY-CEREMONY.md](MCUBOOT-KEY-CEREMONY.md)
 
 > **Disclaimer:** This document is an **engineering gap analysis and programme plan**. It is **not legal advice**, **not a conformity assessment**, **not an EU Declaration of Conformity**, and **not CE / UKCA sign-off**. Product classification, support-period justification, Annex VII technical documentation, and Article 14 reporting require qualified legal/regulatory review before placing products on the EU or UK market.
 
@@ -56,7 +56,7 @@ Status: 🟢 adequate for lab / 🟡 needs work before ship / 🔴 blocking for 
 | (f) | Integrity | 🟡 | MCUboot RSA image verify; ES6F CRC | **Replace demo PEM**; HAB for ROM root of trust (manufacturing) |
 | (g) | Data minimisation | 🟡 | Telemetry fields per EINK contract | Review inventory/telemetry with privacy owner |
 | (h)–(i) | Availability / no network harm | 🟡 | Bounded HTTP; duty-cycle wake | Document backoff; DoS posture on cloud |
-| (j) | Attack surface | 🟡 | Lab shell / serial | Production profile: minimise services; serial recovery entrance-gated only |
+| (j) | Attack surface | 🟡 | Lab shell / serial; [production sketch](../boards/mimxrt1170_production.conf) | Validate production fragment on HW; serial recovery entrance-gated only |
 | (k) | Incident impact reduction | 🟡 | MCUboot rollback | Confirm image; staged Mender groups |
 | (l) | Security logging | 🟡 | ISO8601 logs | Define security-event set; never log tokens |
 | (m) | Secure data removal | 🔴 | Not defined | Device wipe / de-provision + LittleFS erase procedure |
@@ -67,8 +67,8 @@ Status: 🟢 adequate for lab / 🟡 needs work before ship / 🔴 blocking for 
 
 | Requirement | Status | Current | Fix |
 |-------------|--------|---------|-----|
-| SBOM (machine-readable) | 🟡 | `scripts/generate-sbom.sh` (RT118x); RT1170 added | Run per release; archive app + MCUboot SPDX |
-| Remediate without delay; security updates separable | 🟡 | Mender deployments | Process: CVE → pin → build → deploy; feature vs security channels |
+| SBOM (machine-readable) | 🟡 | `scripts/generate-sbom.sh` + `--archive-rc` | Run per RC; keep under `sbom/rc/` |
+| Remediate without delay; security updates separable | 🟡 | Mender deployments; [CRA-ADVISORY-WATCH.md](CRA-ADVISORY-WATCH.md) | Process: CVE → pin → build → deploy; feature vs security channels |
 | Regular security testing | 🔴 | Ad-hoc selftest / verify-sim | `hardenconfig`; periodic bench; dependency scan in CI |
 | Public disclosure of fixed vulns | 🔴 | — | Product advisory process + SECURITY.md contact live |
 | CVD policy | 🟡 | [SECURITY.md](../../SECURITY.md) placeholder | Publish contact; response SLAs |
@@ -132,15 +132,15 @@ Align CRA work with PSTI; confirm B2B industrial exemptions with counsel if clai
 ### Before 11 Sep 2026 (Art. 14)
 
 - [x] Art. 14 runbook draft ([CRA-ARTICLE-14-RUNBOOK.md](CRA-ARTICLE-14-RUNBOOK.md)) — **owners/CSIRT still TBD**  
-- [ ] Zephyr/NXP/Mender advisory watch + triage → Mender deploy loop  
+- [x] Advisory watch + triage stub ([CRA-ADVISORY-WATCH.md](CRA-ADVISORY-WATCH.md)) — weekly cadence; owners TBD  
 - [ ] Publish live vuln contact (replace SECURITY.md placeholder)  
-- [ ] SBOM archived for every release candidate (app + MCUboot)  
+- [x] SBOM RC archive convention (`generate-sbom.sh --archive-rc` → `sbom/rc/<name>/`) — run per release candidate  
 
 ### Before production / Dec 2027 claims
 
 - [ ] Hardware-proven RT1170 Mender OTA + MCUboot rollback  
 - [x] Key ceremony procedure ([MCUBOOT-KEY-CEREMONY.md](MCUBOOT-KEY-CEREMONY.md)); `MCUBOOT_SIGNATURE_KEY_FILE` + `RELEASE_BUILD=1` gate — **prod PEM still to be generated offline**  
-- [ ] Production profile: no lab shell / gated serial recovery  
+- [x] Production profile sketch ([boards/mimxrt1170_production.conf](../boards/mimxrt1170_production.conf)) — no lab shell; validate on product HW  
 - [ ] HAB manufacturing flow (spare units only for fuse experiments)  
 - [ ] Device identity hardening beyond plaintext NVS (or accepted residual risk)  
 - [ ] Support period + risk register signed  
