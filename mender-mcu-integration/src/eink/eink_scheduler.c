@@ -65,12 +65,49 @@ int eink_scheduler_set_schedule(const struct eink_schedule *in, int64_t now)
 	return 0;
 }
 
+static int show_job_locked_copy(const struct eink_job *job, bool advance_state)
+{
+	char path[300];
+	int ret;
+	struct eink_display_status st;
+
+	if (eink_store_image_path(job->image_id, path, sizeof(path)) != 0) {
+		return -ENOENT;
+	}
+	if (!eink_store_has_valid_image(job->image_id)) {
+		LOG_WRN("repaint: image %s not in store", job->image_id);
+		return -ENOENT;
+	}
+
+	LOG_INF("show job=%s image=%s path=%s%s", job->job_id, job->image_id, path,
+		advance_state ? "" : " (repaint)");
+	ret = eink_display_show_path(path, job->job_id);
+	if (ret != 0) {
+		return ret;
+	}
+	ret = eink_display_wait_idle(K_MINUTES(2));
+	if (ret != 0) {
+		return ret;
+	}
+	eink_display_get_status(&st);
+	if (st.last_result != 0) {
+		LOG_WRN("display failed (%d); state not advanced", st.last_result);
+		return st.last_result;
+	}
+	if (advance_state) {
+		k_mutex_lock(&mu, K_FOREVER);
+		strncpy(last_job, job->job_id, sizeof(last_job) - 1);
+		last_job[sizeof(last_job) - 1] = '\0';
+		(void)eink_store_save_state(last_job);
+		k_mutex_unlock(&mu);
+	}
+	return 1;
+}
+
 int eink_scheduler_tick(void)
 {
 	struct eink_sched_decision d;
 	struct eink_job job;
-	char path[300];
-	int ret;
 
 	k_mutex_lock(&mu, K_FOREVER);
 	d = eink_scheduler_decide(&sched, now_unix(), last_job);
@@ -81,33 +118,48 @@ int eink_scheduler_tick(void)
 	job = sched.jobs[d.job_index];
 	k_mutex_unlock(&mu);
 
-	if (eink_store_image_path(job.image_id, path, sizeof(path)) != 0) {
-		return -ENOENT;
-	}
+	return show_job_locked_copy(&job, true);
+}
 
-	LOG_INF("show job=%s image=%s path=%s", job.job_id, job.image_id, path);
-	ret = eink_display_show_path(path, job.job_id);
-	if (ret != 0) {
-		/* Do not advance state on queue/display failure. */
-		return ret;
-	}
-	ret = eink_display_wait_idle(K_MINUTES(2));
-	if (ret != 0) {
-		return ret;
-	}
-	struct eink_display_status st;
-
-	eink_display_get_status(&st);
-	if (st.last_result != 0) {
-		LOG_WRN("display failed (%d); state not advanced", st.last_result);
-		return st.last_result;
-	}
+int eink_scheduler_repaint(void)
+{
+	struct eink_sched_decision d;
+	struct eink_job job;
+	bool found = false;
+	bool advance = false;
 
 	k_mutex_lock(&mu, K_FOREVER);
-	strncpy(last_job, job.job_id, sizeof(last_job) - 1);
-	(void)eink_store_save_state(last_job);
+	/* Ignore last_job skip so we learn which overdue image belongs on panel. */
+	d = eink_scheduler_decide(&sched, now_unix(), "");
+	if (d.action == EINK_SCHED_SHOW) {
+		job = sched.jobs[d.job_index];
+		found = true;
+		advance = (last_job[0] == '\0') || (strcmp(last_job, job.job_id) != 0);
+	} else if (last_job[0] != '\0') {
+		for (size_t i = 0; i < sched.count; i++) {
+			if (strcmp(sched.jobs[i].job_id, last_job) == 0) {
+				job = sched.jobs[i];
+				found = true;
+				advance = false;
+				break;
+			}
+		}
+		if (!found) {
+			/* Orphan last_job: still try image_id == last_job as image id. */
+			memset(&job, 0, sizeof(job));
+			strncpy(job.job_id, last_job, sizeof(job.job_id) - 1);
+			strncpy(job.image_id, last_job, sizeof(job.image_id) - 1);
+			found = true;
+			advance = false;
+		}
+	}
 	k_mutex_unlock(&mu);
-	return 1;
+
+	if (!found) {
+		LOG_INF("repaint: nothing to show");
+		return 0;
+	}
+	return show_job_locked_copy(&job, advance);
 }
 
 int eink_scheduler_due_image(char *out, size_t cap)

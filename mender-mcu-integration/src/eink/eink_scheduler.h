@@ -11,6 +11,14 @@ int eink_scheduler_init(void);
 /** Evaluate schedule once; returns 1 if a show was queued, 0 if nop, <0 on error. */
 int eink_scheduler_tick(void);
 
+/**
+ * Paint the image that should be on the panel now (latest overdue job, else
+ * last_job). Used after power-on / SDL start when tick would NOP because the
+ * job was already recorded as displayed — the panel is still blank.
+ * Returns 1 if a show ran, 0 if nothing to paint, <0 on error.
+ */
+int eink_scheduler_repaint(void);
+
 /** Replace in-memory schedule (fixture / HTTP). Recomputes next_run from cron. */
 int eink_scheduler_set_schedule(const struct eink_schedule *in, int64_t now_unix);
 

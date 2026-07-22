@@ -120,6 +120,11 @@ def main() -> int:
                     and "refresh done result=0" in text
                     and "telemetry posted" in text
                 )
+                or (
+                    "no new scheduled image due" in text
+                    and "show job=" in text
+                    and "refresh done result=0" in text
+                )
                 or "no new scheduled image due" in text
             )
         )

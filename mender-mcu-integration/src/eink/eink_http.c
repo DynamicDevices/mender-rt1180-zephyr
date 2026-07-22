@@ -1287,6 +1287,11 @@ static int eink_http_sync_once_inner(void)
 	LOG_INF("scheduler tick after sync");
 	ret = eink_scheduler_tick();
 	LOG_INF("scheduler tick result=%d", ret);
+	if (ret == 0) {
+		/* Panel is blank after boot/SDL; re-paint current/last image. */
+		ret = eink_scheduler_repaint();
+		LOG_INF("scheduler repaint result=%d", ret);
+	}
 	eink_scheduler_get_last_job(last_job, sizeof(last_job));
 	{
 		int64_t next_wake =

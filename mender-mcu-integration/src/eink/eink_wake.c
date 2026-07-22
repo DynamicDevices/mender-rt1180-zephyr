@@ -28,11 +28,15 @@ int eink_wake_run_once(void)
 	}
 
 	/* Offline display first — never power IW612 for a cached transition.
-	 * eink_scheduler_tick() already waits for the refresh to finish.
+	 * tick advances to a new due job; repaint covers power-on blank panel
+	 * when the due job was already recorded as last_job.
 	 */
 	ret = eink_scheduler_tick();
+	if (ret == 0) {
+		ret = eink_scheduler_repaint();
+	}
 	if (ret < 0) {
-		LOG_WRN("scheduler tick: %d", ret);
+		LOG_WRN("scheduler display: %d", ret);
 	}
 
 #if defined(CONFIG_APP_EINK_HTTP)
