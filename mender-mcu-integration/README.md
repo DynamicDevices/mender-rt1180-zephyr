@@ -19,7 +19,7 @@ Zephyr Module, with configurations for some boards to choose from.
 
 ## i.MX RT118x (CM33) port — EVK and FRDM
 
-Work-in-progress Mender OTA notes for **MIMXRT1180-EVK** and **FRDM-IMXRT1186** (CM33) are in [PROJECT-NOTES.md](PROJECT-NOTES.md) (build, flash, Hosted Mender, **stable lab MAC / device identity** via board overlays, **mender-mcu fork pin @ `1b2d374`**, expected build warnings, status, **EdgeLock ELE security roadmap**, **[CRA technical mapping](PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping)**, and **[CRA compliance programme](PROJECT-NOTES.md#cra-compliance-programme-firmware-technical-baseline)** — engineering preparedness, not legal sign-off). Requires **Zephyr v4.4.0** and **SDK 1.0.1**. For a fresh West workspace, see the [repo README](../README.md).
+Work-in-progress Mender OTA notes for **MIMXRT1180-EVK** / **FRDM-IMXRT1186** (CM33) and **MIMXRT1170-EVK** (CM7) are in [PROJECT-NOTES.md](PROJECT-NOTES.md) (build, flash, Hosted Mender, **stable lab MAC / device identity** via board overlays, **mender-mcu fork pin @ `1b2d374`**, expected build warnings, status, **EdgeLock ELE security roadmap**, **[CRA technical mapping](PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping)**, and **[CRA compliance programme](PROJECT-NOTES.md#cra-compliance-programme-firmware-technical-baseline)** — engineering preparedness, not legal sign-off). Requires **Zephyr v4.4.0** and **SDK 1.0.1**. For a fresh West workspace, see the [repo README](../README.md).
 
 ## Get started
 
@@ -138,6 +138,14 @@ with many contributions from the community. Thanks
 
 [Mender](https://mender.io) is sponsored by [Northern.tech AS](https://northern.tech).
 
+
+### MIMXRT1170-EVK quick build
+
+```bash
+./scripts/build-rt1170-evk.sh
+```
+
+Board: `mimxrt1170_evk/mimxrt1176/cm7`. Host build verified; hardware TBD. See [PROJECT-NOTES — MIMXRT1170-EVK](PROJECT-NOTES.md#mimxrt1170-evk-cm7--mender-mcu-ota).
 
 ### FRDM-IMXRT1186 quick build
 

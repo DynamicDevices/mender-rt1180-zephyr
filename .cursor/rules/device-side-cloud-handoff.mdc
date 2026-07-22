@@ -1,0 +1,12 @@
+---
+description: Device-side agent owns firmware only; hand cloud work to Cloud API implementation
+alwaysApply: true
+---
+
+# Device vs cloud ownership
+
+This agent works the **device side only** in `/data_drive/dd/mender` (Zephyr firmware, native_sim, device scripts).
+
+- Do **not** edit, commit, push, or deploy `/data_drive/esl/etablone-cloud` or other cloud API trees.
+- When cloud/API work is required, hand off to the parallel agent **Cloud API implementation** with a clear request: device change summary, wire contract, and desired cloud actions.
+- Reading cloud docs/OpenAPI for contract alignment is fine; implementing cloud changes is not.

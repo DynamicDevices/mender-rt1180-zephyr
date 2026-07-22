@@ -1,11 +1,17 @@
 # West workspace dependencies (west update — do not commit)
-zephyr/
-modules/
-bootloader/
-.west/
+# Anchor to repo root so mender-mcu-integration/modules/* stays trackable.
+/zephyr/
+/modules/
+/bootloader/
+/.west/
+/zephyr
+/modules
+/bootloader
+/.west
 
 # Local tooling and caches
 .tools/
+.tools
 .local/
 
 # Build outputs (per-target; rm -rf build if migrating from old mixed cache)
@@ -56,3 +62,4 @@ mender-mcu-integration/.git/
 
 # Zephyr net-tools (manual clone for native_sim TAP)
 tools/net-tools/
+tools/net-tools

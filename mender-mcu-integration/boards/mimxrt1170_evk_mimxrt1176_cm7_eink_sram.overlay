@@ -1,0 +1,21 @@
+/*
+ * Production-shaped memory map on EVK silicon:
+ *   zephyr,sram = OCRAM1+OCRAM2 (1 MiB contiguous CM7 OCRAM)
+ * CM4 OCRAM remains reserved / unused.
+ *
+ * SDRAM is not selected as system RAM. This profile proves the streaming
+ * path before custom-board dual-FlexSPI silicon arrives.
+ */
+/ {
+	chosen {
+		zephyr,sram = &ocram1;
+	};
+};
+
+/* Grow OCRAM1 to cover OCRAM1+OCRAM2 for a contiguous 1 MiB region when the
+ * SoC DT allows; if the board DT already splits them, prefer ocram1 alone and
+ * document residual headroom from the map file.
+ */
+&ocram1 {
+	status = "okay";
+};

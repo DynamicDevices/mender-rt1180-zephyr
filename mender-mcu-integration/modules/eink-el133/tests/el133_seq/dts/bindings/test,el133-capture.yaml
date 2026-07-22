@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+description: Test-only SPI capture emulator for the EL133UF1 driver ztest
+
+compatible: "test,el133-capture"
+
+include: spi-device.yaml

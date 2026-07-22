@@ -1,0 +1,12 @@
+/*
+ * Stable locally-administered MAC for Mender lab identity.
+ *
+ * The upstream board DTS uses zephyr,random-mac-address, which would register
+ * a new Mender device after every reboot. Production must provision a unique
+ * per-unit identity instead of sharing this lab address.
+ */
+
+&enet_mac {
+	/delete-property/ zephyr,random-mac-address;
+	local-mac-address = [02 11 70 00 00 01];
+};

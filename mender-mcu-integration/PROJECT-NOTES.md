@@ -84,8 +84,24 @@ Use **separate** `west build -d …` directories so EVK, FRDM, and `native_sim` 
 | MIMXRT1180-EVK CM33 | `build-rt1180-evk/` | `./scripts/build-rt1180-evk.sh` |
 | FRDM-IMXRT1186 CM33 | `build-frdm-rt1186/` | `./scripts/build-rt1186-frdm.sh` |
 | `native_sim` (Phase 0b) | `build-native_sim/` | `./scripts/build-native-sim.sh` |
+| MIMXRT1170-EVK CM7 | `build-rt1170-evk/` | `./scripts/build-rt1170-evk.sh` |
 
 Override with `BUILD_DIR=…` (build scripts) or `MENDER_BUILD_DIR=…` (deployment scripts). **Do not reuse** the legacy shared `build/` directory across boards — if you still have an old mixed tree, remove it: `rm -rf build` (outputs only — not tracked sources).
+
+### Single-writer workspace policy
+
+Canonical Cursor root: **`/data_drive/dd/mender`** (realpath). Do not open this tree via `/home/ajlennon/data_drive/...`, a multi-root workspace file, or a linked worktree path — Cursor treats alternate paths as separate projects.
+
+| Rule | Detail |
+|------|--------|
+| Writers | One write-capable agent only; research/review subagents may not edit |
+| Worktrees | Default **ban**. Exception only with Alex's named branch + lifetime |
+| West deps | One West topdir per checkout; never symlink `.west/`, `zephyr/`, `modules/`, `bootloader/`, or `build*` across trees |
+| App modules | `mender-mcu-integration/modules/*` is **tracked** source; root `/modules/` is West-only and gitignored |
+| Source of truth | GitHub feature-branch checkpoints via `./scripts/safety-checkpoint.sh` |
+| Guard | `./scripts/check-workspace-safety.py` (local) and `--handoff` before session end; CI runs ignore-policy checks |
+
+Exception process: ask Alex first → isolated West workspace with fresh deps → checkpoint and push before handoff → Trash the complete worktree only after `git status --short --ignored` is clean and the remote commit is verified (`git worktree prune` after Trash, never `worktree remove --force` as the deletion step).
 
 
 ## Scripts inventory
@@ -94,9 +110,16 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 
 | Script | Role |
 |--------|------|
-| `scripts/build-native-sim.sh` | Pristine/incremental `native_sim` build; pins NSI to **GCC 11** via `fix-native-sim-link.sh` |
-| `scripts/fix-native-sim-link.sh` | Repair NSI link after a failed pristine configure (sets `NSI_CC` to `gcc-11`) |
-| `scripts/run-native-sim-network.sh` | Start/stop/status TAP + DHCP + NAT using `tools/net-tools/nat.conf` (`cd` into net-tools; `stop` passes `--config nat.conf`) |
+| `scripts/build-native-sim.sh` | Pristine/incremental `native_sim` build; pins NSI to **GCC 11** via `fix-native-sim-link.sh`. Honours `NATIVE_SIM_EXTRA_CONF` / `NATIVE_SIM_EXTRA_MODULES` env for wrapper targets |
+| `scripts/build-native-sim-improv.sh` | `native_sim` Improv (serial) target; adds `improv-native-sim.conf` + `improv-zephyr` module (default `build-native_sim-improv/`) |
+| `scripts/build-native-sim-improv-ble.sh` | `native_sim` Improv (**BLE**) target; adds `improv-native-sim-ble.conf` + `improv-zephyr` module (default `build-native_sim-improv-ble/`) |
+| `scripts/run-native-sim-improv-ble.sh` | Run the BLE emulator against a host adapter (HCI User Channel): powers down `hci0`, handles `CAP_NET_ADMIN` (sudo or `setcap`), restores BlueZ on exit |
+| `mender-mcu-integration/patches/improv-zephyr-active-esl-claim.patch` | Local patch on pinned `improv-zephyr` (`{token}` claim URL, larger buffers, write-without-response); auto-applied by BLE build wrappers |
+| `scripts/improv-serial-provision.py` | Host-side Improv serial provisioner for the native_sim console PTY (Chrome Web Serial can't see a PTY) |
+| `scripts/setup-native-sim-tap.sh` | **One-time** root install of user-owned `zeth` + systemd DHCP/NAT + polkit (then day-to-day no sudo) |
+| `scripts/native-sim-tap/` | Helpers/unit files installed by `setup-native-sim-tap.sh` |
+| `scripts/run-native-sim-network.sh` | Start/stop/status for `zeth` (prefers systemd unit; legacy net-tools fallback still needs sudo) |
+| `scripts/fix-native-sim-link.sh` | Repair NSI link after a failed pristine configure (sets `NSI_CC` to `gcc-11`); honours `BUILD_DIR` |
 | `scripts/test-mender-native-sim.sh` | Build (optional) + run `zephyr.exe` Mender smoke test; expects TAP from `run-native-sim-network.sh` |
 | `scripts/create-native-sim-deployment.sh` | Build noop-update artifact (`device_type` `native_sim`) and create **one** Hosted Mender deployment (`MENDER_DEPLOY_TARGET=device` \| `device_type` \| `group`; default group **`simulator`**) |
 | `scripts/build-rt1180-evk.sh` | Sysbuild Mender for EVK CM33 (default `build-rt1180-evk/`) |
@@ -108,6 +131,12 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 | `scripts/run-vemu-demo.sh` | Build `hello_world` for nRF5340 and print vemulator.com load instructions |
 | `scripts/build-mender-vemu.sh` | Sysbuild Mender app for `nrf5340dk/nrf5340/cpuapp` (noop module; uses `boards/nrf5340dk_nrf5340_cpuapp.conf`) |
 | `scripts/test-mender-vemu.sh` | Build + run Mender image in headless vemu (slow — increase `--frames`) |
+| `scripts/check-workspace-safety.py` | Single-writer / ignore-policy / worktree guard (`--ci`, `--handoff`, `--diag`) |
+| `scripts/safety-checkpoint.sh` | Commit + push a labelled checkpoint on a feature branch (no amend/force) |
+| `scripts/build-el133-ztest.sh` | Build + run EL133UF1 mock-SPI sequence ztest on `native_sim` |
+| `scripts/eink-verify-sim.sh` | Offline e-ink verify gate (fixtures, selftest, driver check, ztest, file:// sync) |
+| `scripts/eink-duty-smoke.sh` | native_sim battery duty-cycle smoke (gallery cache + schedule `next_wake` + SNVS stub) |
+| `scripts/run-native-sim-etabelone.sh` | Live e-tabelone → ES6F → native_sim scheduled-display proof |
 
 ## Prerequisites
 
@@ -266,6 +295,303 @@ west flash -d build-frdm-rt1186
 ```
 
 Use LinkServer (default) or J-Link per `zephyr/boards/nxp/frdm_imxrt1186/board.cmake`. Reset after flash; serial **115200 8N1** on MCU-Link. CM33: jumper **J60** = **1:OFF 2:OFF 3:ON**. Ethernet: cable to **`swp0` or `swp2`** (not `eth0`/`swp4`). Board overlay (`boards/frdm_imxrt1186_mimxrt1186_cm33.overlay`) fixes lab MAC identity only; Mender `storage_partition` needs no overlay.
+
+## MIMXRT1170-EVK (CM7) — Mender MCU OTA
+
+**Goal:** host-buildable Mender MCU image for the standard **MIMXRT1170-EVK** so lab bring-up can start as soon as hardware arrives.
+
+| Topic | Value |
+|-------|-------|
+| Zephyr board | `mimxrt1170_evk/mimxrt1176/cm7` (rev B default) |
+| SoC | MIMXRT1176 (CM7 @ up to 1 GHz + CM4 companion; this port targets **CM7 only**) |
+| Mender device type | `mimxrt1170_evk` |
+| Board conf / overlay | `boards/mimxrt1170_evk_mimxrt1176_cm7.conf` / `.overlay` |
+| Default build dir | `build-rt1170-evk/` |
+| Ethernet | Classic ENET 10/100 (KSZ8081); Gigabit ENET1G left disabled upstream |
+| Lab MAC | **02:11:70:00:00:01** |
+| Lab group | **`rt1170-lab`** |
+| Flash layout | Upstream DTS: 128 KiB MCUboot + 7 MiB ×2 slots + ~2 MiB storage (same shape as RT118x) |
+
+### Scope / non-goals
+
+- **In scope:** MCUboot + Zephyr + Mender MCU on CM7, Hosted Mender `zephyr-image` artifact, ENET DHCP path.
+- **Out of scope (for now):** CM4 companion firmware; NXP EdgeReady **RT117H / RT117F / RT117T / RT117C** vision/voice runtime licences (those need EdgeReady silicon + NXP SDK, not this generic EVK board target).
+
+### Build / flash / deploy
+
+```bash
+./scripts/build-rt1170-evk.sh
+west flash -d build-rt1170-evk
+./scripts/create-rt1170-deployment.sh
+```
+
+**Status:** host sysbuild + `zephyr.mender` validate **done**; hardware Phase 1–2 **TBD**.
+
+### Improv BLE provisioning with IW612
+
+The optional `build-rt1170-improv-iw612` target combines the Mender image with:
+
+- Embedded Artists **2EL M.2** radio (**NXP IW612**);
+- Improv Web Bluetooth provisioning via pinned Apache-2.0
+  `improv-zephyr@b65d2aaa39d48ec0fee11aa3eecd0609bbe30f3c`;
+- NXP IW61x Wi-Fi over the EVKB's USDHC1 SDIO route;
+- persistent credentials through Zephyr `wifi_credentials` + settings/NVS.
+
+```bash
+west update
+west blobs fetch hal_nxp
+./scripts/build-rt1170-improv-iw612.sh
+west flash -d build-rt1170-improv-iw612
+```
+
+The application starts Improv before blocking for an IPv4 address. Stored
+credentials reconnect automatically; on an unprovisioned device the BLE service
+remains available while Mender waits for provisioning.
+
+**Host-build status:** **done** (MCUboot + application + signed binary +
+`zephyr.mender`, Zephyr v4.4.0). Application footprint: 1,731,704 bytes flash
+and 894,512 bytes RAM in the host link report.
+
+**Hardware status:** **TBD.** Upstream Zephyr does not provide the missing
+RT1170 M.2 Wi-Fi mapping, so the application overlay maps the EVKB's shared
+USDHC1 interface and disables its SD-card child. Do not insert an SD card while
+using M.2 Wi-Fi. Validate SDIO enumeration, IW612 firmware load, scan/connect,
+BLE provisioning, reboot reconnect, and Mender OTA on the actual EVKB/2EL
+combination.
+
+**Security limitation:** the pinned community Improv BLE transport advertises
+without pairing and has no physical-presence/provisioning-window gate. Treat
+this as a lab target only. Production requires a bounded, physically authorised
+provisioning mode and review of BLE credential confidentiality.
+
+### Improv in the emulator (`native_sim`)
+
+The `build-native_sim-improv` target runs the **same pinned `improv-zephyr`
+protocol/serial code** on the host so the provisioning flow can be exercised
+without hardware. Because Zephyr provides **no emulated Wi-Fi radio**, a
+management-only simulated Wi-Fi interface (`CONFIG_APP_WIFI_SIM`,
+`src/net/wifi_sim.c`) is registered: it answers `scan`/`connect`/`iface_status`,
+reports association success asynchronously, and — critically — starts DHCPv4 on
+the native TAP Ethernet interface (`zeth0`), which carries all Mender traffic.
+This yields a real causal loop: **Improv provisioning → TAP link up → Mender
+authenticates** — with only the radio association stubbed.
+
+```bash
+west update                                       # fetch improv-zephyr
+sudo ./scripts/setup-native-sim-tap.sh install    # once: user-owned zeth + DHCP/NAT service
+./scripts/run-native-sim-network.sh start         # no sudo after install (terminal 1)
+./scripts/build-native-sim-improv.sh              # terminal 2
+./build-native_sim-improv/zephyr/zephyr.exe       # prints "connected to pseudotty: /dev/pts/N"
+python3 scripts/improv-serial-provision.py /dev/pts/N --ssid <SSID> --psk <8+ chars>  # terminal 3
+```
+
+The serial transport binds `zephyr,console`, so provisioning shares the
+native_sim console PTY. Chrome Web Serial does **not** enumerate Linux PTYs, so
+`scripts/improv-serial-provision.py` drives the handshake instead (it implements
+the Improv serial framing from `modules/improv-zephyr/src/improv.c`).
+
+**Host-run status (2026-07-21):** **done** — verified `AUTHORIZED →
+PROVISIONING → PROVISIONED`, device-info RPC, and `wifi_sim` starting DHCPv4 on
+`zeth0`. Wi-Fi PSKs shorter than 8 bytes are correctly rejected by Zephyr's
+`wifi_mgmt` validation. Full DHCP + Mender check-in needs the host TAP up
+(`./scripts/run-native-sim-network.sh start` after the one-time
+`setup-native-sim-tap.sh install`). Without a user-owned `zeth`, `eth_tap`
+fails with `Operation not permitted` when run as a normal user.
+
+**What is NOT covered:** IW612 SDIO enumeration, firmware-blob load, and real
+scan/associate/DHCP — all hardware-only. `CONFIG_APP_WIFI_SIM` must never be
+enabled on real hardware.
+
+### Improv in the emulator over BLE (`native_sim`)
+
+`build-native_sim-improv-ble` runs the **same pinned `improv-zephyr` BLE (GATT)
+transport** on the host, provisioned from a real BLE central — a phone Improv app
+or Chrome/Edge Web Bluetooth at <https://www.improv-wifi.com/ble/>. The Wi-Fi
+side is unchanged from the serial target: `CONFIG_APP_WIFI_SIM`
+(`src/net/wifi_sim.c`) fakes association and starts DHCPv4 on the native TAP
+interface (`zeth0`), so the causal loop is identical — **Improv (over BLE) →
+TAP link up → Mender authenticates** — with only the radio stubbed.
+
+`native_sim` has no radio, so it borrows the **host's** controller via Zephyr's
+**HCI User Channel** driver (`bt_hci_userchan`, the board's default
+`zephyr,bt-hci`). Enabled with `CONFIG_BT=y` + `CONFIG_BT_PERIPHERAL=y` +
+`CONFIG_IMPROV_BLE=y` (see `improv-native-sim-ble.conf`; `CONFIG_BT_USERCHAN`
+auto-selects on `native_sim`). Two kernel-imposed constraints, distinct from the
+serial/TAP path:
+
+* **Adapter takeover.** The user channel binds the chosen adapter exclusively, so
+  BlueZ must release it first (the run script does `bluetoothctl power off`) and
+  the host's normal Bluetooth (mice/headphones) drops until the sim exits, when
+  the script powers it back on.
+* **`CAP_NET_ADMIN`.** Opening an `HCI_CHANNEL_USER` socket requires it — there is
+  **no** owner/polkit trick as there is for the persistent TAP. Either run under
+  `sudo`, or `run-native-sim-improv-ble.sh setcap` once per build to grant
+  `cap_net_admin+ep` on `zephyr.exe` (needs sudo once; lost on rebuild).
+
+```bash
+west update
+sudo ./scripts/setup-native-sim-tap.sh install    # once: user-owned zeth (data path)
+./scripts/run-native-sim-network.sh start          # terminal 1
+./scripts/build-native-sim-improv-ble.sh           # terminal 2
+./scripts/run-native-sim-improv-ble.sh setcap      # optional: avoid sudo on the run (per build)
+./scripts/run-native-sim-improv-ble.sh             # advertises "eink-51F0" on hci0
+# then connect + submit credentials from the Web Bluetooth installer or a phone app
+```
+
+Override the adapter with `--dev hciN` or `BT_DEV=hciN`. On this workstation the
+only adapter is `hci0` (Intel AX210), which is also the desktop's BT — expect it
+to drop while the sim runs.
+
+**Active ESL app alignment (path A, 2026-07-21):** advertises as **`eink-51F0`**
+(matches the app's `^eink-([0-9a-fA-F]{4})$` filter) and returns the Active ESL
+claim redirect URL with a minted `{token}` (local patch on pinned
+`improv-zephyr`: `{token}` substitution, larger URL buffer, RPC Command
+write-without-response). Build wrappers auto-apply
+`mender-mcu-integration/patches/improv-zephyr-active-esl-claim.patch` when needed; after `west update` the next BLE build re-applies it.
+Claims land as model `imx93-jaguar-eink` / board id `51F0` — lab spoof only.
+RT1170 IW612 Improv target uses the same pattern as **`eink-1170`**.
+
+**Build status (2026-07-21):** BLE target **builds green** on `native_sim`
+(Bluetooth host stack + `transport_ble.c` link into `zephyr.exe`). Over-the-air
+provisioning from a phone/browser is **not yet bench-verified** here because
+grabbing `hci0` interrupts the workstation's own Bluetooth; run it when a spare
+adapter (or an acceptable interruption window) is available.
+
+**Security:** as on hardware, the Improv BLE transport has **no pairing or
+physical-presence gate** — anyone in range can drive provisioning. Lab only;
+gate before any field use. `CONFIG_APP_WIFI_SIM` must never ship on real hardware.
+
+
+## E-ink display and scheduler (Zephyr)
+
+Portable contract for the Zephyr e-ink stack. Linux reference implementations remain
+the source of behaviour: [`eink-scheduler-rust`](../../../../esl/eink-scheduler-rust)
+(schedule/telemetry) and [`eink-spectra6`](../../../../esl/eink-spectra6) (EL133UF1 SPI).
+Do **not** port subprocess/`systemd`/sysfs details — preserve the product invariants below.
+
+### Language
+
+Bring-up is **C only**. Zephyr Rust (`zephyr-lang-rust`) is experimental, application-only,
+and not a first-class path for `native_sim` / RT1170 CM7. Keep the Linux Rust scheduler as the
+**reference contract**. Design the C scheduler decision core as pure logic (clock/schedule in →
+action out) so a future shared `no_std` Rust core remains possible without touching I/O layers.
+
+### Panel geometry (EL133UF1 Spectra 6)
+
+| Property | Value |
+|----------|--------|
+| Logical size | 1200 × 1600 (portrait) |
+| Controllers | Dual (left / right), each 600 × 1600 |
+| Pixel format | 4 bpp indexed (`PIXEL_FORMAT_L_4`), high nibble = left pixel of pair |
+| Payload | 960 000 bytes = 480 000 (CS0 left) + 480 000 (CS1 right) |
+| Palette indices | 0 Black, 1 White, 2 Yellow, 3 Red, 5 Blue, 6 Green |
+| SPI | Mode 0, single-SPI (`SPIM=0x00`), ~5 MHz lab default |
+| Refresh | Full-frame only in v1; PON → DTM×2 → DRF (both CS) → POF; ~20–60 s |
+
+### Packed-frame file format (`ES6F` v1)
+
+Little-endian header (32 bytes) + payload:
+
+| Offset | Size | Field |
+|--------|------|--------|
+| 0 | 4 | magic `ES6F` |
+| 4 | 2 | version (=1) |
+| 6 | 2 | width (1200) |
+| 8 | 2 | height (1600) |
+| 10 | 1 | pixel_format (=1 → Spectra6 L_4) |
+| 11 | 1 | orientation (0/90/180/270 degrees / 90) |
+| 12 | 2 | flags (0) |
+| 14 | 4 | payload_len (must be 960000 for full panel) |
+| 18 | 4 | crc32 of payload (IEEE) |
+| 22 | 10 | reserved (0) |
+| 32 | payload_len | packed pixels |
+
+Reject frames with bad magic/version/geometry/CRC/`payload_len` before display.
+JPEG/PNG are **not** accepted on-device in v1 — convert host-side to `ES6F`.
+
+### Display commands
+
+| Command | Behaviour |
+|---------|-----------|
+| `show <path>` | Validate frame, queue one refresh, return success/failure |
+| `clear` | Solid white (or panel clear sequence) full refresh |
+| `status` | idle / refreshing / last result / last job id |
+
+Single active refresh; long waits run on a **dedicated** display workqueue, never the
+Mender/system workqueue.
+
+### Scheduler invariants (match Rust)
+
+1. Cron: parse `minute hour …` UTC only (same as `cron.rs`).
+2. Among jobs with `now >= next_run`, display **only the latest** overdue job.
+3. Skip if `job_id == last_displayed_job_id`.
+4. On display **failure**, do **not** advance persisted state (retry while overdue).
+5. Persist `last_displayed_job_id` only after successful show.
+6. Local fixture mode: rotate packed frames on a fixed interval without cloud.
+
+### Cloud contracts (do not conflate)
+
+| Path | Role |
+|------|------|
+| Active ESL onboard (Improv + claim) | App/fleet identity — **no** schedules |
+| e-tabelone HTTP | `GET …/config`, due-then-gallery ES6F download, `POST …/telemetry` with schedule-driven `next_wakeup` (native_sim: live + file:// gallery cache proven); optional WGS84 `latitude`/`longitude`/`location_accuracy_m` when `eink location set` / `eink_location_set()` has a fix |
+
+Credentials for e-tabelone live in Bitwarden / device settings — never commit tokens.
+Shell: `eink creds <base> <device_id> <token>` then `eink sync` (token `none`/`-` = omit Bearer).
+Location (optional): `eink location set <lat> <lng> [accuracy_m]` / `eink location clear` — see [EINK-CONTRACT.md](docs/EINK-CONTRACT.md).
+
+### Hardware discussion spec (document control)
+
+Active-ESL custom-board requirements for Michael/Ollie are controlled in the
+**`active-esl/specifications`** repo (not in this firmware tree):
+
+- **Document ID:** `AESL-HW-RT1170-EINK-SPEC`
+- **Canonical:** [`active-esl/specifications` → `hw/AESL-HW-RT1170-EINK-SPEC/`](https://github.com/active-esl/specifications/tree/main/hw/AESL-HW-RT1170-EINK-SPEC)
+- **Procedure:** [DOCUMENT-CONTROL.md](https://github.com/active-esl/specifications/blob/main/DOCUMENT-CONTROL.md)
+- **Local clone:** `/data_drive/esl/specifications`
+- **Collaborator mirror:** Google Doc Rev **0.2** — see Document Control for the current link
+- **Pointer in this tree:** [`docs/DOCUMENT-CONTROL.md`](docs/DOCUMENT-CONTROL.md)
+
+Do not treat ad-hoc Drive drafts as the master. Bump the revision table when architecture decisions change.
+
+### Battery-first streaming implementation (2026-07-21)
+
+| Piece | Status |
+|-------|--------|
+| Chunked ES6F validation / accept-temp | Done (`eink_frame_stream_*`, `eink_store_accept_temp_image`) |
+| Streaming display (no production FB) | Done (`el133uf1_stream_write`, SDL row seeks) |
+| EVK full-FB profile | `CONFIG_APP_EINK_FULL_FRAMEBUFFER` |
+| OCRAM / dual-FlexSPI / IW612 confs | Scaffold overlays + confs under `boards/` |
+| SNVS / CM4 power contract | `eink_power.*` + `docs/POWER-HARDWARE-CONTRACT.md` |
+| Cold-boot wake machine | `CONFIG_APP_EINK_BATTERY_DUTY_CYCLE` + `eink_wake.*` (schedule `next_wake`; native_sim SNVS stub returns) |
+| FlexSPI2 OTA staging | Scaffold `eink_ota_stage.*` (install `-ENOTSUP` until DTS) |
+| native_sim proof | `eink-verify-sim.sh` fixture gate + `run-native-sim-etabelone.sh <device> [--sdl]` live schedule/display/telemetry proof; no `eink_fb`/`validate_buf` symbols |
+
+### Storage / RAM
+
+| Target | Working FB | Persist frames + schedule |
+|--------|------------|---------------------------|
+| `native_sim` | heap / static | 32 MiB simulated NOR; 17.75 MiB e-ink LittleFS at `/lfs1` |
+| RT1170 EVKB | static 960 KB in **SDRAM** | Existing EVK remains 16 MiB NOR; do not apply the custom-board map |
+| Custom RT1170 board (provisional) | static 960 KB in **SDRAM** | 32 MiB XIP NOR: 128 KiB MCUboot + 7 MiB A/B slots + 128 KiB Mender NVS + 17.75 MiB e-ink LittleFS |
+
+The provisional 32 MiB map holds about 19 raw 960,032-byte ES6F files before
+filesystem overhead, satisfying the current 4–16 frame target. Mender NVS and
+LittleFS use separate partitions. The simulator's file-backed flash persists
+across restarts; pass `--flash_erase` to reset it. The custom-board DTS must not
+be finalised until hardware selects a compatible 32 MiB XIP NOR and confirms its
+erase/program geometry.
+
+### Build / run (simulator)
+
+```bash
+./scripts/build-native-sim-eink.sh
+./scripts/gen-eink-frame.py --solid white -o /tmp/white.es6f
+./build-native_sim-eink/zephyr/zephyr.exe
+# shell: eink show /tmp/white.es6f
+# e-tabelone (after DHCP): eink creds https://api.dev.e-tabelone.com <id> <token> && eink sync
+```
+
 
 ## Security / EdgeLock
 
@@ -900,7 +1226,7 @@ Goal: exercise the Mender MCU client, TLS, and Hosted Mender polling on the host
 | Step | Result |
 |------|--------|
 | Build | `./scripts/build-native-sim.sh` — GCC 11 NSI fix; outputs `build-native_sim/zephyr/zephyr.exe` |
-| Network | `./scripts/run-native-sim-network.sh start` — `nat.conf`; stop uses `--config nat.conf` |
+| Network | `./scripts/run-native-sim-network.sh start` after one-time `setup-native-sim-tap.sh install` (user-owned `zeth`; no sudo day-to-day) |
 | Run | `./scripts/test-mender-native-sim.sh` — DHCP **192.0.2.24** on `zeth0`; Mender client init; device type **`native_sim`** |
 | First check-in | HTTP **401** until device **accepted** in Hosted Mender UI (pending device, MAC **02:00:5e:00:53:31**) |
 | Auth OK | After accept: log line **"No deployment available"** = tenant token auth working |
@@ -914,7 +1240,7 @@ Goal: exercise the Mender MCU client, TLS, and Hosted Mender polling on the host
 |------|-------------|
 | Host GCC 11 + multilib | `sudo apt install gcc-11 g++-11 gcc-11-multilib` (alternative: `gcc-multilib` / `g++-multilib` for default GCC 13 if you prefer not to use GCC 11) |
 | `net-tools` | Clone [zephyrproject-rtos/net-tools](https://github.com/zephyrproject-rtos/net-tools) to `tools/net-tools` at the workspace root (not in this West manifest). |
-| TAP / net setup | `./scripts/run-native-sim-network.sh start` (recommended), or manual `tools/net-tools/net-setup.sh --config nat.conf` from `tools/net-tools/` — see [Scripts inventory](#scripts-inventory). Without DHCP on `zeth`, the client stays on “Waiting for network up…”. |
+| TAP / net setup | **One-time:** `sudo ./scripts/setup-native-sim-tap.sh install` (user-owned `zeth` + systemd DHCP/NAT + polkit). **Day-to-day (no sudo):** `./scripts/run-native-sim-network.sh start`. Without DHCP on `zeth`, the client stays on “Waiting for network up…”. |
 | Secrets | Same gitignored `mender-mcu-integration/mender-local.conf` (tenant token + `CONFIG_MENDER_SERVER_HOST_US=y`). |
 
 All paths below are from the **West workspace root** (directory that contains `mender-mcu-integration/` and `.west/`).
@@ -928,24 +1254,31 @@ git clone https://github.com/zephyrproject-rtos/net-tools.git tools/net-tools
 test -x tools/net-tools/net-setup.sh || chmod +x tools/net-tools/net-setup.sh
 ```
 
-In a **separate terminal**, start TAP (needs root; leave running while `zephyr.exe` runs):
+In a **separate terminal**, bring up TAP + DHCP + NAT. After the one-time
+install, this needs **no sudo**, and `zephyr.exe` can attach to the user-owned
+`zeth` without `CAP_NET_ADMIN`:
 
 ```bash
 cd /path/to/your/west/workspace
-sudo ./scripts/run-native-sim-network.sh start
-# stop when done: sudo ./scripts/run-native-sim-network.sh stop
+sudo ./scripts/setup-native-sim-tap.sh install   # once per machine
+./scripts/run-native-sim-network.sh start         # no sudo after install
+# stop when done: ./scripts/run-native-sim-network.sh stop
 ```
 
-**Recommended wrapper** — `run-native-sim-network.sh` `cd`s into `tools/net-tools` and passes `--config nat.conf` on both start and stop (cleans `dnsmasq` + NAT rules). Manual equivalent:
+`start`/`stop` drive the `native-sim-zeth.service` systemd unit (polkit allows
+your user to manage it without a password). The unit creates `zeth` owned by
+you, configures `192.0.2.2/24`, enables MASQUERADE + `ip_forward`, and starts
+`dnsmasq` for DHCP on the TAP.
+
+**Legacy fallback** (sudo every session; still creates a user-owned TAP so the
+sim itself stays unsudo'd):
 
 ```bash
-cd tools/net-tools
-sudo ./net-setup.sh --config nat.conf
+# only if setup-native-sim-tap.sh is not installed
+sudo ./scripts/run-native-sim-network.sh start   # wraps net-tools nat.conf + user/group
 ```
 
-**This blocks — that is normal.** With no `start`/`stop` argument, the script creates `zeth`, sources the config, then sleeps until you press **Ctrl-C**. Run `./scripts/test-mender-native-sim.sh --run-only` (or `./build-native_sim/zephyr/zephyr.exe`) in **another** terminal.
-
-If a previous run left `zeth` behind: `sudo ./scripts/run-native-sim-network.sh stop`, or `sudo ip link delete zeth`.
+If a previous run left `zeth` behind: `./scripts/run-native-sim-network.sh stop` (or `sudo ip link delete zeth` if the unit is not installed).
 
 Configure host NAT so the sim can reach Hosted Mender: [Setting up Zephyr and NAT/masquerading on host to access internet](https://docs.zephyrproject.org/latest/connectivity/networking/qemu_setup.html#setting-up-zephyr-and-nat-masquerading-on-host-to-access-internet).
 
@@ -1289,6 +1622,9 @@ Track progress with the **[Zephyr testing plan](#zephyr-testing-plan)** checkbox
 | `native_sim` Mender smoke + noop OTA | Phase 0b | **Done** (2026-06-13; re-verified 2026-06-17 @ `1b2d374`) — build, DHCP, accept, noop deploy |
 | vemu nRF5340 build/run (no network) | vemu | Done (limited — use Phase 0b for Hosted Mender) |
 | FRDM host sysbuild + artifact | Phase 0 / 1F | **Done** (2026-06-17 @ `1b2d374`) — `./scripts/build-rt1186-frdm.sh` links; hardware flash **TBD** |
+| RT1170 host sysbuild + artifact | Phase 0 / 1170 | **Done** — `./scripts/build-rt1170-evk.sh` links; hardware flash **TBD** |
+| RT1170 flash + serial + DHCP | Phase 1 / 1170 | **TBD** — pending MIMXRT1170-EVK |
+| RT1170 Hosted Mender OTA | Phase 2 / 1170 | **TBD** — pending MIMXRT1170-EVK |
 | EVK flash + serial | Phase 1 | **TBD** — pending MIMXRT1180-EVK arrival |
 | FRDM flash + serial | Phase 1 | **TBD** — host build verified; bench not started |
 | Ethernet DHCP | Phase 1 | **TBD** — pending EVK |
@@ -1308,3 +1644,19 @@ Track progress with the **[Zephyr testing plan](#zephyr-testing-plan)** checkbox
 ## Commits
 
 Track overlay-repo history on [DynamicDevices/mender-rt1180-zephyr](https://github.com/DynamicDevices/mender-rt1180-zephyr). Module changes belong on the [mender-mcu fork](https://github.com/DynamicDevices/mender-mcu/tree/feature/zephyr-4.4-mbedtls4) branch — do not commit `modules/mender-mcu/` in this overlay (west-managed checkout).
+
+
+### E-ink verification gates
+
+| Gate | Status | How |
+|------|--------|-----|
+| Simulator selftest (CRC, latest-overdue, cron) | **Proven** | `./scripts/eink-verify-sim.sh` → `eink selftest OK` |
+| Headless display path (`dummy_dc` 1200×1600) | **Proven** | `eink display ready (dummy_dc)` |
+| Packed-frame fixtures (size/CRC) | **Proven** | `scripts/gen-eink-frame.py` |
+| EL133 driver sequence invariants (mock) | **Proven** | `scripts/eink-check-el133-driver.py` |
+| SDL visual colour/split | Optional | Needs 32-bit SDL2; `native_sim_eink_sdl.overlay` |
+| e-tabelone `file://` fixture HTTP | Implemented | Local JSON under store root |
+| EVK SPI wiring | **Pending schematic** | Overlay pins are placeholders (`*_eink_el133.overlay`) |
+| EVK solid/bars/LR/full refresh | Pending | After wiring: reset/init → solid → bars → LR → BUSY → scheduler |
+
+Physical panel proof is tracked separately from simulator proof.

@@ -1,0 +1,119 @@
+diff --git a/Kconfig b/Kconfig
+index fec345a..2b0099c 100644
+--- a/Kconfig
++++ b/Kconfig
+@@ -37,8 +37,9 @@ config IMPROV_REDIRECT_URL
+ 	default ""
+ 	help
+ 	  URL returned as the first string of the Wi-Fi settings RPC result; the
+-	  installer shows it as a "Next" link. If it contains the token "{ip}" the
+-	  device's assigned IPv4 address is substituted. If left empty, the device
++	  installer shows it as a "Next" link. "{ip}" is replaced with the device's
++	  IPv4 address; "{token}" is replaced with a freshly minted 16-hex-char
++	  claim token (Active ESL / e-ink onboarding). If left empty, the device
+ 	  falls back to "http://<ip>/". Set to a single space to suppress the URL.
+ 
+ config IMPROV_FIRMWARE_NAME
+diff --git a/src/improv_handler.c b/src/improv_handler.c
+index eba10f0..81b5f31 100644
+--- a/src/improv_handler.c
++++ b/src/improv_handler.c
+@@ -11,6 +11,7 @@
+ 
+ #include <zephyr/kernel.h>
+ #include <zephyr/logging/log.h>
++#include <zephyr/random/random.h>
+ 
+ #include <improv/improv.h>
+ #include "wifi_prov.h"
+@@ -71,12 +72,39 @@ static void set_state(enum improv_state state)
+ /* ---- RPC responses ------------------------------------------------------- */
+ 
+ /* Build the redirect URL from CONFIG_IMPROV_REDIRECT_URL, substituting "{ip}"
+- * or, when the configured URL is empty, defaulting to "http://<ip>/".
++ * and/or "{token}". When the configured URL is empty, default to "http://<ip>/".
++ * "{token}" is a freshly minted 16-hex-char claim token (Active ESL / e-ink
++ * onboarding expects ?token= in the redirect URL).
+  */
++static void mint_claim_token(char *out, size_t out_len)
++{
++	uint32_t a = sys_rand32_get();
++	uint32_t b = sys_rand32_get();
++
++	snprintf(out, out_len, "%08x%08x", a, b);
++}
++
++/* Replace the first occurrence of @key in @tmpl with @val into @dst. */
++static size_t subst_first(char *dst, size_t dst_len, const char *tmpl, const char *key,
++			  const char *val)
++{
++	const char *hit = strstr(tmpl, key);
++
++	if (hit == NULL) {
++		return snprintf(dst, dst_len, "%s", tmpl);
++	}
++
++	size_t prefix = (size_t)(hit - tmpl);
++
++	return snprintf(dst, dst_len, "%.*s%s%s", (int)prefix, tmpl, val, hit + strlen(key));
++}
++
+ static size_t build_redirect_url(char *buf, size_t buf_len)
+ {
+ 	const char *tmpl = CONFIG_IMPROV_REDIRECT_URL;
+ 	char ip[16];
++	char claim_token[17];
++	char mid[192];
+ 	bool have_ip = wifi_prov_get_ip(ip, sizeof(ip));
+ 
+ 	/* A single space means "explicitly no URL". */
+@@ -91,23 +119,22 @@ static size_t build_redirect_url(char *buf, size_t buf_len)
+ 		return snprintf(buf, buf_len, "http://%s/", ip);
+ 	}
+ 
+-	const char *token = strstr(tmpl, "{ip}");
+-
+-	if (token == NULL) {
+-		return snprintf(buf, buf_len, "%s", tmpl);
++	if (strstr(tmpl, "{token}") != NULL) {
++		mint_claim_token(claim_token, sizeof(claim_token));
++	} else {
++		claim_token[0] = '\0';
+ 	}
+ 
+-	/* Substitute the first {ip} occurrence. */
+-	size_t prefix = (size_t)(token - tmpl);
+-
+-	return snprintf(buf, buf_len, "%.*s%s%s", (int)prefix, tmpl,
+-			have_ip ? ip : "", token + strlen("{ip}"));
++	/* Substitute {token} first so a subsequent {ip} pass sees a stable mid. */
++	(void)subst_first(mid, sizeof(mid), tmpl, "{token}", claim_token);
++	return subst_first(buf, buf_len, mid, "{ip}", have_ip ? ip : "");
+ }
+ 
+ static void send_wifi_settings_response(void)
+ {
+-	char url[96];
+-	uint8_t payload[128];
++	/* Active ESL claim URLs are ~100 bytes (host + ip_address + token). */
++	char url[160];
++	uint8_t payload[192];
+ 	struct improv_str strings[1];
+ 	size_t n = 0;
+ 
+diff --git a/src/transport_ble.c b/src/transport_ble.c
+index 3cf58e6..406a98f 100644
+--- a/src/transport_ble.c
++++ b/src/transport_ble.c
+@@ -115,8 +115,9 @@ BT_GATT_SERVICE_DEFINE(improv_svc,
+ 	BT_GATT_CHARACTERISTIC(&error_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
+ 			       BT_GATT_PERM_READ, read_error, NULL, NULL),
+ 	BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+-	BT_GATT_CHARACTERISTIC(&rpc_cmd_uuid.uuid, BT_GATT_CHRC_WRITE, BT_GATT_PERM_WRITE,
+-			       NULL, write_rpc_cmd, NULL),
++	BT_GATT_CHARACTERISTIC(&rpc_cmd_uuid.uuid,
++			       BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP,
++			       BT_GATT_PERM_WRITE, NULL, write_rpc_cmd, NULL),
+ 	BT_GATT_CHARACTERISTIC(&rpc_result_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
+ 			       BT_GATT_PERM_READ, read_rpc_result, NULL, NULL),
+ 	BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),

@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: Apache-2.0
+description: EL133UF1 Spectra 6 dual-controller e-ink panel
+
+compatible: "eink,el133uf1"
+
+include: base.yaml
+
+properties:
+  spi-dev:
+    type: phandle
+    required: true
+    description: SPI controller used for panel traffic (CS via GPIO)
+
+  spi-max-frequency:
+    type: int
+    required: true
+    description: SPI clock (Hz)
+
+  busy-gpios:
+    type: phandle-array
+    required: true
+    description: |
+      Panel BUSY. Per the E Ink reference driver the panel drives this line
+      HIGH when ready/idle and LOW while working, so declare it GPIO_ACTIVE_HIGH
+      (logical 1 == ready).
+
+  cs0-gpios:
+    type: phandle-array
+    required: true
+    description: Chip-select for controller 0 (active low)
+
+  cs1-gpios:
+    type: phandle-array
+    required: true
+    description: Chip-select for controller 1 (active low)
+
+  dc-gpios:
+    type: phandle-array
+    required: true
+    description: Data/command select
+
+  reset-gpios:
+    type: phandle-array
+    required: true
+    description: Panel reset (active low)
+
+  width:
+    type: int
+    required: true
+
+  height:
+    type: int
+    required: true

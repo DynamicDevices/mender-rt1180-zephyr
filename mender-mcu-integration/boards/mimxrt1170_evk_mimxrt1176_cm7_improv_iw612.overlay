@@ -1,0 +1,26 @@
+/*
+ * MIMXRT1170-EVKB + Embedded Artists 2EL (NXP IW612).
+ *
+ * The EVKB routes M.2 Bluetooth over LPUART2 and M.2 Wi-Fi over the
+ * USDHC1 SDIO signals shared with the SD-card socket. The upstream board
+ * describes the Bluetooth wiring but does not yet expose an RT1170 Wi-Fi
+ * shield mapping, so this application overlay supplies the missing SDIO node.
+ *
+ * Hardware verification is still required. Do not fit/use an SD card while
+ * the M.2 Wi-Fi module owns USDHC1.
+ */
+
+/ {
+	chosen {
+		zephyr,bt-hci = &bt_hci_uart;
+	};
+};
+
+&usdhc1 {
+	/delete-node/ sdmmc;
+
+	nxp_wifi: nxp-wifi {
+		compatible = "nxp,wifi";
+		status = "okay";
+	};
+};

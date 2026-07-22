@@ -1,0 +1,55 @@
+/*
+ * Custom-board dual-FlexSPI map (provisional — pinmux TBD with hardware).
+ *
+ * FlexSPI1: XIP / MCUboot / slot0 / slot1 / small NVS
+ * FlexSPI2: OTA staging (raw) + e-ink LittleFS gallery
+ *
+ * Part numbers and sizes are placeholders until Michael confirms BOM.
+ */
+/ {
+	fstab {
+		compatible = "zephyr,fstab";
+		lfs1: lfs1 {
+			compatible = "zephyr,fstab-littlefs";
+			mount-point = "/lfs1";
+			partition = <&eink_storage>;
+			read-size = <16>;
+			prog-size = <16>;
+			cache-size = <64>;
+			lookahead-size = <32>;
+			block-cycles = <512>;
+			automount;
+		};
+	};
+};
+
+/* Placeholder partitions — enable FlexSPI2 node once custom DTS exists. */
+/* &flexspi2 {
+ *	status = "okay";
+ *	partitions {
+ *		compatible = "fixed-partitions";
+ *		#address-cells = <1>;
+ *		#size-cells = <1>;
+ *		ota_staging: partition@0 {
+ *			label = "ota-staging";
+ *			reg = <0x00000000 0x00800000>;
+ *		};
+ *		eink_storage: partition@800000 {
+ *			label = "eink-storage";
+ *			reg = <0x00800000 0x03800000>;
+ *		};
+ *	};
+ * };
+ */
+
+/*
+ * Optional rail GPIOs for eink_power_iw612_set() / eink_power_panel_set():
+ *
+ * / {
+ *	zephyr,user {
+ *		iw612-enable-gpios = <&gpio3 0 GPIO_ACTIVE_HIGH>;
+ *		panel-enable-gpios = <&gpio3 1 GPIO_ACTIVE_HIGH>;
+ *	};
+ * };
+ */
+

@@ -1,0 +1,15 @@
+name: workspace-safety
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ignore-and-source-policy:
+    runs-on: [self-hosted, Linux]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Workspace safety (CI mode)
+        run: python3 scripts/check-workspace-safety.py --ci

@@ -8,6 +8,13 @@ set(BOARD
     "Board for the Zephyr application"
 )
 
+# Keep LittleFS discoverable in linked/symlinked west workspaces as well as in
+# clean checkouts where west discovers it from this application's manifest.
+set(LITTLEFS_MODULE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../modules/fs/littlefs")
+if(EXISTS "${LITTLEFS_MODULE_DIR}/zephyr/module.yml")
+    list(APPEND ZEPHYR_EXTRA_MODULES "${LITTLEFS_MODULE_DIR}")
+endif()
+
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(mender-mcu-integration)
@@ -24,6 +31,52 @@ target_include_directories(app PUBLIC
 
 if(CONFIG_MENDER_APP_NOOP_UPDATE_MODULE MATCHES "y")
     target_sources(app PRIVATE src/modules/noop-update-module.c)
+endif()
+
+if(CONFIG_APP_WIFI_SIM)
+    target_sources(app PRIVATE src/net/wifi_sim.c)
+endif()
+
+if(CONFIG_APP_EINK)
+    target_sources(app PRIVATE
+        src/eink/eink_frame.c
+        src/eink/eink_display.c
+        src/eink/eink_scheduler_core.c
+        src/eink/eink_scheduler.c
+        src/eink/eink_store.c
+        src/eink/eink_power.c
+    )
+    target_include_directories(app PRIVATE src/eink)
+    if(CONFIG_APP_EINK_LOCATION)
+        target_sources(app PRIVATE src/eink/eink_location.c)
+    endif()
+    if(CONFIG_APP_EINK_LZ4_LIB)
+        target_sources(app PRIVATE
+            src/eink/eink_lz4.c
+            third_party/lz4/lz4.c
+            third_party/lz4/lz4hc.c
+            third_party/lz4/lz4frame.c
+            third_party/lz4/xxhash.c
+        )
+        target_include_directories(app PRIVATE third_party/lz4)
+        # Keep XXHash private to the LZ4 TU set.
+        target_compile_definitions(app PRIVATE XXH_NAMESPACE=EINK_)
+    endif()
+    if(CONFIG_APP_EINK_SHELL)
+        target_sources(app PRIVATE src/eink/eink_shell.c)
+    endif()
+    if(CONFIG_APP_EINK_HTTP)
+        target_sources(app PRIVATE src/eink/eink_http.c)
+    endif()
+    if(CONFIG_APP_EINK_SELFTEST)
+        target_sources(app PRIVATE src/eink/eink_selftest.c)
+    endif()
+    if(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE)
+        target_sources(app PRIVATE src/eink/eink_wake.c)
+    endif()
+    if(CONFIG_APP_EINK_OTA_FLASH_STAGING)
+        target_sources(app PRIVATE src/eink/eink_ota_stage.c)
+    endif()
 endif()
 
 option(BUILD_INTEGRATION_TESTS "Enable integration tests" OFF)

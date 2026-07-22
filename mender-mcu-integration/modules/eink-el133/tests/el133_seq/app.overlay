@@ -1,0 +1,42 @@
+/* SPDX-License-Identifier: Apache-2.0
+ *
+ * native_sim wiring for the EL133UF1 driver ztest:
+ *   - el133uf1 panel node driven over the emulated SPI controller (spi0)
+ *   - a capture emulator child at CS 0 records the command opcodes
+ *   - BUSY declared PULL_UP so gpio_emul reads it HIGH (== ready), avoiding
+ *     the driver's power-up wait from stalling boot.
+ */
+#include <zephyr/dt-bindings/gpio/gpio.h>
+
+/* Local SDL headers are broken; this test is headless. */
+&sdl_dc {
+	status = "disabled";
+};
+
+&spi0 {
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	capture: capture@0 {
+		compatible = "test,el133-capture";
+		reg = <0>;
+		spi-max-frequency = <5000000>;
+	};
+};
+
+/ {
+	el133uf1: el133uf1 {
+		compatible = "eink,el133uf1";
+		status = "okay";
+		spi-dev = <&spi0>;
+		spi-max-frequency = <5000000>;
+		busy-gpios = <&gpio0 10 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
+		cs0-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
+		cs1-gpios = <&gpio0 12 GPIO_ACTIVE_LOW>;
+		dc-gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&gpio0 14 GPIO_ACTIVE_LOW>;
+		width = <1200>;
+		height = <1600>;
+	};
+};
