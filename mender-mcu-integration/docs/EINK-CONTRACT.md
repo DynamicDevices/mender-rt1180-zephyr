@@ -34,12 +34,16 @@ Client: `src/eink/eink_http.c` (Zephyr sockets + `HTTP_CLIENT`, TLS via mbedTLS/
 | Telemetry | `POST {base}/node/v0/device/{id}/telemetry` |
 
 Production accepts **ES6F only** (reject JPEG/PNG by magic). Defaults: base
-`https://api.dev.e-tabelone.com`, sync **off** until credentials +
-`CONFIG_APP_EINK_HTTP_ENABLE` or shell `eink creds` / `eink sync`.
+`https://etablone.dynamicdevices.co.uk` (Cloudflare). Legacy AWS
+`https://api.dev.e-tabelone.com` remains valid during dual-run — set via
+`eink creds`. Sync **off** until credentials + `CONFIG_APP_EINK_HTTP_ENABLE`
+or shell `eink creds` / `eink sync`. Cutover notes:
+`/data_drive/esl/etablone-cloud/docs/CUTOVER.md`.
 
-S3 pre-signed downloads: omit default `:443` from the HTTP `Host` header
-(Zephyr otherwise breaks AWS signatures). JPEG/PNG payloads are rejected as
-soon as magic bytes are seen.
+S3 pre-signed downloads (AWS gallery): omit default `:443` from the HTTP
+`Host` header (Zephyr otherwise breaks AWS signatures). JPEG/PNG payloads are
+rejected as soon as magic bytes are seen; use the host bridge for AWS JPEG/PNG
+or talk to Cloudflare which already serves ES6F.
 
 The sync downloads the **currently due image first**, then caches remaining
 gallery ES6F assets while the radio is up (skipping frames that already
