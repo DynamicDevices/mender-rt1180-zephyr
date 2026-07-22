@@ -184,6 +184,23 @@ if APP_EINK
 		  Pre-signed S3 image URLs require a correct wall clock. When
 		  CONFIG_SNTP is enabled, sync runs SNTP if time looks unset.
 
+	config APP_EINK_LZ4
+		bool "Accept LZ4-framed ES6F image downloads"
+		depends on APP_EINK
+		select APP_EINK_LZ4_LIB
+		default y
+		help
+		  After HTTP download, if the body is an LZ4 frame (lz4 CLI
+		  format), stream-decompress to a raw ES6F before validate/
+		  accept. Raw ES6F remains accepted. Shrinks radio on-time
+		  when the server/bridge serves .es6f.lz4.
+
+	config APP_EINK_LZ4_LIB
+		bool
+		depends on APP_EINK
+		help
+		  Build vendored LZ4 frame library (third_party/lz4).
+
 	config APP_EINK_STORE_ROOT
 		string "Host/FS root for frames and state"
 		default "/tmp/eink-zephyr"

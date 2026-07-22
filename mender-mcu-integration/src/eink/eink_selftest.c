@@ -5,6 +5,10 @@
  */
 #include "eink_frame.h"
 #include "eink_scheduler_core.h"
+#if defined(CONFIG_APP_EINK_LZ4)
+#include "eink_lz4.h"
+#include "lz4frame.h"
+#endif
 
 #include <string.h>
 #include <zephyr/kernel.h>
@@ -185,6 +189,47 @@ static int test_scheduler_next_wakeup(void)
 	return 0;
 }
 
+#if defined(CONFIG_APP_EINK_LZ4)
+static int test_lz4_frame_roundtrip(void)
+{
+	uint8_t src[128];
+	uint8_t comp[256];
+	uint8_t out[128];
+	size_t clen;
+	LZ4F_dctx *dctx = NULL;
+	LZ4F_errorCode_t lret;
+	size_t src_size;
+	size_t dst_size;
+	size_t consumed;
+
+	for (size_t i = 0; i < sizeof(src); i++) {
+		src[i] = (uint8_t)(i * 3u);
+	}
+	clen = LZ4F_compressFrame(comp, sizeof(comp), src, sizeof(src), NULL);
+	if (LZ4F_isError(clen) || clen < 4) {
+		return -EIO;
+	}
+	if (!eink_lz4_is_frame(comp, clen)) {
+		return -EINVAL;
+	}
+
+	lret = LZ4F_createDecompressionContext(&dctx, LZ4F_VERSION);
+	if (LZ4F_isError(lret)) {
+		return -ENOMEM;
+	}
+	src_size = clen;
+	dst_size = sizeof(out);
+	consumed = src_size;
+	lret = LZ4F_decompress(dctx, out, &dst_size, comp, &consumed, NULL);
+	(void)LZ4F_freeDecompressionContext(dctx);
+	if (LZ4F_isError(lret) || dst_size != sizeof(src) ||
+	    memcmp(src, out, sizeof(src)) != 0) {
+		return -EILSEQ;
+	}
+	return 0;
+}
+#endif
+
 int eink_selftest_run(void)
 {
 	int fails = 0;
@@ -205,6 +250,11 @@ int eink_selftest_run(void)
 	r = test_scheduler_next_wakeup();
 	LOG_INF("test_scheduler_next_wakeup: %d", r);
 	fails += (r != 0);
+#if defined(CONFIG_APP_EINK_LZ4)
+	r = test_lz4_frame_roundtrip();
+	LOG_INF("test_lz4_frame_roundtrip: %d", r);
+	fails += (r != 0);
+#endif
 	if (fails) {
 		LOG_ERR("eink selftest FAILED (%d)", fails);
 		return -EFAULT;

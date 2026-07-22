@@ -41,7 +41,7 @@ int eink_http_fetch_config(struct eink_schedule *out_sched,
 			   struct eink_http_image *images, size_t image_cap,
 			   size_t *image_count, int *orientation);
 
-/** Download URL into store as image_id.es6f; reject non-ES6F magic. */
+/** Download URL into store as image_id.es6f; accept raw or LZ4-framed ES6F. */
 int eink_http_download_image(const char *image_id, const char *url);
 
 /** POST telemetry with held job_ids + last displayed. */

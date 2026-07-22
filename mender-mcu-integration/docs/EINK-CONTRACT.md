@@ -33,7 +33,12 @@ Client: `src/eink/eink_http.c` (Zephyr sockets + `HTTP_CLIENT`, TLS via mbedTLS/
 | Image | `GET` image URL (Bearer omitted for `*.amazonaws.com`) |
 | Telemetry | `POST {base}/node/v0/device/{id}/telemetry` |
 
-Production accepts **ES6F only** (reject JPEG/PNG by magic). Defaults: base
+Production accepts **ES6F** raw, or an **LZ4 frame** whose decompressed
+payload is a complete ES6F v1 file (magic `04 22 4D 18`, same as `lz4 -f`).
+JPEG/PNG remain rejected by magic. Device expand is streaming (no full-frame
+RAM). Helper: `scripts/eink-lz4-wrap.py`. Kconfig: `CONFIG_APP_EINK_LZ4`.
+
+Defaults: base
 `https://etablone.dynamicdevices.co.uk` (Cloudflare). Legacy AWS
 `https://api.dev.e-tabelone.com` remains valid during dual-run — set via
 `eink creds`. Sync **off** until credentials + `CONFIG_APP_EINK_HTTP_ENABLE`
@@ -43,7 +48,7 @@ or shell `eink creds` / `eink sync`. Cutover notes:
 S3 pre-signed downloads (AWS gallery): omit default `:443` from the HTTP
 `Host` header (Zephyr otherwise breaks AWS signatures). JPEG/PNG payloads are
 rejected as soon as magic bytes are seen; use the host bridge for AWS JPEG/PNG
-or talk to Cloudflare which already serves ES6F.
+or talk to Cloudflare which already serves ES6F (optionally LZ4-framed).
 
 The sync downloads the **currently due image first**, then caches remaining
 gallery ES6F assets while the radio is up (skipping frames that already

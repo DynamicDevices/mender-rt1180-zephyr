@@ -7,13 +7,16 @@
  *  - file:// fixtures for local bring-up
  *  - Bearer auth on API calls; omit Bearer for Amazon S3 pre-signed URLs
  *  - Limited redirects for image downloads
- *  - ES6F-only acceptance (reject JPEG/PNG by magic)
+ *  - ES6F or LZ4-framed ES6F acceptance (reject JPEG/PNG by magic)
  */
 #include "eink_http.h"
 
 #include "eink_frame.h"
 #include "eink_scheduler.h"
 #include "eink_store.h"
+#if defined(CONFIG_APP_EINK_LZ4)
+#include "eink_lz4.h"
+#endif
 
 #include <cJSON.h>
 #include <errno.h>
@@ -1238,15 +1241,42 @@ int eink_http_download_image(const char *image_id, const char *url)
 
 	if (strncmp(url, "file://", 7) == 0) {
 		LOG_INF("importing fixture image %s", image_id);
-		ret = eink_store_validate_path(url + 7, NULL);
-		if (ret) {
-			LOG_ERR("reject bad fixture ES6F for %s: %d", image_id, ret);
-			return ret;
-		}
 		ret = copy_path_chunked(url + 7, tmp_path);
 		if (ret) {
 			return ret;
 		}
+#if defined(CONFIG_APP_EINK_LZ4)
+		{
+			uint8_t head[8];
+			size_t hn = 0;
+
+			ret = load_fs_body(tmp_path, head, sizeof(head), &hn);
+			if (ret == 0 && eink_lz4_is_frame(head, hn)) {
+				char unc_path[384];
+				int expanded;
+
+				if (strlen(tmp_path) + 5 >= sizeof(unc_path)) {
+					(void)fs_unlink(tmp_path);
+					return -ENOMEM;
+				}
+				memcpy(unc_path, tmp_path, strlen(tmp_path));
+				memcpy(unc_path + strlen(tmp_path), ".unc", 5);
+				expanded = eink_lz4_expand_if_framed(tmp_path, unc_path);
+				if (expanded < 0) {
+					(void)fs_unlink(tmp_path);
+					return expanded;
+				}
+				if (expanded == 1) {
+					(void)fs_unlink(tmp_path);
+					ret = fs_rename(unc_path, tmp_path);
+					if (ret < 0) {
+						(void)fs_unlink(unc_path);
+						return ret;
+					}
+				}
+			}
+		}
+#endif
 	} else if (strncmp(url, "http://", 7) == 0 || strncmp(url, "https://", 8) == 0) {
 		int64_t t0 = k_uptime_get();
 		int64_t t_http;
@@ -1270,6 +1300,36 @@ int eink_http_download_image(const char *image_id, const char *url)
 			(void)fs_unlink(tmp_path);
 			return -ENOTSUP;
 		}
+#if defined(CONFIG_APP_EINK_LZ4)
+		if (eink_lz4_is_frame(magic, n)) {
+			char unc_path[384];
+			int64_t t_lz4;
+			int expanded;
+
+			if (strlen(tmp_path) + 5 >= sizeof(unc_path)) {
+				(void)fs_unlink(tmp_path);
+				return -ENOMEM;
+			}
+			memcpy(unc_path, tmp_path, strlen(tmp_path));
+			memcpy(unc_path + strlen(tmp_path), ".unc", 5);
+			LOG_INF("LZ4 frame detected for %s — expanding", image_id);
+			t_lz4 = k_uptime_get();
+			expanded = eink_lz4_expand_if_framed(tmp_path, unc_path);
+			t_lz4 = k_uptime_get() - t_lz4;
+			if (expanded < 0) {
+				LOG_WRN("LZ4 expand failed: %d (%lld ms)", expanded,
+					(long long)t_lz4);
+				(void)fs_unlink(tmp_path);
+				return expanded;
+			}
+			if (expanded == 1) {
+				(void)fs_unlink(tmp_path);
+				memcpy(tmp_path, unc_path, strlen(unc_path) + 1);
+				LOG_INF("prof: image %s lz4_expand=%lld ms", image_id,
+					(long long)t_lz4);
+			}
+		}
+#endif
 		LOG_INF("validating downloaded image %s", image_id);
 		t_val = k_uptime_get();
 		ret = eink_store_accept_temp_image(image_id, tmp_path);
