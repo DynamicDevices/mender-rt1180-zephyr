@@ -113,6 +113,17 @@ if APP_EINK
 		default 300
 		range 30 86400
 
+	config APP_EINK_HTTP_V2_SYNC
+		bool "Use /node/v2 radio-on-time sync (Cloudflare)"
+		depends on APP_EINK_HTTP
+		default n
+		help
+		  POST /node/v2/device/{id}/sync folds telemetry + config +
+		  hash-diff download[] into one control-plane RTT. Asset bytes
+		  still use GET /node/v0/.../assets/{id}.es6f.lz4. Falls back
+		  to /node/v0 for file:// fixtures. Keep /node/v0 path when
+		  this is disabled (AWS dual-run).
+
 	config APP_EINK_HTTP_GALLERY_DEFER
 		bool "Defer gallery ES6F downloads until after paint"
 		depends on APP_EINK_HTTP

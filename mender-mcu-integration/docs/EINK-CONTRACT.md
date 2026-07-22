@@ -60,8 +60,10 @@ Client: `src/eink/eink_http.c` (Zephyr sockets + `HTTP_CLIENT`, TLS via mbedTLS/
 - `/node/v0` remains frozen for AWS dual-run; see etablone-cloud
   `docs/BOARD-API-COMPAT.md`.
 
-Firmware: implement behind Kconfig (Zephyr agent). Acceptance metric is
-**joules / radio-on time per wake** vs v0 config+telemetry+GETs.
+Firmware: `CONFIG_APP_EINK_HTTP_V2_SYNC` (Zephyr). When enabled, HTTPS bases
+use v2; `file://` fixtures keep the v0 path. Acceptance metric is
+**joules / radio-on time per wake** vs v0 config+telemetry+GETs (native_sim
+proxies with `prof: sync … (v2)` wall time).
 
 Telemetry JSON (`telemetry` object) includes at least:
 

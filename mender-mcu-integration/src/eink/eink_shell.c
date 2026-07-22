@@ -13,6 +13,7 @@
 #if defined(CONFIG_APP_EINK_GNSS)
 #include "eink_gnss.h"
 #endif
+#include "utils/soc_uid.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -207,6 +208,22 @@ static int cmd_creds(const struct shell *sh, size_t argc, char **argv)
 }
 #endif
 
+static int cmd_uid(const struct shell *sh, size_t argc, char **argv)
+{
+	char uid[SOC_UID_HEX_MAX];
+	int ret;
+
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+	ret = soc_uid_get_hex(uid, sizeof(uid));
+	if (ret) {
+		shell_error(sh, "SoC UID unavailable: %d", ret);
+		return ret;
+	}
+	shell_print(sh, "soc_uid=%s", uid);
+	return 0;
+}
+
 static int cmd_sched_tick(const struct shell *sh, size_t argc, char **argv)
 {
 	ARG_UNUSED(argc);
@@ -221,6 +238,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(eink_cmds,
 	SHELL_CMD_ARG(show, NULL, "Show ES6F frame file", cmd_show, 2, 1),
 	SHELL_CMD(clear, NULL, "Clear panel (white)", cmd_clear),
 	SHELL_CMD(status, NULL, "Display status", cmd_status),
+	SHELL_CMD(uid, NULL, "Print SoC UID hex (device identity SoT)", cmd_uid),
 	SHELL_CMD(tick, NULL, "Run one scheduler tick (local/fixture)", cmd_sched_tick),
 #if defined(CONFIG_APP_EINK_LOCATION)
 	SHELL_CMD_ARG(location, NULL,

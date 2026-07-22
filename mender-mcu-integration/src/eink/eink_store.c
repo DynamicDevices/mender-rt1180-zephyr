@@ -461,6 +461,110 @@ int eink_store_image_lz4_path(const char *image_id, char *out, size_t out_cap)
 	return 0;
 }
 
+static int eink_store_content_hash_path(const char *image_id, char *out, size_t out_cap)
+{
+	if (!image_id || !out) {
+		return -EINVAL;
+	}
+	snprintf(out, out_cap, "%s/images/%s.es6f.lz4.sha", root, image_id);
+	return 0;
+}
+
+int eink_store_save_content_hash(const char *image_id, const char *sha256_hex,
+				 uint32_t byte_size)
+{
+	char path[300];
+	char tmp[320];
+	char line[96];
+	struct fs_file_t f;
+	int ret;
+	ssize_t n;
+	size_t len;
+
+	if (!image_id || !sha256_hex || strlen(sha256_hex) != 64) {
+		return -EINVAL;
+	}
+	if (eink_store_content_hash_path(image_id, path, sizeof(path)) != 0) {
+		return -EINVAL;
+	}
+	if (strlen(path) + 5 >= sizeof(tmp)) {
+		return -ENOMEM;
+	}
+	memcpy(tmp, path, strlen(path));
+	memcpy(tmp + strlen(path), ".tmp", 5);
+	snprintk(line, sizeof(line), "%s\n%u\n", sha256_hex, (unsigned)byte_size);
+	len = strlen(line);
+
+	fs_file_t_init(&f);
+	ret = fs_open(&f, tmp, FS_O_CREATE | FS_O_WRITE);
+	if (ret < 0) {
+		return ret;
+	}
+	n = fs_write(&f, line, len);
+	(void)fs_close(&f);
+	if (n != (ssize_t)len) {
+		(void)fs_unlink(tmp);
+		return n < 0 ? (int)n : -EIO;
+	}
+	(void)fs_unlink(path);
+	ret = fs_rename(tmp, path);
+	if (ret < 0) {
+		(void)fs_unlink(tmp);
+	}
+	return ret;
+}
+
+int eink_store_load_content_hash(const char *image_id, char *sha256_hex, size_t cap,
+				 uint32_t *byte_size)
+{
+	char path[300];
+	char buf[96];
+	struct fs_file_t f;
+	ssize_t n;
+	int ret;
+	char *nl;
+	unsigned long size = 0;
+
+	if (!image_id || !sha256_hex || cap < 65) {
+		return -EINVAL;
+	}
+	if (eink_store_content_hash_path(image_id, path, sizeof(path)) != 0) {
+		return -EINVAL;
+	}
+	fs_file_t_init(&f);
+	ret = fs_open(&f, path, FS_O_READ);
+	if (ret < 0) {
+		return ret;
+	}
+	n = fs_read(&f, buf, sizeof(buf) - 1);
+	(void)fs_close(&f);
+	if (n < 65) {
+		return n < 0 ? (int)n : -EINVAL;
+	}
+	buf[n] = '\0';
+	nl = strchr(buf, '\n');
+	if (!nl || (size_t)(nl - buf) != 64) {
+		return -EINVAL;
+	}
+	*nl = '\0';
+	for (size_t i = 0; i < 64; i++) {
+		char c = buf[i];
+
+		if (c >= 'A' && c <= 'F') {
+			buf[i] = (char)(c - 'A' + 'a');
+		} else if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+			return -EINVAL;
+		}
+	}
+	memcpy(sha256_hex, buf, 64);
+	sha256_hex[64] = '\0';
+	if (byte_size) {
+		size = strtoul(nl + 1, NULL, 10);
+		*byte_size = (uint32_t)size;
+	}
+	return 0;
+}
+
 static bool path_is_file(const char *path)
 {
 	struct fs_dirent ent;

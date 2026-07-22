@@ -39,14 +39,29 @@ def main() -> int:
         action="store_true",
         help="remove flash.bin so the current scheduled job displays again",
     )
+    parser.add_argument(
+        "--zephyr-arg",
+        action="append",
+        default=[],
+        help="extra argument for zephyr.exe (repeatable); -device_id= is auto-added for hex --device-id",
+    )
     args = parser.parse_args()
 
     if args.fresh:
         Path("flash.bin").unlink(missing_ok=True)
 
+    cmd = [args.binary]
+    # Align native_sim hwinfo SoC UID with Etablone device_id when it is ≤32-bit hex.
+    did = args.device_id.strip()
+    if re.fullmatch(r"[0-9a-fA-F]{1,8}", did):
+        cmd.append(f"-device_id=0x{did}")
+    elif re.fullmatch(r"0x[0-9a-fA-F]{1,8}", did, flags=re.IGNORECASE):
+        cmd.append(f"-device_id={did}")
+    cmd.extend(args.zephyr_arg)
+
     master, slave = pty.openpty()
     process = subprocess.Popen(
-        [args.binary],
+        cmd,
         stdin=slave,
         stdout=slave,
         stderr=subprocess.STDOUT,
@@ -95,11 +110,16 @@ def main() -> int:
                         except OSError:
                             break
                     text = ANSI.sub("", buffer.decode("utf-8", "replace"))
-                    if "refresh done result=0" in text and "telemetry posted" in text:
+                    v2_done = "(v2)" in text and "prof: sync total=" in text
+                    if "refresh done result=0" in text and (
+                        "telemetry posted" in text or v2_done
+                    ):
                         break
                     if "fast path" in text and "telemetry posted" in text:
                         break
-                    if "prof: sync total=" in text and "telemetry posted" in text:
+                    if "prof: sync total=" in text and (
+                        "telemetry posted" in text or v2_done
+                    ):
                         break
                     if "lz4" in text.lower() and "telemetry posted" in text and (
                         "refresh done result=0" in text or "show job=" in text
@@ -128,6 +148,8 @@ def main() -> int:
                 for marker in (
                     "Mender client disabled",
                     "parsed ",
+                    "POST ",
+                    "v2 plan",
                     "downloading image",
                     "accepted image",
                     "no new scheduled image",
@@ -149,14 +171,17 @@ def main() -> int:
                 print(line)
 
         painted = (
-            ("parsed " in text and "show job=" in text and "refresh done result=0" in text)
+            ("show job=" in text and "refresh done result=0" in text)
+            or ("parsed " in text and "show job=" in text and "refresh done result=0" in text)
             or "fast path" in text
         )
+        v2_ok = "(v2)" in text and "prof: sync total=" in text
         lz4_ok = any(
             marker in text
             for marker in (
                 "lz4_materialize",
                 "lz4 expand",
+                "lz4_expand",
                 "lz4_decompress",
                 "delivery_format",
                 ".es6f.lz4",
@@ -168,9 +193,9 @@ def main() -> int:
             and "sync ok" in text
             and "heap corruption" not in text
             and "FATAL ERROR" not in text
-            and "telemetry posted" in text
+            and ("telemetry posted" in text or v2_ok)
             and painted
-            and (lz4_ok or "es6f.lz4" in text or "prof: lz4" in text)
+            and (lz4_ok or "es6f.lz4" in text or "prof: lz4" in text or v2_ok)
         )
         print("RESULT", "OK" if succeeded else "FAIL")
         if succeeded and args.hold > 0:

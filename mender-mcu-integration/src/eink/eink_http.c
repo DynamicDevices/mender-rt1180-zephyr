@@ -836,6 +836,36 @@ static int http_post_json(const char *url, const char *json)
 	return 0;
 }
 
+#if defined(CONFIG_APP_EINK_HTTP_V2_SYNC)
+static int http_post_json_body(const char *url, const char *json, uint8_t *buf, size_t cap,
+			       size_t *out_len)
+{
+	struct body_ctx ctx = {
+		.buf = buf,
+		.cap = cap,
+	};
+	int ret;
+
+	if (!buf || cap == 0) {
+		return -EINVAL;
+	}
+	memset(buf, 0, cap);
+	ret = do_http(url, HTTP_POST, json, strlen(json), true, &ctx, NULL, EINK_HTTP_TIMEOUT_MS,
+		      NULL);
+	if (ret) {
+		return ret;
+	}
+	if (ctx.status_code < 200 || ctx.status_code >= 300) {
+		LOG_WRN("HTTP POST %s -> %d", url, ctx.status_code);
+		return -EIO;
+	}
+	if (out_len) {
+		*out_len = ctx.len;
+	}
+	return 0;
+}
+#endif
+
 static int load_fs_body(const char *path, uint8_t *buf, size_t cap, size_t *out_len);
 
 static int load_file_body(const char *path, uint8_t *buf, size_t cap, size_t *out_len)
@@ -1240,6 +1270,12 @@ static int copy_path_chunked(const char *src, const char *dst)
 
 int eink_http_download_image(const char *image_id, const char *url)
 {
+	return eink_http_download_image_hashed(image_id, url, NULL, 0);
+}
+
+int eink_http_download_image_hashed(const char *image_id, const char *url,
+				    const char *content_sha256, uint32_t byte_size)
+{
 	char path[300];
 	char tmp_path[384];
 	size_t n = 0;
@@ -1383,6 +1419,16 @@ int eink_http_download_image(const char *image_id, const char *url)
 		t_val = k_uptime_get() - t_val;
 		if (ret) {
 			(void)fs_unlink(tmp_path);
+		} else if (content_sha256 && strlen(content_sha256) == 64) {
+			char sha[65];
+
+			for (size_t i = 0; i < 64; i++) {
+				char c = content_sha256[i];
+
+				sha[i] = (c >= 'A' && c <= 'F') ? (char)(c - 'A' + 'a') : c;
+			}
+			sha[64] = '\0';
+			(void)eink_store_save_content_hash(image_id, sha, byte_size);
 		}
 		LOG_INF("prof: image %s http=%lld ms validate=%lld ms total=%lld ms ret=%d",
 			image_id, (long long)t_http, (long long)t_val,
@@ -1396,6 +1442,16 @@ int eink_http_download_image(const char *image_id, const char *url)
 	ret = eink_store_accept_temp_image(image_id, tmp_path);
 	if (ret) {
 		(void)fs_unlink(tmp_path);
+	} else if (content_sha256 && strlen(content_sha256) == 64) {
+		char sha[65];
+
+		for (size_t i = 0; i < 64; i++) {
+			char c = content_sha256[i];
+
+			sha[i] = (c >= 'A' && c <= 'F') ? (char)(c - 'A' + 'a') : c;
+		}
+		sha[64] = '\0';
+		(void)eink_store_save_content_hash(image_id, sha, byte_size);
 	}
 	return ret;
 }
@@ -1747,6 +1803,366 @@ bool eink_http_radio_sync_needed(void)
 }
 #endif
 
+#if defined(CONFIG_APP_EINK_HTTP_V2_SYNC)
+struct eink_http_download {
+	char asset_id[EINK_ID_MAX];
+	char url[EINK_HTTP_URL_MAX];
+	char content_sha256[65];
+	uint32_t byte_size;
+};
+
+static void telemetry_fill_object(cJSON *telemetry, const char *current_displayed_job_id,
+				  int64_t next_wakeup_unix, int battery_capacity)
+{
+	char wake[40];
+
+	iso8601_utc(next_wakeup_unix > 0 ? next_wakeup_unix : (int64_t)time(NULL) + 300, wake,
+		    sizeof(wake));
+	cJSON_AddNumberToObject(telemetry, "battery_capacity", battery_capacity);
+	cJSON_AddStringToObject(telemetry, "next_wakeup_date", wake);
+	if (current_displayed_job_id && current_displayed_job_id[0]) {
+		cJSON_AddStringToObject(telemetry, "current_displayed_job_id",
+					current_displayed_job_id);
+	}
+#if defined(CONFIG_APP_EINK_LOCATION)
+	{
+		struct eink_location_fix fix;
+
+		if (eink_location_get(&fix) == 0 && fix.valid) {
+			cJSON_AddNumberToObject(telemetry, "latitude", fix.latitude);
+			cJSON_AddNumberToObject(telemetry, "longitude", fix.longitude);
+			if (fix.accuracy_m >= 0.0) {
+				cJSON_AddNumberToObject(telemetry, "location_accuracy_m",
+							fix.accuracy_m);
+			}
+		}
+	}
+#endif
+}
+
+static int sync_v2_once_inner(void)
+{
+	static struct eink_schedule sched;
+	static struct eink_schedule prior;
+	static struct eink_http_image images[EINK_HTTP_MAX_IMAGES];
+	static struct eink_http_download downloads[EINK_HTTP_MAX_IMAGES];
+	static uint8_t body[EINK_HTTP_CFG_BUF];
+	size_t image_count = 0;
+	size_t download_count = 0;
+	size_t body_len = 0;
+	char last_job[EINK_ID_MAX];
+	char due_image[EINK_ID_MAX];
+	char url[EINK_HTTP_URL_MAX];
+	int64_t now;
+	int64_t next_wake;
+	int64_t t_sync = k_uptime_get();
+	int64_t t_mark;
+	int64_t ms_plan = 0;
+	int64_t ms_primary = 0;
+	int64_t ms_paint = 0;
+	int64_t ms_gallery = 0;
+	size_t gallery_downloads = 0;
+	cJSON *root;
+	cJSON *telemetry;
+	cJSON *schedule_acks;
+	cJSON *gallery;
+	cJSON *client;
+	char *json;
+	int ret;
+	bool noop = false;
+	bool sync_now = false;
+
+	if (!inited || !cfg.enabled) {
+		return -EINVAL;
+	}
+	if (strncmp(cfg.api_base, "file://", 7) == 0) {
+		return -ENOTSUP;
+	}
+
+	due_image[0] = '\0';
+	memset(&sched, 0, sizeof(sched));
+	memset(&prior, 0, sizeof(prior));
+	(void)ensure_wall_clock();
+	now = (int64_t)time(NULL);
+	(void)eink_store_load_schedule(&prior);
+	eink_scheduler_get_last_job(last_job, sizeof(last_job));
+	next_wake = eink_scheduler_get_next_wakeup(now, cfg.poll_interval_seconds);
+
+	cjson_arena_enter();
+	root = cJSON_CreateObject();
+	telemetry = cJSON_AddObjectToObject(root, "telemetry");
+	schedule_acks = cJSON_AddArrayToObject(root, "schedule");
+	gallery = cJSON_AddArrayToObject(root, "gallery");
+	client = cJSON_AddObjectToObject(root, "client");
+	telemetry_fill_object(telemetry, last_job, next_wake, -1);
+	for (size_t i = 0; i < prior.count; i++) {
+		cJSON *ack = cJSON_CreateObject();
+		cJSON *g;
+		char sha[65];
+		uint32_t nbytes = 0;
+		bool seen = false;
+
+		cJSON_AddStringToObject(ack, "job_id", prior.jobs[i].job_id);
+		cJSON_AddItemToArray(schedule_acks, ack);
+
+		for (size_t j = 0; j < i; j++) {
+			if (strcmp(prior.jobs[j].image_id, prior.jobs[i].image_id) == 0) {
+				seen = true;
+				break;
+			}
+		}
+		if (seen || !eink_store_has_valid_image(prior.jobs[i].image_id)) {
+			continue;
+		}
+		if (eink_store_load_content_hash(prior.jobs[i].image_id, sha, sizeof(sha),
+						 &nbytes) != 0) {
+			continue;
+		}
+		g = cJSON_CreateObject();
+		cJSON_AddStringToObject(g, "asset_id", prior.jobs[i].image_id);
+		cJSON_AddStringToObject(g, "content_sha256", sha);
+		cJSON_AddNumberToObject(g, "byte_size", (double)nbytes);
+		cJSON_AddItemToArray(gallery, g);
+	}
+	cJSON_AddBoolToObject(client, "supports_lz4", true);
+	cJSON_AddNumberToObject(client, "max_download_bytes", 2000000);
+	cJSON_AddNumberToObject(client, "radio_budget_ms", 120000);
+	json = cJSON_PrintUnformatted(root);
+	cJSON_Delete(root);
+	if (!json) {
+		cjson_arena_leave();
+		return -ENOMEM;
+	}
+
+	snprintf(url, sizeof(url), "%s/node/v2/device/%s/sync", cfg.api_base, cfg.device_id);
+	LOG_INF("POST %s (v2)", url);
+	t_mark = k_uptime_get();
+	ret = http_post_json_body(url, json, body, sizeof(body) - 1, &body_len);
+	ms_plan = k_uptime_get() - t_mark;
+	cJSON_free(json);
+	cjson_arena_leave();
+	if (ret) {
+		LOG_WRN("v2 sync plan failed: %d", ret);
+		return ret;
+	}
+	body[body_len] = '\0';
+
+	cjson_arena_enter();
+	root = cJSON_ParseWithLength((char *)body, body_len);
+	if (!root) {
+		cjson_arena_leave();
+		return -EINVAL;
+	}
+	{
+		cJSON *proto = cJSON_GetObjectItemCaseSensitive(root, "protocol");
+		cJSON *noop_j = cJSON_GetObjectItemCaseSensitive(root, "noop");
+		cJSON *sn = cJSON_GetObjectItemCaseSensitive(root, "sync_now");
+		cJSON *sched_j = cJSON_GetObjectItemCaseSensitive(root, "schedule");
+		cJSON *imgs = cJSON_GetObjectItemCaseSensitive(root, "images");
+		cJSON *dls = cJSON_GetObjectItemCaseSensitive(root, "download");
+		cJSON *item;
+
+		if (!cJSON_IsString(proto) || strcmp(proto->valuestring, "v2") != 0) {
+			cJSON_Delete(root);
+			cjson_arena_leave();
+			return -EINVAL;
+		}
+		noop = cJSON_IsTrue(noop_j);
+		sync_now = cJSON_IsTrue(sn);
+		if (sync_now) {
+			LOG_INF("cloud sync_now requested — full sync this wake");
+		}
+
+		sched.count = 0;
+		if (cJSON_IsArray(sched_j)) {
+			cJSON_ArrayForEach(item, sched_j)
+			{
+				cJSON *job_id = cJSON_GetObjectItemCaseSensitive(item, "job_id");
+				cJSON *image_id =
+					cJSON_GetObjectItemCaseSensitive(item, "image_id");
+				cJSON *cron = cJSON_GetObjectItemCaseSensitive(item, "cron");
+				struct eink_job *j;
+
+				if (sched.count >= EINK_MAX_JOBS) {
+					break;
+				}
+				if (!cJSON_IsString(job_id) || !cJSON_IsString(image_id)) {
+					continue;
+				}
+				j = &sched.jobs[sched.count++];
+				memset(j, 0, sizeof(*j));
+				strncpy(j->job_id, job_id->valuestring, sizeof(j->job_id) - 1);
+				strncpy(j->image_id, image_id->valuestring,
+					sizeof(j->image_id) - 1);
+				if (cJSON_IsString(cron) && cron->valuestring[0]) {
+					strncpy(j->cron, cron->valuestring, sizeof(j->cron) - 1);
+				} else {
+					strncpy(j->cron, "0 0 * * *", sizeof(j->cron) - 1);
+				}
+			}
+		}
+
+		image_count = 0;
+		if (cJSON_IsArray(imgs)) {
+			cJSON_ArrayForEach(item, imgs)
+			{
+				cJSON *image_id =
+					cJSON_GetObjectItemCaseSensitive(item, "image_id");
+				cJSON *u = cJSON_GetObjectItemCaseSensitive(item, "url");
+
+				if (image_count >= ARRAY_SIZE(images)) {
+					break;
+				}
+				if (!cJSON_IsString(image_id) || !cJSON_IsString(u)) {
+					continue;
+				}
+				strncpy(images[image_count].image_id, image_id->valuestring,
+					sizeof(images[image_count].image_id) - 1);
+				strncpy(images[image_count].url, u->valuestring,
+					sizeof(images[image_count].url) - 1);
+				image_count++;
+			}
+		}
+
+		download_count = 0;
+		if (cJSON_IsArray(dls)) {
+			cJSON_ArrayForEach(item, dls)
+			{
+				cJSON *aid = cJSON_GetObjectItemCaseSensitive(item, "asset_id");
+				cJSON *u = cJSON_GetObjectItemCaseSensitive(item, "url");
+				cJSON *sha =
+					cJSON_GetObjectItemCaseSensitive(item, "content_sha256");
+				cJSON *bs = cJSON_GetObjectItemCaseSensitive(item, "byte_size");
+				struct eink_http_download *d;
+
+				if (download_count >= ARRAY_SIZE(downloads)) {
+					break;
+				}
+				if (!cJSON_IsString(aid) || !cJSON_IsString(u) ||
+				    !cJSON_IsString(sha)) {
+					continue;
+				}
+				d = &downloads[download_count++];
+				memset(d, 0, sizeof(*d));
+				strncpy(d->asset_id, aid->valuestring, sizeof(d->asset_id) - 1);
+				strncpy(d->url, u->valuestring, sizeof(d->url) - 1);
+				strncpy(d->content_sha256, sha->valuestring,
+					sizeof(d->content_sha256) - 1);
+				if (cJSON_IsNumber(bs)) {
+					d->byte_size = (uint32_t)bs->valuedouble;
+				}
+			}
+		}
+	}
+	cJSON_Delete(root);
+	cjson_arena_leave();
+
+	LOG_INF("v2 plan noop=%d sync_now=%d images=%u download=%u plan=%lld ms", noop ? 1 : 0,
+		sync_now ? 1 : 0, (unsigned)image_count, (unsigned)download_count,
+		(long long)ms_plan);
+
+	ret = eink_scheduler_set_schedule(&sched, now);
+	if (ret) {
+		return ret;
+	}
+
+	ret = eink_scheduler_due_image(due_image, sizeof(due_image));
+	if (ret < 0) {
+		return ret;
+	}
+	if (ret == 0) {
+		LOG_INF("no new scheduled image due");
+		ret = eink_scheduler_current_image(due_image, sizeof(due_image));
+		if (ret > 0) {
+			LOG_INF("will show current scheduled image %s", due_image);
+		} else {
+			due_image[0] = '\0';
+		}
+	}
+
+	if (due_image[0] != '\0') {
+		const char *dl_url = NULL;
+		const char *dl_sha = NULL;
+		uint32_t dl_sz = 0;
+
+		t_mark = k_uptime_get();
+		for (size_t i = 0; i < download_count; i++) {
+			if (strcmp(downloads[i].asset_id, due_image) == 0) {
+				dl_url = downloads[i].url;
+				dl_sha = downloads[i].content_sha256;
+				dl_sz = downloads[i].byte_size;
+				break;
+			}
+		}
+		if (!dl_url) {
+			for (size_t i = 0; i < image_count; i++) {
+				if (strcmp(images[i].image_id, due_image) == 0) {
+					dl_url = images[i].url;
+					break;
+				}
+			}
+		}
+		if (eink_store_has_valid_image(due_image) && !dl_sha) {
+			LOG_INF("display image %s already cached", due_image);
+		} else if (dl_url) {
+			ret = eink_http_download_image_hashed(due_image, dl_url, dl_sha, dl_sz);
+			if (ret) {
+				LOG_WRN("display image %s download failed: %d", due_image, ret);
+			}
+		} else {
+			LOG_WRN("display image %s missing from v2 plan", due_image);
+		}
+		ms_primary = k_uptime_get() - t_mark;
+	}
+
+	t_mark = k_uptime_get();
+	LOG_INF("scheduler tick after primary image");
+	ret = eink_scheduler_tick();
+	LOG_INF("scheduler tick result=%d", ret);
+	if (ret == 0) {
+		ret = eink_scheduler_repaint();
+		LOG_INF("scheduler repaint result=%d", ret);
+	}
+	ms_paint = k_uptime_get() - t_mark;
+
+	t_mark = k_uptime_get();
+	gallery_downloads = 0;
+#if defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE)
+	LOG_INF("gallery skipped (battery duty-cycle)");
+#else
+	for (size_t i = 0; i < download_count; i++) {
+		if (due_image[0] && strcmp(downloads[i].asset_id, due_image) == 0) {
+			continue;
+		}
+		if (eink_store_has_valid_image(downloads[i].asset_id)) {
+			char sha[65];
+
+			if (eink_store_load_content_hash(downloads[i].asset_id, sha, sizeof(sha),
+							 NULL) == 0) {
+				continue;
+			}
+		}
+		gallery_downloads++;
+		ret = eink_http_download_image_hashed(downloads[i].asset_id, downloads[i].url,
+						      downloads[i].content_sha256,
+						      downloads[i].byte_size);
+		if (ret) {
+			LOG_WRN("gallery image %s download failed: %d", downloads[i].asset_id,
+				ret);
+		}
+	}
+#endif
+	ms_gallery = k_uptime_get() - t_mark;
+	(void)eink_store_save_last_sync(now);
+
+	LOG_INF("prof: sync total=%lld ms plan=%lld primary=%lld paint=%lld "
+		"gallery=%lld (%u dl) telem=0 (v2)",
+		(long long)(k_uptime_get() - t_sync), (long long)ms_plan, (long long)ms_primary,
+		(long long)ms_paint, (long long)ms_gallery, (unsigned)gallery_downloads);
+	return 0;
+}
+#endif /* CONFIG_APP_EINK_HTTP_V2_SYNC */
+
 static int eink_http_sync_once_inner(void)
 {
 	static struct eink_schedule sched;
@@ -1770,6 +2186,12 @@ static int eink_http_sync_once_inner(void)
 	if (!inited || !cfg.enabled) {
 		return -EINVAL;
 	}
+
+#if defined(CONFIG_APP_EINK_HTTP_V2_SYNC)
+	if (strncmp(cfg.api_base, "file://", 7) != 0) {
+		return sync_v2_once_inner();
+	}
+#endif
 
 	due_image[0] = '\0';
 	memset(&sched, 0, sizeof(sched));

@@ -44,6 +44,13 @@ int eink_http_fetch_config(struct eink_schedule *out_sched,
 /** Download URL into store as image_id.es6f; accept raw or LZ4-framed ES6F. */
 int eink_http_download_image(const char *image_id, const char *url);
 
+/**
+ * Same as eink_http_download_image, then persist LZ4 content hash for /node/v2
+ * gallery reporting when @a content_sha256 is a 64-char hex string.
+ */
+int eink_http_download_image_hashed(const char *image_id, const char *url,
+				    const char *content_sha256, uint32_t byte_size);
+
 /** POST telemetry with held job_ids + last displayed. */
 int eink_http_post_telemetry(const struct eink_schedule *sched,
 			     const char *current_displayed_job_id,
