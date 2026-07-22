@@ -30,7 +30,7 @@ stage_path() {
   case "$p" in
     *-local.conf|secrets.conf|*.mender|*.bin|*.elf|*.hex) return 0 ;;
   esac
-  if [[ "$p" == mender-mcu-integration/* || "$p" == scripts/* || "$p" == .gitignore || "$p" == .cursor/* || "$p" == .github/* ]]; then
+  if [[ "$p" == mender-mcu-integration/* || "$p" == scripts/* || "$p" == docs/* || "$p" == .gitignore || "$p" == .cursor/* || "$p" == .github/* ]]; then
     git add -- "$p"
   fi
 }
