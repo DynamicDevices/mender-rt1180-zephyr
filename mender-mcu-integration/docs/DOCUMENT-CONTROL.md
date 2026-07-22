@@ -18,3 +18,6 @@ Firmware-local notes that remain here:
 - [EINK-CONTRACT.md](EINK-CONTRACT.md) — software frame/payload contract for this integration
 - [POWER-HARDWARE-CONTRACT.md](POWER-HARDWARE-CONTRACT.md) — SNVS / CM4 / rail software contract
 - [SDRAM-DECISION.md](SDRAM-DECISION.md) — DNP vs populate evidence log
+- [CRA-COMPLIANCE.md](CRA-COMPLIANCE.md) — EU CRA / UK PSTI engineering gap analysis (RT1170 Active ESL)
+- [CRA-ARTICLE-14-RUNBOOK.md](CRA-ARTICLE-14-RUNBOOK.md) — Art. 14 reporting runbook (draft)
+- [MCUBOOT-KEY-CEREMONY.md](MCUBOOT-KEY-CEREMONY.md) — production signing key procedure

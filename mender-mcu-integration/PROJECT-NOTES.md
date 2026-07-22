@@ -209,21 +209,27 @@ west build -p --sysbuild \
 
 **Zephyr version:** upstream `frdm_imxrt1186` landed in Zephyr **v4.4.0**. This manifest pins **`revision: v4.4.0`** in `west.yml` (was v4.2.0 for EVK-only bring-up). Run `west update` after pulling manifest changes.
 
-### Device identity (stable MAC)
+### Device identity (SoC UID)
 
-Hosted Mender registers devices by **identity** JSON from the integration app: `{"mac": "…"}` — MAC of the **first-up** Ethernet interface (`netup_get_mac_address()` in `src/utils/netup.c` after `netup_wait_for_network()`).
+Canonical identity is the **SoC unique ID** from Zephyr `hwinfo` (`soc_uid_get_hex()` in `src/utils/soc_uid.c`): **uppercase hex, no separators** — same string Active ESL onboard stores as `board_id` / BLE DIS Serial `0x2A25`.
 
-| Board | Why overlay | Lab identity MAC (typical) |
-|-------|-------------|----------------------------|
-| **EVK** | Upstream sets `zephyr,random-mac-address` on NETC switch ports → new pending device every boot | **02:11:80:00:00:01** on `swp0` (cable to host port) |
-| **FRDM** | Upstream uses shared placeholder `00:00:00:01:xx:xx` MACs — not fleet-safe | **02:11:86:00:00:01** on `swp0` |
-| **native_sim** | TAP MAC fixed in Kconfig | **02:00:5e:00:53:31** (unchanged) |
+| Consumer | Field | Notes |
+|----------|-------|-------|
+| **Hosted Mender** | `{"soc_uid": "<hex>"}` | Replaces former `{"mac": "…"}`. Existing MAC-keyed lab devices need re-accept. |
+| **Etablone** | `device_id` | Defaults to SoC UID when `CONFIG_APP_EINK_HTTP_DEVICE_ID` is empty. Auth = Bearer `device_token`, not the UID. |
+| **Onboard Worker** | `board_id` | Already SoC UID (cloud lane). BLE advert suffix = last 4 hex for discovery only. |
 
-**Overlay wiring:** Zephyr auto-applies `boards/<board>_<soc>_<core>.overlay` from the app tree — no `DTC_OVERLAY_FILE` in build scripts. Pattern follows Josef’s RT1064 `local-mac-address` on the Ethernet node; RT118x uses NETC (`enetc_psi*`, `switch_port*`) instead of legacy ENET.
+**CRA:** SoC UID is a **public identifier**, not a credential. Do not accept API/claim/OTA on UID alone.
 
-**Why MAC overlay (not hwinfo):** Mender MCU exposes only a `get_identity` callback; the integration app hard-codes MAC-from-interface. `hwinfo` (SoC UID) or a custom identity key would need application changes and server-side acceptance rules — reasonable for production (ELE/OTP, S2), but MAC overlay is zero code churn for lab fleet stability.
+**Lab MAC overlays** (stable `local-mac-address` on NETC / TAP) remain useful for L2/DHCP debugging but are **not** Mender identity anymore.
 
-**Caveats:** Identity follows whichever interface is **first up** at check-in (usually `swp0` when cabled). Multiple lab boards of the same type need **unique** MACs per unit before accept. Production must use **EdgeLock / per-unit provisioning** (S2–S4), not shared lab MACs.
+| Board | hwinfo source | Typical hex length |
+|-------|---------------|--------------------|
+| **RT1170** | OCOTP FUSEN 16/17 (`hwinfo_imxrt`) | 16 hex (8 bytes) |
+| **RT118x** | OCOTP shadow (16 bytes) | 32 hex |
+| **native_sim** | `--*-hwinfo-device-id` / hostid | 8 hex (uint32 BE) |
+
+**Caveats:** Changing identity attribute (`mac` → `soc_uid`) creates **new** pending devices in Hosted Mender. Production still needs per-device auth keys/tokens (S2–S4), not UID-as-secret.
 
 ### Mbed TLS 4.x / Zephyr 4.4 (mender-mcu device auth)
 
@@ -569,7 +575,7 @@ Mender/system workqueue.
 
 Credentials for e-tabelone live in Bitwarden / device settings — never commit tokens.
 Shell: `eink creds <base> <device_id> <token>` then `eink sync` (token `none`/`-` = omit Bearer).
-Location (optional): `eink location set <lat> <lng> [accuracy_m]` / `eink location clear` — see [EINK-CONTRACT.md](docs/EINK-CONTRACT.md).
+Location (optional): `eink location set <lat> <lng> [accuracy_m]` / `eink location clear` — see [EINK-CONTRACT.md](docs/EINK-CONTRACT.md). GNSS bridge: `CONFIG_APP_EINK_GNSS` + DT alias `gnss` (`zephyr,gnss-emul` on native_sim; NMEA-generic EVK scaffold in `*_gnss.overlay`).
 
 ### Hardware discussion spec (document control)
 
@@ -819,6 +825,8 @@ Mender addresses CRA themes around **secure distribution** and **operational vul
 - **Practical split:** treat this repo as the **MCU firmware CRA/PSTI technical baseline** (OTA + boot integrity + future ELE); treat **UK Statement of Compliance / CE marking** as product-line deliverables above this integration layer.
 
 For the **unified delivery plan** (workstreams, milestones, checklists), see [CRA compliance programme](#cra-compliance-programme-firmware-technical-baseline) below.
+
+**Active ESL / RT1170:** product-line gap analysis and CAAM (non-ELE) roadmap live in [`docs/CRA-COMPLIANCE.md`](docs/CRA-COMPLIANCE.md).
 
 ## CRA compliance programme (firmware technical baseline)
 

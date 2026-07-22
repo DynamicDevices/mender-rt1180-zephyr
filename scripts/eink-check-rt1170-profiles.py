@@ -103,6 +103,23 @@ def main() -> int:
     require(flex, "DNP", "flexspi2.overlay docs")
     require(flex, "64", "flexspi2.overlay size comments")
 
+    
+    gnss_ov = read("mender-mcu-integration/boards/mimxrt1170_evk_mimxrt1176_cm7_gnss.overlay")
+    gnss_cf = read("mender-mcu-integration/boards/mimxrt1170_evk_mimxrt1176_cm7_gnss.conf")
+    require(gnss_ov, "gnss-nmea-generic", "gnss.overlay")
+    require(gnss_ov, 'status = "disabled"', "gnss.overlay (pins TBD)")
+    require(gnss_cf, "CONFIG_APP_EINK_GNSS=y", "gnss.conf")
+    require(gnss_cf, "CONFIG_GNSS=y", "gnss.conf")
+
+    cm7 = read("mender-mcu-integration/boards/mimxrt1170_evk_mimxrt1176_cm7.conf")
+    require(cm7, "CONFIG_ENTROPY_MCUX_CAAM=y", "cm7.conf CAAM entropy (CRA WS2)")
+    require(cm7, "CONFIG_BUILD_OUTPUT_META=y", "cm7.conf west spdx zephyr.meta (CRA WS3)")
+    forbid(cm7, "CONFIG_TEST_RANDOM_GENERATOR=y", "cm7.conf must not use test RNG")
+    forbid(cm7, "CONFIG_TIMER_RANDOM_GENERATOR=y", "cm7.conf must not use timer RNG")
+    cra = read("mender-mcu-integration/docs/CRA-COMPLIANCE.md")
+    require(cra, "Regulation (EU) 2024/2847", "CRA-COMPLIANCE.md")
+    require(cra, "CAAM entropy", "CRA-COMPLIANCE.md")
+
     print("OK: RT1170 lab/product profile contracts")
     return 0
 

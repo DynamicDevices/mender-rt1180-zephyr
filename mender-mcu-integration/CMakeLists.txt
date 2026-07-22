@@ -23,6 +23,7 @@ target_sources(app PRIVATE
     src/main.c
     src/utils/netup.c
     src/utils/certs.c
+    src/utils/soc_uid.c
 )
 
 target_include_directories(app PUBLIC
@@ -49,6 +50,9 @@ if(CONFIG_APP_EINK)
     target_include_directories(app PRIVATE src/eink)
     if(CONFIG_APP_EINK_LOCATION)
         target_sources(app PRIVATE src/eink/eink_location.c)
+    endif()
+    if(CONFIG_APP_EINK_GNSS)
+        target_sources(app PRIVATE src/eink/eink_gnss.c)
     endif()
     if(CONFIG_APP_EINK_LZ4_LIB)
         target_sources(app PRIVATE

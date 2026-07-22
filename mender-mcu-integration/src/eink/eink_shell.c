@@ -10,7 +10,11 @@
 #if defined(CONFIG_APP_EINK_LOCATION)
 #include "eink_location.h"
 #endif
+#if defined(CONFIG_APP_EINK_GNSS)
+#include "eink_gnss.h"
+#endif
 
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <zephyr/shell/shell.h>
@@ -86,6 +90,9 @@ static int cmd_location(const struct shell *sh, size_t argc, char **argv)
 			shell_error(sh, "location get failed: %d", ret);
 			return ret;
 		}
+#if defined(CONFIG_APP_EINK_GNSS)
+		shell_print(sh, "gnss: %s", eink_gnss_ready() ? "ready" : "unavailable");
+#endif
 		if (!fix.valid) {
 			shell_print(sh, "location: none");
 			return 0;
@@ -182,9 +189,11 @@ static int cmd_http_start(const struct shell *sh, size_t argc, char **argv)
 
 static int cmd_creds(const struct shell *sh, size_t argc, char **argv)
 {
-	/* eink creds <base_url> <device_id> <token> */
+	/* eink creds <base_url> <device_id> <token>
+	 * device_id should be SoC UID hex (or leave product default empty).
+	 */
 	if (argc < 4) {
-		shell_error(sh, "usage: eink creds <base_url> <device_id> <token>");
+		shell_error(sh, "usage: eink creds <base_url> <device_id|soc_uid_hex> <token>");
 		return -EINVAL;
 	}
 	int ret = eink_http_set_credentials(argv[1], argv[2], argv[3]);

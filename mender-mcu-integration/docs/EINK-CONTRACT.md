@@ -43,6 +43,25 @@ Client: `src/eink/eink_http.c` (Zephyr sockets + `HTTP_CLIENT`, TLS via mbedTLS/
 | Config | `GET {base}/node/v0/device/{id}/config` |
 | Image | `GET` image URL (Bearer omitted for `*.amazonaws.com`) |
 | Telemetry | `POST {base}/node/v0/device/{id}/telemetry` |
+| Sync (v2) | `POST {base}/node/v2/device/{id}/sync` (opt-in; see below) |
+
+### `/node/v2` radio-on-time sync (Cloudflare)
+
+**Not MQTT.** Hard-gated WiFi: one TLS session, fewer RTTs, then radio off.
+
+`POST /node/v2/device/{id}/sync` with Bearer device token:
+
+- **Request:** v0-shaped `telemetry` + `schedule` acks, plus `gallery[]` of
+  `{asset_id, content_sha256, byte_size}` for local LittleFS frames, plus optional
+  `client.{max_download_bytes,supports_lz4,radio_budget_ms}`.
+- **Response:** merged `schedule`/`images` (ES6F.lz4 only), `download[]` of assets
+  whose hash does not match gallery, `sync_now`, `noop`, `radio_budget_ms`.
+- Asset bytes still via `GET …/node/v0/.../assets/{id}.es6f.lz4` (pipelined).
+- `/node/v0` remains frozen for AWS dual-run; see etablone-cloud
+  `docs/BOARD-API-COMPAT.md`.
+
+Firmware: implement behind Kconfig (Zephyr agent). Acceptance metric is
+**joules / radio-on time per wake** vs v0 config+telemetry+GETs.
 
 Telemetry JSON (`telemetry` object) includes at least:
 
@@ -57,7 +76,7 @@ Telemetry JSON (`telemetry` object) includes at least:
 Top-level `schedule` is an array of `{ "job_id": "…" }` acks. Never send
 null/zero placeholders for missing location — omit the keys entirely.
 
-Lab / native_sim (no GNSS hardware yet; `CONFIG_APP_EINK_LOCATION` default y):
+Lab / native_sim (`CONFIG_APP_EINK_LOCATION` default y):
 
 ```text
 eink location
@@ -65,11 +84,14 @@ eink location set 53.4808 -2.2426 12.5
 eink location clear
 ```
 
-Persisted under `{APP_EINK_STORE_ROOT}/location.json`. A future GNSS driver
-should call `eink_location_set()` / `eink_location_clear()` — do not invent
-DTS/drivers here until the hardware path is confirmed (UART/SPI/modem TBD for
-Jaguar/RT1170). Remaining GNSS work is **hardware bring-up + driver**, not
-cloud or shell API.
+Persisted under `{APP_EINK_STORE_ROOT}/location.json`.
+
+**GNSS (`CONFIG_APP_EINK_GNSS`):** Zephyr GNSS driver API → `eink_location_set()`
+via `eink_gnss_*`. native_sim uses `zephyr,gnss-emul` (alias `gnss`). EVK lab
+scaffold: `boards/mimxrt1170_evk_mimxrt1176_cm7_gnss.{conf,overlay}` with
+`gnss-nmea-generic` on LPUART2 (disabled until loom/pins confirmed). Swap the
+compatible to the BOM module when known (u-blox / Quectel / …). Manual shell
+set/clear remains available for lab without sky view.
 
 Device `GET …/config` may include `"sync_now": true` when an operator requested
 force-sync; the cloud clears the flag after that response. Clients should treat
@@ -103,7 +125,9 @@ Defaults: base
 `https://etablone.dynamicdevices.co.uk` (Cloudflare). Legacy AWS
 `https://api.dev.e-tabelone.com` remains valid during dual-run — set via
 `eink creds`. Sync **off** until credentials + `CONFIG_APP_EINK_HTTP_ENABLE`
-or shell `eink creds` / `eink sync`. Cutover notes:
+or shell `eink creds` / `eink sync`. **Device id SoT:** uppercase SoC UID hex
+(`hwinfo` / `soc_uid_get_hex`); leave `CONFIG_APP_EINK_HTTP_DEVICE_ID` empty
+in product builds. Auth remains Bearer `device_token`. Cutover notes:
 `/data_drive/esl/etablone-cloud/docs/CUTOVER.md`.
 
 S3 pre-signed downloads (AWS gallery): omit default `:443` from the HTTP

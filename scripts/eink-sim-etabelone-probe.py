@@ -22,6 +22,11 @@ def main() -> int:
         "--binary", default="build-native_sim-eink/zephyr/zephyr.exe"
     )
     parser.add_argument("--base", default="http://192.0.2.2:8765")
+    parser.add_argument(
+        "--token",
+        default="none",
+        help="Bearer token for eink creds (none/- omit Authorization)",
+    )
     parser.add_argument("--timeout", type=float, default=700.0)
     parser.add_argument(
         "--hold",
@@ -74,7 +79,7 @@ def main() -> int:
                 or "Network already has a preferred IPv4 address" in text
                 or "Address[1]: 192.0.2." in text
             ):
-                send(f"eink creds {args.base} {args.device_id} none")
+                send(f"eink creds {args.base} {args.device_id} {args.token}")
                 phase = 1
             elif phase == 1 and "credentials updated" in text:
                 send("eink sync")
@@ -95,6 +100,10 @@ def main() -> int:
                     if "fast path" in text and "telemetry posted" in text:
                         break
                     if "prof: sync total=" in text and "telemetry posted" in text:
+                        break
+                    if "lz4" in text.lower() and "telemetry posted" in text and (
+                        "refresh done result=0" in text or "show job=" in text
+                    ):
                         break
                     if "sync failed" in text:
                         break
@@ -127,6 +136,8 @@ def main() -> int:
                     "scheduler tick result",
                     "telemetry posted",
                     "prof:",
+                    "lz4",
+                    "LZ4",
                     "gallery",
                     "fast path",
                     "sync ok",
@@ -137,16 +148,29 @@ def main() -> int:
             ):
                 print(line)
 
+        painted = (
+            ("parsed " in text and "show job=" in text and "refresh done result=0" in text)
+            or "fast path" in text
+        )
+        lz4_ok = any(
+            marker in text
+            for marker in (
+                "lz4_materialize",
+                "lz4 expand",
+                "lz4_decompress",
+                "delivery_format",
+                ".es6f.lz4",
+                "EXPAND",
+            )
+        ) or ("lz4" in text.lower() and painted)
         succeeded = (
             "Mender client disabled" in text
             and "sync ok" in text
             and "heap corruption" not in text
             and "FATAL ERROR" not in text
             and "telemetry posted" in text
-            and (
-                ("parsed " in text and "show job=" in text and "refresh done result=0" in text)
-                or "fast path" in text
-            )
+            and painted
+            and (lz4_ok or "es6f.lz4" in text or "prof: lz4" in text)
         )
         print("RESULT", "OK" if succeeded else "FAIL")
         if succeeded and args.hold > 0:

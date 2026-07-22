@@ -2,7 +2,7 @@
  * Optional device location fix for e-tabelone telemetry.
  * SPDX-License-Identifier: Apache-2.0
  *
- * Lab/native_sim: set via shell. Real GNSS can call eink_location_set() later.
+ * Lab/native_sim: set via shell. GNSS: eink_gnss_apply_data() / Zephyr CB.
  */
 #ifndef EINK_LOCATION_H
 #define EINK_LOCATION_H
