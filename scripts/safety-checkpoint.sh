@@ -41,7 +41,14 @@ for p in "${DIRTY[@]:-}"; do
   case "$p" in
     zephyr/*|modules/*|bootloader/*|.west/*|build/*|build-*/*|.tools/*|tools/net-tools/*) continue ;;
   esac
-  stage_path "$p"
+  if [[ -d "$p" ]]; then
+    # Expand untracked directories so nested source is staged.
+    while IFS= read -r -d '' f; do
+      stage_path "$f"
+    done < <(find "$p" -type f -print0)
+  else
+    stage_path "$p"
+  fi
 done
 
 if git diff --cached --quiet; then
