@@ -13,3 +13,27 @@ jobs:
 
       - name: Workspace safety (CI mode)
         run: python3 scripts/check-workspace-safety.py --ci
+
+  # No Zephyr tree in Actions checkout — keep these static / host-python only.
+  eink-contracts:
+    runs-on: [self-hosted, Linux]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Identity / v2 / production contracts
+        run: python3 scripts/eink-contract-checks.py
+
+      - name: RT1170 lab/product profile contracts
+        run: python3 scripts/eink-check-rt1170-profiles.py
+
+      - name: EL133 driver invariants
+        run: python3 scripts/eink-check-el133-driver.py
+
+      - name: ES6F fixture generate + validate
+        run: |
+          mkdir -p /tmp/eink-zephyr/images
+          python3 scripts/gen-eink-frame.py --solid white -o /tmp/eink-zephyr/images/white.es6f
+          python3 scripts/gen-eink-frame.py --lr red blue -o /tmp/eink-zephyr/images/lr.es6f
+          python3 scripts/gen-eink-frame.py --bars -o /tmp/eink-zephyr/images/bars.es6f
+          python3 scripts/eink-check-fixtures.py
