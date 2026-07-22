@@ -297,6 +297,17 @@ if APP_EINK
 		  to FlexSPI1 slot1 with the radio gated and flash-critical code
 		  in internal RAM.
 
+	config APP_EINK_LOCATION
+		bool "Optional WGS84 location in e-tabelone telemetry"
+		depends on APP_EINK
+		default y
+		help
+		  Persist a last-known fix under the e-ink store root and include
+		  latitude/longitude (and optional location_accuracy_m) in
+		  POST …/telemetry when a fix is present. Omit fields when no
+		  fix. Lab/native_sim: eink location set|clear. Real GNSS can
+		  call eink_location_set() later — no GNSS driver here.
+
 	config APP_EINK_SELFTEST
 		bool "Run e-ink unit self-tests at boot"
 		default n

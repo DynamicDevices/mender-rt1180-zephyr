@@ -5,6 +5,9 @@
  */
 #include "eink_frame.h"
 #include "eink_scheduler_core.h"
+#if defined(CONFIG_APP_EINK_LOCATION)
+#include "eink_location.h"
+#endif
 #if defined(CONFIG_APP_EINK_LZ4)
 #include "eink_lz4.h"
 #include "lz4frame.h"
@@ -230,6 +233,61 @@ static int test_lz4_frame_roundtrip(void)
 }
 #endif
 
+#if defined(CONFIG_APP_EINK_LOCATION)
+static int test_location_telemetry_json(void)
+{
+	struct eink_location_fix fix;
+	char json[192];
+	int ret;
+
+	ret = eink_location_clear();
+	if (ret != 0) {
+		return ret;
+	}
+	ret = eink_location_to_json_object(json, sizeof(json));
+	if (ret != 0 || strcmp(json, "{}") != 0) {
+		return -EINVAL;
+	}
+	if (strstr(json, "latitude") != NULL) {
+		return -EFAULT;
+	}
+
+	ret = eink_location_set(53.4808, -2.2426, 12.5);
+	if (ret != 0) {
+		return ret;
+	}
+	ret = eink_location_get(&fix);
+	if (ret != 0 || !fix.valid) {
+		return -EINVAL;
+	}
+	if (fix.latitude < 53.48 || fix.latitude > 53.49 || fix.longitude > -2.24 ||
+	    fix.longitude < -2.25 || fix.accuracy_m < 12.0 || fix.accuracy_m > 13.0) {
+		return -ERANGE;
+	}
+	ret = eink_location_to_json_object(json, sizeof(json));
+	if (ret != 0 || strstr(json, "\"latitude\"") == NULL ||
+	    strstr(json, "\"longitude\"") == NULL ||
+	    strstr(json, "\"location_accuracy_m\"") == NULL) {
+		return -EINVAL;
+	}
+
+	/* Out of range must fail and leave prior fix intact. */
+	if (eink_location_set(91.0, 0.0, -1.0) != -ERANGE) {
+		return -EFAULT;
+	}
+
+	ret = eink_location_clear();
+	if (ret != 0) {
+		return ret;
+	}
+	ret = eink_location_to_json_object(json, sizeof(json));
+	if (ret != 0 || strcmp(json, "{}") != 0 || strstr(json, "latitude") != NULL) {
+		return -EINVAL;
+	}
+	return 0;
+}
+#endif
+
 int eink_selftest_run(void)
 {
 	int fails = 0;
@@ -253,6 +311,11 @@ int eink_selftest_run(void)
 #if defined(CONFIG_APP_EINK_LZ4)
 	r = test_lz4_frame_roundtrip();
 	LOG_INF("test_lz4_frame_roundtrip: %d", r);
+	fails += (r != 0);
+#endif
+#if defined(CONFIG_APP_EINK_LOCATION)
+	r = test_location_telemetry_json();
+	LOG_INF("test_location_telemetry_json: %d", r);
 	fails += (r != 0);
 #endif
 	if (fails) {

@@ -7,7 +7,12 @@
 #if defined(CONFIG_APP_EINK_HTTP)
 #include "eink_http.h"
 #endif
+#if defined(CONFIG_APP_EINK_LOCATION)
+#include "eink_location.h"
+#endif
 
+#include <stdlib.h>
+#include <string.h>
 #include <zephyr/shell/shell.h>
 #include <zephyr/logging/log.h>
 
@@ -68,6 +73,83 @@ static int cmd_status(const struct shell *sh, size_t argc, char **argv)
 	return 0;
 }
 
+
+#if defined(CONFIG_APP_EINK_LOCATION)
+static int cmd_location(const struct shell *sh, size_t argc, char **argv)
+{
+	struct eink_location_fix fix;
+	int ret;
+
+	if (argc < 2) {
+		ret = eink_location_get(&fix);
+		if (ret) {
+			shell_error(sh, "location get failed: %d", ret);
+			return ret;
+		}
+		if (!fix.valid) {
+			shell_print(sh, "location: none");
+			return 0;
+		}
+		if (fix.accuracy_m >= 0.0) {
+			shell_print(sh, "location: lat=%.7f lng=%.7f accuracy_m=%.3f",
+				    fix.latitude, fix.longitude, fix.accuracy_m);
+		} else {
+			shell_print(sh, "location: lat=%.7f lng=%.7f", fix.latitude,
+				    fix.longitude);
+		}
+		return 0;
+	}
+	if (strcmp(argv[1], "clear") == 0) {
+		ret = eink_location_clear();
+		if (ret) {
+			shell_error(sh, "location clear failed: %d", ret);
+			return ret;
+		}
+		shell_print(sh, "location cleared");
+		return 0;
+	}
+	if (strcmp(argv[1], "set") == 0) {
+		double lat;
+		double lng;
+		double acc = -1.0;
+		char *end = NULL;
+
+		if (argc < 4) {
+			shell_error(sh,
+				    "usage: eink location set <lat> <lng> [accuracy_m]");
+			return -EINVAL;
+		}
+		lat = strtod(argv[2], &end);
+		if (end == argv[2] || *end != '\0') {
+			shell_error(sh, "invalid latitude");
+			return -EINVAL;
+		}
+		end = NULL;
+		lng = strtod(argv[3], &end);
+		if (end == argv[3] || *end != '\0') {
+			shell_error(sh, "invalid longitude");
+			return -EINVAL;
+		}
+		if (argc >= 5) {
+			end = NULL;
+			acc = strtod(argv[4], &end);
+			if (end == argv[4] || *end != '\0') {
+				shell_error(sh, "invalid accuracy_m");
+				return -EINVAL;
+			}
+		}
+		ret = eink_location_set(lat, lng, acc);
+		if (ret) {
+			shell_error(sh, "location set failed: %d", ret);
+			return ret;
+		}
+		shell_print(sh, "location set");
+		return 0;
+	}
+	shell_error(sh, "usage: eink location [set <lat> <lng> [accuracy_m]|clear]");
+	return -EINVAL;
+}
+#endif
 
 #if defined(CONFIG_APP_EINK_HTTP)
 static int cmd_sync(const struct shell *sh, size_t argc, char **argv)
@@ -131,6 +213,10 @@ SHELL_STATIC_SUBCMD_SET_CREATE(eink_cmds,
 	SHELL_CMD(clear, NULL, "Clear panel (white)", cmd_clear),
 	SHELL_CMD(status, NULL, "Display status", cmd_status),
 	SHELL_CMD(tick, NULL, "Run one scheduler tick (local/fixture)", cmd_sched_tick),
+#if defined(CONFIG_APP_EINK_LOCATION)
+	SHELL_CMD_ARG(location, NULL,
+		      "Show/set/clear WGS84 fix for telemetry", cmd_location, 1, 4),
+#endif
 #if defined(CONFIG_APP_EINK_HTTP)
 	SHELL_CMD(sync, NULL, "One-shot e-tabelone sync", cmd_sync),
 	SHELL_CMD(http_start, NULL, "Start periodic e-tabelone sync", cmd_http_start),

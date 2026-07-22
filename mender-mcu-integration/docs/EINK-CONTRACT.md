@@ -33,6 +33,31 @@ Client: `src/eink/eink_http.c` (Zephyr sockets + `HTTP_CLIENT`, TLS via mbedTLS/
 | Image | `GET` image URL (Bearer omitted for `*.amazonaws.com`) |
 | Telemetry | `POST {base}/node/v0/device/{id}/telemetry` |
 
+Telemetry JSON (`telemetry` object) includes at least:
+
+| Field | Notes |
+|-------|--------|
+| `battery_capacity` | Integer percent, or `-1` when unknown |
+| `next_wakeup_date` | ISO-8601 UTC |
+| `current_displayed_job_id` | Optional string when known |
+| `latitude` / `longitude` | Optional WGS84 degrees; **omit** when no fix |
+| `location_accuracy_m` | Optional metres; omit when unknown |
+
+Top-level `schedule` is an array of `{ "job_id": "…" }` acks. Never send
+null/zero placeholders for missing location — omit the keys entirely.
+
+Lab / native_sim (no GNSS hardware yet; `CONFIG_APP_EINK_LOCATION` default y):
+
+```text
+eink location
+eink location set 53.4808 -2.2426 12.5
+eink location clear
+```
+
+Persisted under `{APP_EINK_STORE_ROOT}/location.json`. A future GNSS driver
+should call `eink_location_set()` / `eink_location_clear()` — do not invent
+DTS/drivers here until the hardware path is confirmed.
+
 Production accepts **ES6F** raw, or an **LZ4 frame** whose decompressed
 payload is a complete ES6F v1 file (magic `04 22 4D 18`, same as `lz4 -f`).
 JPEG/PNG remain rejected by magic. Expand timing is selectable:

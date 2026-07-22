@@ -47,6 +47,9 @@ if(CONFIG_APP_EINK)
         src/eink/eink_power.c
     )
     target_include_directories(app PRIVATE src/eink)
+    if(CONFIG_APP_EINK_LOCATION)
+        target_sources(app PRIVATE src/eink/eink_location.c)
+    endif()
     if(CONFIG_APP_EINK_LZ4_LIB)
         target_sources(app PRIVATE
             src/eink/eink_lz4.c

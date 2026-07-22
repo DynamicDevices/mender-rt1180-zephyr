@@ -14,6 +14,9 @@
 #include "eink_frame.h"
 #include "eink_scheduler.h"
 #include "eink_store.h"
+#if defined(CONFIG_APP_EINK_LOCATION)
+#include "eink_location.h"
+#endif
 #if defined(CONFIG_APP_EINK_LZ4)
 #include "eink_lz4.h"
 #endif
@@ -1443,6 +1446,20 @@ int eink_http_post_telemetry(const struct eink_schedule *sched,
 		cJSON_AddStringToObject(telemetry, "current_displayed_job_id",
 					current_displayed_job_id);
 	}
+#if defined(CONFIG_APP_EINK_LOCATION)
+	{
+		struct eink_location_fix fix;
+
+		if (eink_location_get(&fix) == 0 && fix.valid) {
+			cJSON_AddNumberToObject(telemetry, "latitude", fix.latitude);
+			cJSON_AddNumberToObject(telemetry, "longitude", fix.longitude);
+			if (fix.accuracy_m >= 0.0) {
+				cJSON_AddNumberToObject(telemetry, "location_accuracy_m",
+							fix.accuracy_m);
+			}
+		}
+	}
+#endif
 	if (sched) {
 		for (size_t i = 0; i < sched->count; i++) {
 			cJSON *ack = cJSON_CreateObject();

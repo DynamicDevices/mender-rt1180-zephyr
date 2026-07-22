@@ -534,10 +534,11 @@ Mender/system workqueue.
 | Path | Role |
 |------|------|
 | Active ESL onboard (Improv + claim) | App/fleet identity — **no** schedules |
-| e-tabelone HTTP | `GET …/config`, due-then-gallery ES6F download, `POST …/telemetry` with schedule-driven `next_wakeup` (native_sim: live + file:// gallery cache proven) |
+| e-tabelone HTTP | `GET …/config`, due-then-gallery ES6F download, `POST …/telemetry` with schedule-driven `next_wakeup` (native_sim: live + file:// gallery cache proven); optional WGS84 `latitude`/`longitude`/`location_accuracy_m` when `eink location set` / `eink_location_set()` has a fix |
 
 Credentials for e-tabelone live in Bitwarden / device settings — never commit tokens.
 Shell: `eink creds <base> <device_id> <token>` then `eink sync` (token `none`/`-` = omit Bearer).
+Location (optional): `eink location set <lat> <lng> [accuracy_m]` / `eink location clear` — see [EINK-CONTRACT.md](docs/EINK-CONTRACT.md).
 
 ### Hardware discussion spec (document control)
 
