@@ -141,6 +141,50 @@ static int test_cron_overdue_today(void)
 	return 0;
 }
 
+static int test_cron_next_after(void)
+{
+	const int64_t day_start = 1704067200LL; /* 2024-01-01 00:00 UTC */
+	const int64_t one_am = day_start + 3600;
+	int64_t next = eink_cron_next_after("0 0 * * *", one_am);
+
+	/* Midnight today is past → tomorrow midnight. */
+	if (next != day_start + 86400) {
+		return -EINVAL;
+	}
+	next = eink_cron_next_after("30 12 * * *", day_start + 10 * 3600);
+	if (next != day_start + 12 * 3600 + 30 * 60) {
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int test_scheduler_next_wakeup(void)
+{
+	struct eink_schedule s = { 0 };
+	const int64_t day_start = 1704067200LL;
+	const int64_t now = day_start + 13 * 3600; /* 13:00 */
+	int64_t wake;
+
+	strncpy(s.jobs[0].job_id, "a", sizeof(s.jobs[0].job_id));
+	strncpy(s.jobs[0].cron, "0 0 * * *", sizeof(s.jobs[0].cron));
+	strncpy(s.jobs[1].job_id, "b", sizeof(s.jobs[1].job_id));
+	strncpy(s.jobs[1].cron, "0 18 * * *", sizeof(s.jobs[1].cron));
+	s.count = 2;
+
+	/* Earliest future is 18:00 today (poll=12h would be later). */
+	wake = eink_scheduler_next_wakeup(&s, now, 12 * 3600);
+	if (wake != day_start + 18 * 3600) {
+		return -EINVAL;
+	}
+	/* Empty schedule → poll deadline (floored at +60). */
+	s.count = 0;
+	wake = eink_scheduler_next_wakeup(&s, now, 300);
+	if (wake != now + 300) {
+		return -EINVAL;
+	}
+	return 0;
+}
+
 int eink_selftest_run(void)
 {
 	int fails = 0;
@@ -154,6 +198,12 @@ int eink_selftest_run(void)
 	fails += (r != 0);
 	r = test_cron_overdue_today();
 	LOG_INF("test_cron_overdue_today: %d", r);
+	fails += (r != 0);
+	r = test_cron_next_after();
+	LOG_INF("test_cron_next_after: %d", r);
+	fails += (r != 0);
+	r = test_scheduler_next_wakeup();
+	LOG_INF("test_scheduler_next_wakeup: %d", r);
 	fails += (r != 0);
 	if (fails) {
 		LOG_ERR("eink selftest FAILED (%d)", fails);

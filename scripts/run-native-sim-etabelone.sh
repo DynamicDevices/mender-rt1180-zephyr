@@ -5,6 +5,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+# Avoid inheriting duty-cycle / other wrapper BUILD_DIR overrides.
+unset BUILD_DIR NATIVE_SIM_EXTRA_CONF NATIVE_SIM_EXTRA_MODULES NATIVE_SIM_EXTRA_CMAKE_ARGS
+
 if [[ $# -lt 1 ]]; then
     echo "usage: $0 <e-tabelone-device-id> [--sdl]" >&2
     exit 2

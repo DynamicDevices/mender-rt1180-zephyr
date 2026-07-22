@@ -8,6 +8,7 @@
 #include "eink_frame.h"
 #include "eink_scheduler_core.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -21,6 +22,9 @@ int eink_store_load_schedule(struct eink_schedule *sched);
 
 /** Resolve image_id → absolute path of ES6F file (null-terminated). */
 int eink_store_image_path(const char *image_id, char *out, size_t out_cap);
+
+/** True if a valid ES6F already exists for image_id. */
+bool eink_store_has_valid_image(const char *image_id);
 
 /** Write payload file for image_id (atomic replace). */
 int eink_store_put_image(const char *image_id, const uint8_t *es6f, size_t len);

@@ -38,11 +38,24 @@ struct eink_sched_decision {
 int64_t eink_cron_next_run(const char *cron, int64_t now_unix);
 
 /**
+ * Next future occurrence of cron at/after now: today HH:MM if still upcoming,
+ * otherwise tomorrow HH:MM (Rust sleep semantics).
+ */
+int64_t eink_cron_next_after(const char *cron, int64_t now_unix);
+
+/**
  * Among overdue jobs (next_run <= now), pick the latest next_run.
  * Skip if that job_id equals last_displayed.
  */
 struct eink_sched_decision eink_scheduler_decide(const struct eink_schedule *sched,
 						 int64_t now_unix,
 						 const char *last_displayed_job_id);
+
+/**
+ * Earliest future job wake from eink_cron_next_after, else now+poll_interval_sec.
+ * Floor: at least now+60 so duty-cycle never spins.
+ */
+int64_t eink_scheduler_next_wakeup(const struct eink_schedule *sched, int64_t now_unix,
+				   uint32_t poll_interval_sec);
 
 #endif

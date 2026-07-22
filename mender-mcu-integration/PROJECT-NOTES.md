@@ -135,6 +135,7 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 | `scripts/safety-checkpoint.sh` | Commit + push a labelled checkpoint on a feature branch (no amend/force) |
 | `scripts/build-el133-ztest.sh` | Build + run EL133UF1 mock-SPI sequence ztest on `native_sim` |
 | `scripts/eink-verify-sim.sh` | Offline e-ink verify gate (fixtures, selftest, driver check, ztest, file:// sync) |
+| `scripts/eink-duty-smoke.sh` | native_sim battery duty-cycle smoke (gallery cache + schedule `next_wake` + SNVS stub) |
 | `scripts/run-native-sim-etabelone.sh` | Live e-tabelone → ES6F → native_sim scheduled-display proof |
 
 ## Prerequisites
@@ -533,7 +534,7 @@ Mender/system workqueue.
 | Path | Role |
 |------|------|
 | Active ESL onboard (Improv + claim) | App/fleet identity — **no** schedules |
-| e-tabelone HTTP | `GET …/config`, due-image download, `POST …/telemetry` (native_sim 2026-07-21: live 7-job config parsed; JPEG/PNG converted by simulator-only bridge; scheduled ES6F streamed to SDL/dummy display; telemetry accepted) |
+| e-tabelone HTTP | `GET …/config`, due-then-gallery ES6F download, `POST …/telemetry` with schedule-driven `next_wakeup` (native_sim: live + file:// gallery cache proven) |
 
 Credentials for e-tabelone live in Bitwarden / device settings — never commit tokens.
 Shell: `eink creds <base> <device_id> <token>` then `eink sync` (token `none`/`-` = omit Bearer).
@@ -561,7 +562,7 @@ Do not treat ad-hoc Drive drafts as the master. Bump the revision table when arc
 | EVK full-FB profile | `CONFIG_APP_EINK_FULL_FRAMEBUFFER` |
 | OCRAM / dual-FlexSPI / IW612 confs | Scaffold overlays + confs under `boards/` |
 | SNVS / CM4 power contract | `eink_power.*` + `docs/POWER-HARDWARE-CONTRACT.md` |
-| Cold-boot wake machine | `CONFIG_APP_EINK_BATTERY_DUTY_CYCLE` + `eink_wake.*` |
+| Cold-boot wake machine | `CONFIG_APP_EINK_BATTERY_DUTY_CYCLE` + `eink_wake.*` (schedule `next_wake`; native_sim SNVS stub returns) |
 | FlexSPI2 OTA staging | Scaffold `eink_ota_stage.*` (install `-ENOTSUP` until DTS) |
 | native_sim proof | `eink-verify-sim.sh` fixture gate + `run-native-sim-etabelone.sh <device> [--sdl]` live schedule/display/telemetry proof; no `eink_fb`/`validate_buf` symbols |
 

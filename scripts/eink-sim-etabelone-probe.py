@@ -22,7 +22,7 @@ def main() -> int:
         "--binary", default="build-native_sim-eink/zephyr/zephyr.exe"
     )
     parser.add_argument("--base", default="http://192.0.2.2:8765")
-    parser.add_argument("--timeout", type=float, default=180.0)
+    parser.add_argument("--timeout", type=float, default=700.0)
     parser.add_argument(
         "--hold",
         type=float,

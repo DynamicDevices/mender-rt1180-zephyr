@@ -3,7 +3,6 @@
  */
 #include "eink_wake.h"
 
-#include "eink_display.h"
 #include "eink_http.h"
 #include "eink_power.h"
 #include "eink_scheduler.h"
@@ -21,18 +20,20 @@ int eink_wake_run_once(void)
 	int ret;
 	int64_t now;
 	int64_t next;
+	uint32_t poll = 300;
 
 	ret = eink_power_init();
 	if (ret < 0) {
 		return ret;
 	}
 
-	/* Offline display first — never power IW612 for a cached transition. */
+	/* Offline display first — never power IW612 for a cached transition.
+	 * eink_scheduler_tick() already waits for the refresh to finish.
+	 */
 	ret = eink_scheduler_tick();
 	if (ret < 0) {
 		LOG_WRN("scheduler tick: %d", ret);
 	}
-	(void)eink_display_wait_idle(K_SECONDS(120));
 
 #if defined(CONFIG_APP_EINK_HTTP)
 	ret = eink_power_iw612_set(true);
@@ -43,13 +44,19 @@ int eink_wake_run_once(void)
 		}
 	}
 	(void)eink_power_iw612_set(false);
+	poll = CONFIG_APP_EINK_HTTP_POLL_INTERVAL;
 #endif
 
 	now = (int64_t)time(NULL);
 	if (now < 1700000000LL) {
-		next = 12 * 3600;
+		/* Wall clock unset — fall back to poll interval from epoch-ish now. */
+		next = now + (int64_t)poll;
+		if (next < now + 60) {
+			next = now + 12 * 3600;
+		}
+		LOG_WRN("wake: wall clock unset; next_wake fallback=%lld", (long long)next);
 	} else {
-		next = now + 12 * 3600;
+		next = eink_scheduler_get_next_wakeup(now, poll);
 	}
 	(void)eink_power_set_next_wake(next);
 

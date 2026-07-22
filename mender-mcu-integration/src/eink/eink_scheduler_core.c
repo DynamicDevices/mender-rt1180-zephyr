@@ -78,6 +78,45 @@ int64_t eink_cron_next_run(const char *cron, int64_t now_unix)
 	return ymd_hms_to_unix(Y, M, D, hour, minute, 0);
 }
 
+int64_t eink_cron_next_after(const char *cron, int64_t now_unix)
+{
+	int64_t today = eink_cron_next_run(cron, now_unix);
+
+	if (today > now_unix) {
+		return today;
+	}
+	/* Tomorrow same HH:MM. */
+	return today + 86400;
+}
+
+int64_t eink_scheduler_next_wakeup(const struct eink_schedule *sched, int64_t now_unix,
+				   uint32_t poll_interval_sec)
+{
+	int64_t best = -1;
+	int64_t poll_deadline;
+	uint32_t poll = poll_interval_sec ? poll_interval_sec : 300;
+
+	if (sched != NULL) {
+		for (size_t i = 0; i < sched->count; i++) {
+			int64_t t = eink_cron_next_after(sched->jobs[i].cron, now_unix);
+
+			if (best < 0 || t < best) {
+				best = t;
+			}
+		}
+	}
+
+	poll_deadline = now_unix + (int64_t)poll;
+	if (best < 0 || poll_deadline < best) {
+		best = poll_deadline;
+	}
+	/* Avoid spin if clock/cron glitch. */
+	if (best < now_unix + 60) {
+		best = now_unix + 60;
+	}
+	return best;
+}
+
 struct eink_sched_decision eink_scheduler_decide(const struct eink_schedule *sched,
 						 int64_t now_unix,
 						 const char *last_displayed_job_id)

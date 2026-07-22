@@ -1219,6 +1219,7 @@ static int eink_http_sync_once_inner(void)
 		return -EINVAL;
 	}
 
+	due_image[0] = '\0';
 	memset(&sched, 0, sizeof(sched));
 	(void)ensure_wall_clock();
 	ret = eink_http_fetch_config(&sched, images, ARRAY_SIZE(images), &image_count,
@@ -1235,9 +1236,9 @@ static int eink_http_sync_once_inner(void)
 	}
 
 	/*
-	 * Fetch the frame that is due now, not every gallery asset. This bounds
-	 * network-on time and gets the scheduled image onto the panel first.
-	 * Previously cached frames remain available for offline/display-only wakes.
+	 * Rust-like gallery cache: download the due frame first (panel fast path),
+	 * then remaining schedule images while the radio is up. Skip assets that
+	 * already validate in the store. ES6F only.
 	 */
 	ret = eink_scheduler_due_image(due_image, sizeof(due_image));
 	if (ret < 0) {
@@ -1251,10 +1252,14 @@ static int eink_http_sync_once_inner(void)
 				continue;
 			}
 			found = true;
-			ret = eink_http_download_image(images[i].image_id, images[i].url);
-			if (ret) {
-				LOG_WRN("due image %s download failed: %d; trying cache",
-					images[i].image_id, ret);
+			if (eink_store_has_valid_image(images[i].image_id)) {
+				LOG_INF("due image %s already cached", images[i].image_id);
+			} else {
+				ret = eink_http_download_image(images[i].image_id, images[i].url);
+				if (ret) {
+					LOG_WRN("due image %s download failed: %d; trying cache",
+						images[i].image_id, ret);
+				}
 			}
 			break;
 		}
@@ -1265,12 +1270,31 @@ static int eink_http_sync_once_inner(void)
 		LOG_INF("no new scheduled image due");
 	}
 
+	for (size_t i = 0; i < image_count; i++) {
+		if (due_image[0] != '\0' && strcmp(images[i].image_id, due_image) == 0) {
+			continue;
+		}
+		if (eink_store_has_valid_image(images[i].image_id)) {
+			LOG_INF("gallery image %s already cached", images[i].image_id);
+			continue;
+		}
+		ret = eink_http_download_image(images[i].image_id, images[i].url);
+		if (ret) {
+			LOG_WRN("gallery image %s download failed: %d", images[i].image_id, ret);
+		}
+	}
+
 	LOG_INF("scheduler tick after sync");
 	ret = eink_scheduler_tick();
 	LOG_INF("scheduler tick result=%d", ret);
 	eink_scheduler_get_last_job(last_job, sizeof(last_job));
-	return eink_http_post_telemetry(&sched, last_job, now + (int64_t)cfg.poll_interval_seconds,
-					-1);
+	{
+		int64_t next_wake =
+			eink_scheduler_get_next_wakeup(now, cfg.poll_interval_seconds);
+
+		LOG_INF("schedule next_wake unix=%lld", (long long)next_wake);
+		return eink_http_post_telemetry(&sched, last_job, next_wake, -1);
+	}
 }
 
 int eink_http_sync_once(void)
@@ -1289,7 +1313,8 @@ int eink_http_sync_once(void)
 	k_work_init(&sync_once_work, sync_once_work_handler);
 	(void)k_sem_take(&sync_once_done, K_NO_WAIT);
 	k_work_submit_to_queue(&http_q, &sync_once_work);
-	if (k_sem_take(&sync_once_done, K_SECONDS(120)) != 0) {
+	/* Gallery cache can pull many ~1 MiB ES6F frames (live bridge convert). */
+	if (k_sem_take(&sync_once_done, K_MINUTES(10)) != 0) {
 		return -ETIMEDOUT;
 	}
 	return sync_once_result;

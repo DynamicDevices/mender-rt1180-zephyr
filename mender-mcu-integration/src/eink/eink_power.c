@@ -9,6 +9,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <time.h>
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -105,9 +106,31 @@ int eink_power_enter_snvs(void)
 
 	LOG_INF("power: requesting SNVS / main-rail-off (DCDC_IN+VDD_LPSR_IN gated)");
 #if defined(CONFIG_ARCH_POSIX)
-	LOG_WRN("power: native_sim cannot enter SNVS — sleeping forever for duty-cycle shape");
-	k_sleep(K_FOREVER);
-	return 0;
+	{
+		uint32_t hold = 0;
+
+#if defined(CONFIG_APP_EINK_SNVS_SIM_HOLD_SEC)
+		hold = CONFIG_APP_EINK_SNVS_SIM_HOLD_SEC;
+#endif
+		if (hold > 0) {
+			uint32_t sleep_s = hold;
+
+			if (g_status.next_wake_unix > 1700000000LL) {
+				int64_t rem = g_status.next_wake_unix - (int64_t)time(NULL);
+
+				if (rem > 0 && rem < (int64_t)hold) {
+					sleep_s = (uint32_t)rem;
+				}
+			}
+			LOG_INF("power: native_sim SNVS stub holding %u s (next_wake=%lld)",
+				sleep_s, (long long)g_status.next_wake_unix);
+			k_sleep(K_SECONDS(sleep_s));
+		} else {
+			LOG_INF("power: native_sim SNVS stub return (next_wake=%lld)",
+				(long long)g_status.next_wake_unix);
+		}
+		return 0;
+	}
 #else
 	/* Board bring-up: wire PMIC_ON_REQ / SNVS entry here. */
 	return -ENOTSUP;

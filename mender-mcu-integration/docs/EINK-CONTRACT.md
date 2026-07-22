@@ -41,9 +41,11 @@ S3 pre-signed downloads: omit default `:443` from the HTTP `Host` header
 (Zephyr otherwise breaks AWS signatures). JPEG/PNG payloads are rejected as
 soon as magic bytes are seen.
 
-The sync downloads the **currently due image first**, displays it, then posts
-telemetry. It does not hold the radio/network open to download every gallery
-asset. Previously cached frames remain available for offline display wakes.
+The sync downloads the **currently due image first**, then caches remaining
+gallery ES6F assets while the radio is up (skipping frames that already
+validate in the store). It displays the due job, then posts telemetry with a
+**schedule-driven** `next_wakeup` (earliest future cron vs poll deadline).
+Previously cached frames remain available for offline display wakes.
 
 ### native_sim live e-tabelone
 

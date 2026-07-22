@@ -6,6 +6,7 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <zephyr/fs/fs.h>
@@ -205,11 +206,132 @@ int eink_store_save_schedule(const struct eink_schedule *sched)
 
 int eink_store_load_schedule(struct eink_schedule *sched)
 {
-	/* Minimal loader: fixture mode fills schedule in eink_scheduler_init. */
+	char path[300];
+	struct fs_file_t f;
+	char buf[8192];
+	ssize_t n;
+	const char *p;
+	size_t count = 0;
+
 	if (!sched) {
 		return -EINVAL;
 	}
-	sched->count = 0;
+	memset(sched, 0, sizeof(*sched));
+	path_sched(path, sizeof(path));
+	fs_file_t_init(&f);
+	n = fs_open(&f, path, FS_O_READ);
+	if (n < 0) {
+		return (int)n;
+	}
+	n = fs_read(&f, buf, sizeof(buf) - 1);
+	(void)fs_close(&f);
+	if (n < 0) {
+		return (int)n;
+	}
+	buf[n] = '\0';
+
+	p = strstr(buf, "\"jobs\"");
+	if (p == NULL) {
+		return -EINVAL;
+	}
+	p = strchr(p, '[');
+	if (p == NULL) {
+		return -EINVAL;
+	}
+	p++;
+
+	while (*p && count < EINK_MAX_JOBS) {
+		char job_id[EINK_ID_MAX];
+		char image_id[EINK_ID_MAX];
+		char cron[32];
+		long long next_run = 0;
+		const char *obj;
+		const char *end;
+		char objbuf[384];
+		size_t olen;
+
+		while (*p == ' ' || *p == '\n' || *p == '\r' || *p == ',') {
+			p++;
+		}
+		if (*p == ']') {
+			break;
+		}
+		if (*p != '{') {
+			return -EINVAL;
+		}
+		obj = p;
+		end = strchr(obj, '}');
+		if (end == NULL) {
+			return -EINVAL;
+		}
+		olen = (size_t)(end - obj + 1);
+		if (olen >= sizeof(objbuf)) {
+			return -ENOMEM;
+		}
+		memcpy(objbuf, obj, olen);
+		objbuf[olen] = '\0';
+
+		job_id[0] = image_id[0] = cron[0] = '\0';
+		{
+			const char *k = strstr(objbuf, "\"job_id\"");
+			const char *q;
+
+			if (k) {
+				q = strchr(k + 8, '"');
+				if (q) {
+					q++;
+					for (size_t i = 0; i + 1 < sizeof(job_id) && q[i] && q[i] != '"';
+					     i++) {
+						job_id[i] = q[i];
+						job_id[i + 1] = '\0';
+					}
+				}
+			}
+			k = strstr(objbuf, "\"image_id\"");
+			if (k) {
+				q = strchr(k + 10, '"');
+				if (q) {
+					q++;
+					for (size_t i = 0; i + 1 < sizeof(image_id) && q[i] &&
+							    q[i] != '"';
+					     i++) {
+						image_id[i] = q[i];
+						image_id[i + 1] = '\0';
+					}
+				}
+			}
+			k = strstr(objbuf, "\"cron\"");
+			if (k) {
+				q = strchr(k + 6, '"');
+				if (q) {
+					q++;
+					for (size_t i = 0; i + 1 < sizeof(cron) && q[i] && q[i] != '"';
+					     i++) {
+						cron[i] = q[i];
+						cron[i + 1] = '\0';
+					}
+				}
+			}
+			k = strstr(objbuf, "\"next_run\"");
+			if (k) {
+				k = strchr(k + 10, ':');
+				if (k) {
+					next_run = strtoll(k + 1, NULL, 10);
+				}
+			}
+		}
+		if (job_id[0] == '\0' || image_id[0] == '\0') {
+			return -EINVAL;
+		}
+		strncpy(sched->jobs[count].job_id, job_id, sizeof(sched->jobs[count].job_id) - 1);
+		strncpy(sched->jobs[count].image_id, image_id,
+			sizeof(sched->jobs[count].image_id) - 1);
+		strncpy(sched->jobs[count].cron, cron, sizeof(sched->jobs[count].cron) - 1);
+		sched->jobs[count].next_run_unix = (int64_t)next_run;
+		count++;
+		p = end + 1;
+	}
+	sched->count = count;
 	return 0;
 }
 
@@ -220,6 +342,16 @@ int eink_store_image_path(const char *image_id, char *out, size_t out_cap)
 	}
 	snprintf(out, out_cap, "%s/images/%s.es6f", root, image_id);
 	return 0;
+}
+
+bool eink_store_has_valid_image(const char *image_id)
+{
+	char path[300];
+
+	if (eink_store_image_path(image_id, path, sizeof(path)) != 0) {
+		return false;
+	}
+	return eink_store_validate_path(path, NULL) == 0;
 }
 
 struct eink_fs_stream {

@@ -36,19 +36,32 @@ def main() -> int:
     fixture_dir = Path("/tmp/eink-fixture")
     fixture_dir.mkdir(exist_ok=True)
     # Cron is minute+hour numeric only (no '*'); 00:00 UTC is always overdue.
+    bars = Path("/tmp/eink-zephyr/images/bars.es6f")
+    if not bars.is_file():
+        # verify gate generates bars; fall back to white-only if absent
+        bars = image
     cfg = {
         "images": [
             {
                 "image_id": "white",
                 "url": f"file://{image.resolve()}",
-            }
+            },
+            {
+                "image_id": "bars",
+                "url": f"file://{bars.resolve()}",
+            },
         ],
         "schedule": [
             {
                 "job_id": "j1",
                 "image_id": "white",
                 "cron": "0 0 * * *",
-            }
+            },
+            {
+                "job_id": "j2",
+                "image_id": "bars",
+                "cron": "0 18 * * *",
+            },
         ],
         "orientation": 0,
     }
@@ -132,6 +145,8 @@ def main() -> int:
                 "show job",
                 "refresh",
                 "scheduler tick",
+                "next_wake",
+                "gallery",
                 "failed",
             )
         ):
@@ -141,7 +156,14 @@ def main() -> int:
         "sync ok" in text
         and "parsed" in text
         and ("accepted image white" in text or "importing fixture image white" in text)
+        and (
+            "accepted image bars" in text
+            or "importing fixture image bars" in text
+            or "gallery image bars" in text
+            or "already cached" in text
+        )
         and ("show job=j1" in text or "refresh done result=0" in text)
+        and "schedule next_wake unix=" in text
     )
     print("RESULT", "OK" if ok else "FAIL")
     return 0 if ok else 1

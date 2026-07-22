@@ -137,6 +137,17 @@ if APP_EINK
 		  sleep instead of polling forever. Production battery boards
 		  should enable this.
 
+	config APP_EINK_SNVS_SIM_HOLD_SEC
+		int "native_sim: optional hold before returning from SNVS stub"
+		default 0
+		range 0 3600
+		depends on APP_EINK_BATTERY_DUTY_CYCLE && ARCH_POSIX
+		help
+		  On native_sim, SNVS cannot cut power. When non-zero, sleep
+		  min(time-to-next-wake, this many seconds) then return so
+		  automated duty-cycle smokes can finish. Zero means log the
+		  programmed wake and return immediately (no forever hang).
+
 	config APP_EINK_OTA_FLASH_STAGING
 		bool "Stage Mender artifacts on FlexSPI2 data NOR"
 		default n

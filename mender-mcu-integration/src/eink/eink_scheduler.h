@@ -19,4 +19,10 @@ int eink_scheduler_due_image(char *out, size_t cap);
 
 void eink_scheduler_get_last_job(char *out, size_t cap);
 
+/**
+ * Schedule-driven next wake (min of future crons and poll deadline).
+ * Uses in-memory schedule under lock.
+ */
+int64_t eink_scheduler_get_next_wakeup(int64_t now_unix, uint32_t poll_interval_sec);
+
 #endif

@@ -26,11 +26,23 @@ static int64_t now_unix(void)
 
 int eink_scheduler_init(void)
 {
+	int64_t now = now_unix();
+
 	k_mutex_init(&mu);
 	memset(&sched, 0, sizeof(sched));
 	last_job[0] = '\0';
 	(void)eink_store_load_state(last_job, sizeof(last_job));
-	LOG_INF("scheduler init last_job=%s", last_job[0] ? last_job : "-");
+	if (eink_store_load_schedule(&sched) == 0 && sched.count > 0) {
+		for (size_t i = 0; i < sched.count; i++) {
+			sched.jobs[i].next_run_unix =
+				eink_cron_next_run(sched.jobs[i].cron, now);
+		}
+		LOG_INF("scheduler init last_job=%s jobs=%u (from store)",
+			last_job[0] ? last_job : "-", (unsigned)sched.count);
+	} else {
+		sched.count = 0;
+		LOG_INF("scheduler init last_job=%s", last_job[0] ? last_job : "-");
+	}
 	return 0;
 }
 
@@ -122,4 +134,17 @@ void eink_scheduler_get_last_job(char *out, size_t cap)
 	strncpy(out, last_job, cap - 1);
 	out[cap - 1] = '\0';
 	k_mutex_unlock(&mu);
+}
+
+int64_t eink_scheduler_get_next_wakeup(int64_t now_unix_in, uint32_t poll_interval_sec)
+{
+	int64_t wake;
+
+	if (now_unix_in <= 0) {
+		now_unix_in = now_unix();
+	}
+	k_mutex_lock(&mu, K_FOREVER);
+	wake = eink_scheduler_next_wakeup(&sched, now_unix_in, poll_interval_sec);
+	k_mutex_unlock(&mu);
+	return wake;
 }
