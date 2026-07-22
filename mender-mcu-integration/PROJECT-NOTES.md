@@ -337,9 +337,11 @@ west flash -d build-rt1170-evk
 
 | Profile | Script | Display | Notes |
 |---------|--------|---------|-------|
-| Baseline Mender | `build-rt1170-evk.sh` | none | ENET + OTA |
-| **LCD preview** | `build-rt1170-evk-lcd.sh` | Rocktech **RK055HDMIPI4MA0** 5.5″ 720×1280 MIPI (J48) | `APP_EINK_DISPLAY_LCD_PREVIEW`; EVK SDRAM FB; **no** LPSPI1 EL133 |
-| **EL133 SPI** | `build-rt1170-evk-eink.sh` | Spectra 6 EL133UF1 on LPSPI1 | Overlay GPIOs placeholder (`status=disabled`); interim `dummy_dc` until schematic; **no** MIPI shield |
+| Baseline Mender | `build-rt1170-evk.sh` | none | ENET + OTA; Zephyr shell on UART |
+| **LCD preview** | `build-rt1170-evk-lcd.sh` | Rocktech **RK055HDMIPI4MA0** 5.5″ 720×1280 MIPI (J48) | `APP_EINK_DISPLAY_LCD_PREVIEW`; EVK SDRAM FB; **no** LPSPI1 EL133; `eink` shell like native_sim |
+| **EL133 SPI** | `build-rt1170-evk-eink.sh` | Spectra 6 EL133UF1 on LPSPI1 | Overlay GPIOs placeholder (`status=disabled`); interim `dummy_dc` until schematic; **no** MIPI shield; `eink` shell |
+
+Interactive console: MCU-Link / USB serial **115200 8N1** — same `eink show|sync|creds|…` and `fs` shell as `native_sim` (see `boards/mimxrt1170_eink_shell.conf`).
 | OCRAM / duty | `*_eink_sram.*` | streaming | Product-shaped on EVK silicon |
 
 LCDIF pinmux conflicts with `lpspi1` — never enable Rocktech shield and EL133 in one image.

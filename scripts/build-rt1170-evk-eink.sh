@@ -7,11 +7,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT}"
 
 export BUILD_DIR="${BUILD_DIR:-build-rt1170-evk-eink}"
-export RT1170_EXTRA_CONF_FILE="${RT1170_EXTRA_CONF_FILE:-boards/mimxrt1170_evk_mimxrt1176_cm7_eink_el133.conf}"
+export RT1170_EXTRA_CONF_FILE="${RT1170_EXTRA_CONF_FILE:-boards/mimxrt1170_eink_shell.conf;boards/mimxrt1170_evk_mimxrt1176_cm7_eink_el133.conf}"
 
 EL133_MODULE="${ROOT}/mender-mcu-integration/modules/eink-el133"
 EL133_OVERLAY="${ROOT}/mender-mcu-integration/boards/mimxrt1170_evk_mimxrt1176_cm7_eink_el133.overlay"
-# Same LittleFS carve as LCD lab (shared flash layout helper).
 LCD_FS_OVERLAY="${ROOT}/mender-mcu-integration/boards/mimxrt1170_evk_mimxrt1176_cm7_lcd.overlay"
 
 exec "${ROOT}/scripts/build-rt1170-evk.sh" "$@" \

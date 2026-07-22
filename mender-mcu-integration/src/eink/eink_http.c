@@ -836,8 +836,11 @@ static int http_post_json(const char *url, const char *json)
 	return 0;
 }
 
+static int load_fs_body(const char *path, uint8_t *buf, size_t cap, size_t *out_len);
+
 static int load_file_body(const char *path, uint8_t *buf, size_t cap, size_t *out_len)
 {
+#if defined(CONFIG_ARCH_POSIX)
 	FILE *f = fopen(path, "rb");
 	size_t n;
 
@@ -850,6 +853,10 @@ static int load_file_body(const char *path, uint8_t *buf, size_t cap, size_t *ou
 		*out_len = n;
 	}
 	return 0;
+#else
+	/* MCU: host paths are not available — use Zephyr FS (LittleFS). */
+	return load_fs_body(path, buf, cap, out_len);
+#endif
 }
 
 static int load_fs_body(const char *path, uint8_t *buf, size_t cap, size_t *out_len)

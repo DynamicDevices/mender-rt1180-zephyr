@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT}"
 
 export BUILD_DIR="${BUILD_DIR:-build-rt1170-evk-lcd}"
-export RT1170_EXTRA_CONF_FILE="${RT1170_EXTRA_CONF_FILE:-boards/mimxrt1170_evk_mimxrt1176_cm7_lcd.conf}"
+export RT1170_EXTRA_CONF_FILE="${RT1170_EXTRA_CONF_FILE:-boards/mimxrt1170_eink_shell.conf;boards/mimxrt1170_evk_mimxrt1176_cm7_lcd.conf}"
 
 LCD_OVERLAY="${ROOT}/mender-mcu-integration/boards/mimxrt1170_evk_mimxrt1176_cm7_lcd.overlay"
 

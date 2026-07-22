@@ -59,12 +59,25 @@ def main() -> int:
     if conf_flag(lcd_conf, "CONFIG_APP_EINK_FULL_FRAMEBUFFER") == "y":
         fail("lcd.conf must not enable FULL_FRAMEBUFFER")
     require(lcd_conf, "CONFIG_FILE_SYSTEM_LITTLEFS=y", "lcd.conf")
+    require(lcd_conf, "CONFIG_FILE_SYSTEM_SHELL=y", "lcd.conf")
+    require(lcd_conf, "CONFIG_APP_EINK_SHELL=y", "lcd.conf")
     require(lcd_conf, 'CONFIG_APP_EINK_STORE_ROOT="/lfs1/eink"', "lcd.conf")
 
     if conf_flag(el_conf, "CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW") == "y":
         fail("el133.conf must not enable LCD preview")
     require(el_conf, "CONFIG_DUMMY_DISPLAY=y", "el133.conf (interim until EL133 GPIOs)")
     require(el_conf, "CONFIG_FILE_SYSTEM_LITTLEFS=y", "el133.conf")
+    require(el_conf, "CONFIG_FILE_SYSTEM_SHELL=y", "el133.conf")
+    require(el_conf, "CONFIG_APP_EINK_SHELL=y", "el133.conf")
+
+    board = read("mender-mcu-integration/boards/mimxrt1170_evk_mimxrt1176_cm7.conf")
+    shell_frag = read("mender-mcu-integration/boards/mimxrt1170_eink_shell.conf")
+    require(board, "CONFIG_SHELL=y", "EVK board conf (shell parity with native_sim)")
+    require(shell_frag, "CONFIG_SHELL=y", "eink_shell.conf")
+    require(shell_frag, "CONFIG_FILE_SYSTEM_SHELL=y", "eink_shell.conf")
+    forbid(shell_frag, "CONFIG_POSIX_SYSTEM_INTERFACES=y", "eink_shell.conf (keep MCU light)")
+    require(lcd_sh, "mimxrt1170_eink_shell.conf", "build-rt1170-evk-lcd.sh")
+    require(el_sh, "mimxrt1170_eink_shell.conf", "build-rt1170-evk-eink.sh")
 
     if conf_flag(aesl, "CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW") == "y":
         fail("aesl product conf must not enable LCD preview")
