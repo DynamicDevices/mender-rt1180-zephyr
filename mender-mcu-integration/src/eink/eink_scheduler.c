@@ -123,17 +123,33 @@ int eink_scheduler_tick(void)
 
 int eink_scheduler_repaint(void)
 {
-	struct eink_sched_decision d;
 	struct eink_job job;
 	bool found = false;
 	bool advance = false;
+	int64_t now = now_unix();
+	int64_t best_occ = -1;
+	size_t best_i = 0;
 
 	k_mutex_lock(&mu, K_FOREVER);
-	/* Ignore last_job skip so we learn which overdue image belongs on panel. */
-	d = eink_scheduler_decide(&sched, now_unix(), "");
-	if (d.action == EINK_SCHED_SHOW) {
-		job = sched.jobs[d.job_index];
-		found = true;
+	/*
+	 * Current panel content = latest cron occurrence that is already in the
+	 * past (today's HH:MM if overdue, else yesterday's). Matches ESL
+	 * "keep showing last scheduled frame" when nothing new is due.
+	 */
+	for (size_t i = 0; i < sched.count; i++) {
+		int64_t occ = eink_cron_next_run(sched.jobs[i].cron, now);
+
+		if (occ > now) {
+			occ -= 86400;
+		}
+		if (occ <= now && (!found || occ >= best_occ)) {
+			best_occ = occ;
+			best_i = i;
+			found = true;
+		}
+	}
+	if (found) {
+		job = sched.jobs[best_i];
 		advance = (last_job[0] == '\0') || (strcmp(last_job, job.job_id) != 0);
 	} else if (last_job[0] != '\0') {
 		for (size_t i = 0; i < sched.count; i++) {
@@ -143,14 +159,6 @@ int eink_scheduler_repaint(void)
 				advance = false;
 				break;
 			}
-		}
-		if (!found) {
-			/* Orphan last_job: still try image_id == last_job as image id. */
-			memset(&job, 0, sizeof(job));
-			strncpy(job.job_id, last_job, sizeof(job.job_id) - 1);
-			strncpy(job.image_id, last_job, sizeof(job.image_id) - 1);
-			found = true;
-			advance = false;
 		}
 	}
 	k_mutex_unlock(&mu);
