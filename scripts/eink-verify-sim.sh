@@ -30,6 +30,7 @@ python3 scripts/eink-check-el133-driver.py
 ./scripts/build-el133-ztest.sh
 
 # End-to-end: file:// config → import ES6F → schedule show (streaming, no FB)
+rm -f flash.bin
 python3 scripts/eink-sim-sync-probe.py
 echo "OK: file:// sync + scheduled show"
 

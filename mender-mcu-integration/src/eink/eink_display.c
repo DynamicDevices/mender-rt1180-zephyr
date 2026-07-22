@@ -601,3 +601,13 @@ int eink_display_wait_idle(k_timeout_t timeout)
 {
 	return k_sem_take(&eink_idle_sem, timeout);
 }
+
+bool eink_display_is_busy(void)
+{
+	bool busy;
+
+	k_mutex_lock(&eink_mu, K_FOREVER);
+	busy = has_pending || status.state == EINK_DISPLAY_REFRESHING;
+	k_mutex_unlock(&eink_mu);
+	return busy;
+}

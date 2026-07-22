@@ -1,6 +1,22 @@
 /*
  * Custom-board SNVS / rail-gate contract (software side).
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Battery duty-cycle state machine (field product):
+ *
+ *   cold/SRTC wake
+ *     -> offline paint (optional fire-and-forget display)
+ *     -> eink_power_iw612_set(true)   // WiFi rail up only if radio needed
+ *     -> network sync + eink_http_flush_deferred()
+ *     -> eink_power_iw612_set(false)  // hard-gate WiFi before sleep
+ *     -> program SRTC next_wake
+ *     -> eink_power_enter_snvs()      // main rail off; panel may stay up
+ *
+ * Board overlays may provide GPIOs under /zephyr,user:
+ *   iw612-enable-gpios = <&gpioX N flags>;
+ *   panel-enable-gpios = <&gpioY M flags>;
+ * Without those properties the API still enforces the software contract
+ * (status bits + logs) so callers stay identical on EVK / native_sim.
  */
 #ifndef EINK_POWER_H
 #define EINK_POWER_H
@@ -20,8 +36,11 @@ struct eink_power_status {
 	enum eink_wake_reason wake_reason;
 	bool cm4_held_in_reset;
 	bool iw612_powered;
+	bool iw612_wowlan;
 	bool panel_powered;
 	bool data_nor_powered;
+	bool iw612_gpio_bound;
+	bool panel_gpio_bound;
 	int64_t next_wake_unix;
 };
 
@@ -35,12 +54,19 @@ void eink_power_get_status(struct eink_power_status *out);
 int eink_power_set_next_wake(int64_t unix_sec);
 
 /**
- * Enter true SNVS / main-rail-off sleep. On platforms without board support
- * this logs the request and returns -ENOTSUP (native_sim / EVK lab).
+ * Enter true SNVS / main-rail-off sleep. Always hard-gates IW612 first.
+ * If a fire-and-forget panel refresh is still in flight, leaves panel and
+ * data-NOR rails powered so the waveform can finish. On platforms without
+ * board support this logs the request and returns -ENOTSUP (EVK) or the
+ * native_sim stub.
  */
 int eink_power_enter_snvs(void);
 
-/** Hard-gate or power IW612 (battery mode). */
+/**
+ * Hard-gate or power IW612 WiFi (battery mode).
+ * Call true only around network work; false immediately after
+ * eink_http_flush_deferred() — never leave the radio up into SNVS.
+ */
 int eink_power_iw612_set(bool on);
 
 /** Arm WoWLAN keep-alive rail + host-wake (separately budgeted). */

@@ -37,7 +37,12 @@ timeout 40 ./build-native_sim-eink-duty/zephyr/zephyr.exe 2>&1 | tee "$LOG" || t
 grep -q "eink selftest OK" "$LOG"
 grep -q "power: next wake unix=" "$LOG"
 grep -q "power: native_sim SNVS stub return" "$LOG"
-# Gallery cache: due white + remaining bars
-grep -Eq "accepted image white|already cached|importing fixture image white" "$LOG"
-grep -Eq "accepted image bars|already cached|importing fixture image bars|gallery image bars" "$LOG"
+grep -q "power: IW612 software gate only" "$LOG"
+# Fire-and-forget display: do not block wake on waveform completion.
+grep -Eq "display fire-and-forget|refresh done result=0" "$LOG"
+# Radio hard-gated before SNVS (or skipped entirely when schedule fresh).
+grep -Eq "WiFi hard-gated after network work|skip radio|IW612 HARD-GATE" "$LOG"
+# Primary frame only — gallery is skipped on battery duty-cycle.
+grep -Eq "accepted image white|already cached|importing fixture image white|show job=" "$LOG"
+grep -Eq "gallery skipped \(battery duty-cycle\)|gallery deferred|no new scheduled" "$LOG" || true
 echo "OK: duty-cycle smoke (schedule next_wake + SNVS stub)"

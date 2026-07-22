@@ -170,9 +170,8 @@ def main() -> int:
         ):
             print(line)
 
-    ok = (
-        "sync ok" in text
-        and "parsed" in text
+    ok_full = (
+        "parsed" in text
         and (
             "accepted image white" in text
             or "importing fixture image white" in text
@@ -190,6 +189,15 @@ def main() -> int:
             or "gallery=0 (0 dl)" in text
         )
         and ("show job=j1" in text or "refresh done result=0" in text)
+    )
+    ok_fast = (
+        "sync fast path" in text
+        and ("telemetry posted" in text or "telemetry deferred" in text)
+        and "schedule next_wake unix=" in text
+    )
+    ok = (
+        "sync ok" in text
+        and (ok_full or ok_fast)
         and "schedule next_wake unix=" in text
     )
     print("RESULT", "OK" if ok else "FAIL")

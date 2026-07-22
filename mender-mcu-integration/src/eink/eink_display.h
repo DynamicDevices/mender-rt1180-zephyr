@@ -30,4 +30,7 @@ int eink_display_show_payload(const uint8_t *payload, const char *job_id);
 void eink_display_get_status(struct eink_display_status *out);
 int eink_display_wait_idle(k_timeout_t timeout);
 
+/** True while a show/clear is queued or the panel workqueue is refreshing. */
+bool eink_display_is_busy(void);
+
 #endif

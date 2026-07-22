@@ -75,7 +75,6 @@ static int show_job_locked_copy(const struct eink_job *job, bool advance_state)
 {
 	char path[300];
 	int ret;
-	struct eink_display_status st;
 
 	if (eink_store_image_path(job->image_id, path, sizeof(path)) != 0) {
 		return -ENOENT;
@@ -91,14 +90,33 @@ static int show_job_locked_copy(const struct eink_job *job, bool advance_state)
 	if (ret != 0) {
 		return ret;
 	}
-	ret = eink_display_wait_idle(K_MINUTES(2));
-	if (ret != 0) {
-		return ret;
+#if defined(CONFIG_APP_EINK_DISPLAY_FIRE_AND_FORGET)
+	/*
+	 * Battery path: do not burn MCU on-time waiting for the waveform.
+	 * Advance schedule state on successful queue; panel finishes async.
+	 */
+	LOG_INF("display fire-and-forget (duty-cycle) job=%s", job->job_id);
+	if (advance_state) {
+		k_mutex_lock(&mu, K_FOREVER);
+		strncpy(last_job, job->job_id, sizeof(last_job) - 1);
+		last_job[sizeof(last_job) - 1] = '\0';
+		(void)eink_store_save_state(last_job);
+		k_mutex_unlock(&mu);
 	}
-	eink_display_get_status(&st);
-	if (st.last_result != 0) {
-		LOG_WRN("display failed (%d); state not advanced", st.last_result);
-		return st.last_result;
+	return 1;
+#else
+	{
+		struct eink_display_status st;
+
+		ret = eink_display_wait_idle(K_MINUTES(2));
+		if (ret != 0) {
+			return ret;
+		}
+		eink_display_get_status(&st);
+		if (st.last_result != 0) {
+			LOG_WRN("display failed (%d); state not advanced", st.last_result);
+			return st.last_result;
+		}
 	}
 	if (advance_state) {
 		k_mutex_lock(&mu, K_FOREVER);
@@ -108,6 +126,7 @@ static int show_job_locked_copy(const struct eink_job *job, bool advance_state)
 		k_mutex_unlock(&mu);
 	}
 	return 1;
+#endif
 }
 
 int eink_scheduler_tick(void)

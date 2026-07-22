@@ -205,6 +205,18 @@ if APP_EINK
 		  sleep instead of polling forever. Production battery boards
 		  should enable this.
 
+	config APP_EINK_DISPLAY_FIRE_AND_FORGET
+		bool "Do not wait for panel refresh before advancing schedule / sleep"
+		depends on APP_EINK_BATTERY_DUTY_CYCLE
+		default y
+		help
+		  Queue the ES6F transfer and return immediately so the MCU can
+		  drop WiFi and enter SNVS while the panel finishes its waveform.
+		  Scheduler state advances on successful queue (not on refresh
+		  completion). enter_snvs() leaves panel + data-NOR rails up
+		  while a refresh is still in flight. Lab/shell builds without
+		  BATTERY_DUTY_CYCLE still wait for idle.
+
 	config APP_EINK_SNVS_SIM_HOLD_SEC
 		int "native_sim: optional hold before returning from SNVS stub"
 		default 0
@@ -215,6 +227,23 @@ if APP_EINK
 		  min(time-to-next-wake, this many seconds) then return so
 		  automated duty-cycle smokes can finish. Zero means log the
 		  programmed wake and return immediately (no forever hang).
+
+	config APP_EINK_IW612_GPIO
+		bool "Drive IW612 enable from zephyr,user iw612-enable-gpios"
+		depends on APP_EINK && GPIO
+		default y
+		help
+		  When the board overlay provides
+		  /zephyr,user { iw612-enable-gpios = <...>; }, toggle that
+		  GPIO in eink_power_iw612_set(). Without the property the
+		  call remains a software-only hard-gate contract (logged).
+
+	config APP_EINK_PANEL_GPIO
+		bool "Drive panel rail from zephyr,user panel-enable-gpios"
+		depends on APP_EINK && GPIO
+		default y
+		help
+		  Optional panel rail GPIO via /zephyr,user panel-enable-gpios.
 
 	config APP_EINK_OTA_FLASH_STAGING
 		bool "Stage Mender artifacts on FlexSPI2 data NOR"

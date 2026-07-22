@@ -103,7 +103,6 @@ static struct k_work_q http_q;
 static K_THREAD_STACK_DEFINE(http_stack, EINK_HTTP_STACK_SIZE);
 static struct k_work_delayable sync_work;
 static struct k_work sync_once_work;
-static struct k_work gallery_work;
 static struct k_sem sync_once_done;
 static int sync_once_result;
 
@@ -117,7 +116,9 @@ static size_t cached_image_count;
 static int cached_orientation;
 #endif
 
-#if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER)
+#if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER) && \
+	!defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE)
+static struct k_work gallery_work;
 static struct {
 	struct eink_http_image images[EINK_HTTP_MAX_IMAGES];
 	size_t count;
@@ -190,7 +191,8 @@ static void telem_work_handler(struct k_work *work);
 static int queue_deferred_telem(const struct eink_schedule *sched, const char *last_job,
 				int64_t next_wake, int64_t now);
 #endif
-#if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER)
+#if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER) && \
+	!defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE)
 static void gallery_work_handler(struct k_work *work);
 #endif
 
@@ -1491,7 +1493,8 @@ int eink_http_flush_deferred(k_timeout_t timeout)
 }
 #endif
 
-#if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER)
+#if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER) && \
+	!defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE)
 static void gallery_work_handler(struct k_work *work)
 {
 	int64_t t0 = k_uptime_get();

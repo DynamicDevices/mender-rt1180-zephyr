@@ -41,3 +41,15 @@
  *	};
  * };
  */
+
+/*
+ * Optional rail GPIOs for eink_power_iw612_set() / eink_power_panel_set():
+ *
+ * / {
+ *	zephyr,user {
+ *		iw612-enable-gpios = <&gpio3 0 GPIO_ACTIVE_HIGH>;
+ *		panel-enable-gpios = <&gpio3 1 GPIO_ACTIVE_HIGH>;
+ *	};
+ * };
+ */
+

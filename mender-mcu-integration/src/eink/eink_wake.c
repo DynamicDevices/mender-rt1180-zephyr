@@ -30,6 +30,8 @@ int eink_wake_run_once(void)
 	/* Offline display first — never power IW612 for a cached transition.
 	 * tick advances to a new due job; repaint covers power-on blank panel
 	 * when the due job was already recorded as last_job.
+	 * With DISPLAY_FIRE_AND_FORGET this returns after queueing the panel
+	 * transfer so WiFi/SNVS are not blocked on the waveform.
 	 */
 	ret = eink_scheduler_tick();
 	if (ret == 0) {
@@ -46,6 +48,7 @@ int eink_wake_run_once(void)
 	} else
 #endif
 	{
+		/* WiFi rail up only for this transaction, then hard-gate. */
 		ret = eink_power_iw612_set(true);
 		if (ret == 0) {
 			ret = eink_http_sync_once();
@@ -56,6 +59,7 @@ int eink_wake_run_once(void)
 			(void)eink_http_flush_deferred(K_SECONDS(60));
 		}
 		(void)eink_power_iw612_set(false);
+		LOG_INF("wake: WiFi hard-gated after network work");
 	}
 	poll = CONFIG_APP_EINK_HTTP_POLL_INTERVAL;
 #endif
@@ -73,5 +77,6 @@ int eink_wake_run_once(void)
 	}
 	(void)eink_power_set_next_wake(next);
 
+	/* SNVS: radio already off; panel may stay up if refresh still running. */
 	return eink_power_enter_snvs();
 }
