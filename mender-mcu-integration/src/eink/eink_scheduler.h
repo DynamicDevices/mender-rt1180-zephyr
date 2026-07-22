@@ -25,6 +25,12 @@ int eink_scheduler_set_schedule(const struct eink_schedule *in, int64_t now_unix
 /** Return 1 and copy the currently due image id, 0 if no display is due. */
 int eink_scheduler_due_image(char *out, size_t cap);
 
+/**
+ * Image that should be on the panel now (latest past cron slot).
+ * Returns 1 and copies image_id, 0 if none.
+ */
+int eink_scheduler_current_image(char *out, size_t cap);
+
 void eink_scheduler_get_last_job(char *out, size_t cap);
 
 /**

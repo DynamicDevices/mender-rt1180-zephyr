@@ -188,6 +188,47 @@ int eink_scheduler_due_image(char *out, size_t cap)
 	return d.action == EINK_SCHED_SHOW ? 1 : 0;
 }
 
+int eink_scheduler_current_image(char *out, size_t cap)
+{
+	bool found = false;
+	int64_t now = now_unix();
+	int64_t best_occ = -1;
+	size_t best_i = 0;
+
+	if (out == NULL || cap == 0) {
+		return -EINVAL;
+	}
+	out[0] = '\0';
+	k_mutex_lock(&mu, K_FOREVER);
+	for (size_t i = 0; i < sched.count; i++) {
+		int64_t occ = eink_cron_next_run(sched.jobs[i].cron, now);
+
+		if (occ > now) {
+			occ -= 86400;
+		}
+		if (occ <= now && (!found || occ >= best_occ)) {
+			best_occ = occ;
+			best_i = i;
+			found = true;
+		}
+	}
+	if (found) {
+		strncpy(out, sched.jobs[best_i].image_id, cap - 1);
+		out[cap - 1] = '\0';
+	} else if (last_job[0] != '\0') {
+		for (size_t i = 0; i < sched.count; i++) {
+			if (strcmp(sched.jobs[i].job_id, last_job) == 0) {
+				strncpy(out, sched.jobs[i].image_id, cap - 1);
+				out[cap - 1] = '\0';
+				found = true;
+				break;
+			}
+		}
+	}
+	k_mutex_unlock(&mu);
+	return found ? 1 : 0;
+}
+
 void eink_scheduler_get_last_job(char *out, size_t cap)
 {
 	k_mutex_lock(&mu, K_FOREVER);

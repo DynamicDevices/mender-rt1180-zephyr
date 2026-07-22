@@ -1236,15 +1236,25 @@ static int eink_http_sync_once_inner(void)
 	}
 
 	/*
-	 * Rust-like gallery cache: download the due frame first (panel fast path),
-	 * then remaining schedule images while the radio is up. Skip assets that
-	 * already validate in the store. ES6F only.
+	 * Fast path to panel: fetch the frame that should be visible now, paint
+	 * it, THEN cache the rest of the gallery. Otherwise SDL/boot stays on
+	 * the blank transparency grid for minutes while 7× ES6F downloads.
 	 */
 	ret = eink_scheduler_due_image(due_image, sizeof(due_image));
 	if (ret < 0) {
 		return ret;
 	}
-	if (ret > 0) {
+	if (ret == 0) {
+		LOG_INF("no new scheduled image due");
+		ret = eink_scheduler_current_image(due_image, sizeof(due_image));
+		if (ret > 0) {
+			LOG_INF("will show current scheduled image %s", due_image);
+		} else {
+			due_image[0] = '\0';
+		}
+	}
+
+	if (due_image[0] != '\0') {
 		bool found = false;
 
 		for (size_t i = 0; i < image_count; i++) {
@@ -1253,21 +1263,27 @@ static int eink_http_sync_once_inner(void)
 			}
 			found = true;
 			if (eink_store_has_valid_image(images[i].image_id)) {
-				LOG_INF("due image %s already cached", images[i].image_id);
+				LOG_INF("display image %s already cached", images[i].image_id);
 			} else {
 				ret = eink_http_download_image(images[i].image_id, images[i].url);
 				if (ret) {
-					LOG_WRN("due image %s download failed: %d; trying cache",
+					LOG_WRN("display image %s download failed: %d; trying cache",
 						images[i].image_id, ret);
 				}
 			}
 			break;
 		}
 		if (!found) {
-			LOG_WRN("due image %s missing from config", due_image);
+			LOG_WRN("display image %s missing from config", due_image);
 		}
-	} else {
-		LOG_INF("no new scheduled image due");
+	}
+
+	LOG_INF("scheduler tick after primary image");
+	ret = eink_scheduler_tick();
+	LOG_INF("scheduler tick result=%d", ret);
+	if (ret == 0) {
+		ret = eink_scheduler_repaint();
+		LOG_INF("scheduler repaint result=%d", ret);
 	}
 
 	for (size_t i = 0; i < image_count; i++) {
@@ -1284,14 +1300,6 @@ static int eink_http_sync_once_inner(void)
 		}
 	}
 
-	LOG_INF("scheduler tick after sync");
-	ret = eink_scheduler_tick();
-	LOG_INF("scheduler tick result=%d", ret);
-	if (ret == 0) {
-		/* Panel is blank after boot/SDL; re-paint current/last image. */
-		ret = eink_scheduler_repaint();
-		LOG_INF("scheduler repaint result=%d", ret);
-	}
 	eink_scheduler_get_last_job(last_job, sizeof(last_job));
 	{
 		int64_t next_wake =
