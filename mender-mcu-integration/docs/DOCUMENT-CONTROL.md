@@ -22,4 +22,5 @@ Firmware-local notes that remain here:
 - [CRA-ARTICLE-14-RUNBOOK.md](CRA-ARTICLE-14-RUNBOOK.md) — Art. 14 reporting runbook (draft)
 - [CRA-ADVISORY-WATCH.md](CRA-ADVISORY-WATCH.md) — advisory watch + triage + RC ship gate
 - [MCUBOOT-KEY-CEREMONY.md](MCUBOOT-KEY-CEREMONY.md) — production signing key procedure
+- [HW-BRINGUP-CHECKLIST.md](HW-BRINGUP-CHECKLIST.md) — EVK/product day-0: SoC UID, OTA, joules, HAB (blocked on HW)
 - [boards/mimxrt1170_production.conf](../boards/mimxrt1170_production.conf) — production Kconfig sketch (no lab shell)

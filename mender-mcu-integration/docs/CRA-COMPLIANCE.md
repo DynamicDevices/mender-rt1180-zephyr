@@ -4,7 +4,7 @@
 **Date:** 2026-07-22  
 **Product line:** Active ESL (13.3" Spectra 6 / EL133) on **i.MX RT1170**  
 **Firmware tree:** [`/data_drive/dd/mender`](file:///data_drive/dd/mender) (`feat/rt1170-evk`)  
-**Related:** [PROJECT-NOTES — CRA mapping](../PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping) (RT118x ELE programme), [SECURITY.md](../../SECURITY.md), [CRA-ARTICLE-14-RUNBOOK.md](CRA-ARTICLE-14-RUNBOOK.md), [CRA-ADVISORY-WATCH.md](CRA-ADVISORY-WATCH.md), [MCUBOOT-KEY-CEREMONY.md](MCUBOOT-KEY-CEREMONY.md)
+**Related:** [PROJECT-NOTES — CRA mapping](../PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping) (RT118x ELE programme), [SECURITY.md](../../SECURITY.md), [CRA-ARTICLE-14-RUNBOOK.md](CRA-ARTICLE-14-RUNBOOK.md), [CRA-ADVISORY-WATCH.md](CRA-ADVISORY-WATCH.md), [MCUBOOT-KEY-CEREMONY.md](MCUBOOT-KEY-CEREMONY.md), [HW-BRINGUP-CHECKLIST.md](HW-BRINGUP-CHECKLIST.md)
 
 > **Disclaimer:** This document is an **engineering gap analysis and programme plan**. It is **not legal advice**, **not a conformity assessment**, **not an EU Declaration of Conformity**, and **not CE / UKCA sign-off**. Product classification, support-period justification, Annex VII technical documentation, and Article 14 reporting require qualified legal/regulatory review before placing products on the EU or UK market.
 
@@ -138,7 +138,7 @@ Align CRA work with PSTI; confirm B2B industrial exemptions with counsel if clai
 
 ### Before production / Dec 2027 claims
 
-- [ ] Hardware-proven RT1170 Mender OTA + MCUboot rollback  
+- [ ] Hardware-proven RT1170 Mender OTA + MCUboot rollback — see [HW-BRINGUP-CHECKLIST.md](HW-BRINGUP-CHECKLIST.md) §2 (**blocked: no EVK yet**)  
 - [x] Key ceremony procedure ([MCUBOOT-KEY-CEREMONY.md](MCUBOOT-KEY-CEREMONY.md)); `MCUBOOT_SIGNATURE_KEY_FILE` + `RELEASE_BUILD=1` gate — **prod PEM still to be generated offline**  
 - [x] Production profile sketch ([boards/mimxrt1170_production.conf](../boards/mimxrt1170_production.conf)) — no lab shell; validate on product HW  
 - [ ] HAB manufacturing flow (spare units only for fuse experiments)  
