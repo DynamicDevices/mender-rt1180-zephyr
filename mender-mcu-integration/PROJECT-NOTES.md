@@ -88,6 +88,21 @@ Use **separate** `west build -d …` directories so EVK, FRDM, and `native_sim` 
 
 Override with `BUILD_DIR=…` (build scripts) or `MENDER_BUILD_DIR=…` (deployment scripts). **Do not reuse** the legacy shared `build/` directory across boards — if you still have an old mixed tree, remove it: `rm -rf build` (outputs only — not tracked sources).
 
+### Single-writer workspace policy
+
+Canonical Cursor root: **`/data_drive/dd/mender`** (realpath). Do not open this tree via `/home/ajlennon/data_drive/...`, a multi-root workspace file, or a linked worktree path — Cursor treats alternate paths as separate projects.
+
+| Rule | Detail |
+|------|--------|
+| Writers | One write-capable agent only; research/review subagents may not edit |
+| Worktrees | Default **ban**. Exception only with Alex's named branch + lifetime |
+| West deps | One West topdir per checkout; never symlink `.west/`, `zephyr/`, `modules/`, `bootloader/`, or `build*` across trees |
+| App modules | `mender-mcu-integration/modules/*` is **tracked** source; root `/modules/` is West-only and gitignored |
+| Source of truth | GitHub feature-branch checkpoints via `./scripts/safety-checkpoint.sh` |
+| Guard | `./scripts/check-workspace-safety.py` (local) and `--handoff` before session end; CI runs ignore-policy checks |
+
+Exception process: ask Alex first → isolated West workspace with fresh deps → checkpoint and push before handoff → Trash the complete worktree only after `git status --short --ignored` is clean and the remote commit is verified (`git worktree prune` after Trash, never `worktree remove --force` as the deletion step).
+
 
 ## Scripts inventory
 
@@ -116,6 +131,11 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 | `scripts/run-vemu-demo.sh` | Build `hello_world` for nRF5340 and print vemulator.com load instructions |
 | `scripts/build-mender-vemu.sh` | Sysbuild Mender app for `nrf5340dk/nrf5340/cpuapp` (noop module; uses `boards/nrf5340dk_nrf5340_cpuapp.conf`) |
 | `scripts/test-mender-vemu.sh` | Build + run Mender image in headless vemu (slow — increase `--frames`) |
+| `scripts/check-workspace-safety.py` | Single-writer / ignore-policy / worktree guard (`--ci`, `--handoff`, `--diag`) |
+| `scripts/safety-checkpoint.sh` | Commit + push a labelled checkpoint on a feature branch (no amend/force) |
+| `scripts/build-el133-ztest.sh` | Build + run EL133UF1 mock-SPI sequence ztest on `native_sim` |
+| `scripts/eink-verify-sim.sh` | Offline e-ink verify gate (fixtures, selftest, driver check, ztest, file:// sync) |
+| `scripts/run-native-sim-etabelone.sh` | Live e-tabelone → ES6F → native_sim scheduled-display proof |
 
 ## Prerequisites
 

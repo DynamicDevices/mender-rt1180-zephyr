@@ -1,0 +1,33 @@
+---
+description: Mender workspace safety — canonical path, single writer, GitHub checkpoints, ignore guards
+alwaysApply: true
+---
+
+# Mender workspace safety
+
+## Canonical identity
+
+- Repository root must be `/data_drive/dd/mender` (realpath). Do not open via `/home/ajlennon/data_drive/...`, `dd.code-workspace`, or a linked worktree path.
+- This checkout is the **only** write-capable tree for Mender/RT1170 work unless Alex explicitly authorizes a named exception.
+
+## Before and after write work
+
+1. Run `./scripts/check-workspace-safety.py` (local mode) at session start.
+2. After meaningful progress, run `./scripts/safety-checkpoint.sh "<message>"` so the change is committed and pushed to GitHub.
+3. Before handoff/cleanup/session end, run `./scripts/check-workspace-safety.py --handoff` and leave a clean, pushed tree.
+
+## Source tracking rules
+
+- West dependencies live at repo-root `/zephyr/`, `/modules/`, `/bootloader/`, `/.west/` and stay **gitignored**.
+- Application modules under `mender-mcu-integration/modules/` are **tracked source**. Never reintroduce an unanchored `modules/` ignore rule.
+- Refuse to proceed if `git check-ignore` matches any source under `mender-mcu-integration/` or `scripts/` that should be tracked.
+- Secrets (`*-local.conf`, tokens) stay ignored and must never be staged.
+
+## Parallelism ban (default)
+
+- No second write agent, no `/worktree`, no Best-of-N, no cloud write handoff, no shared/symlinked West deps.
+- Read-only research subagents are allowed.
+
+## Explicit exception
+
+If Alex requires parallel write work: stop and confirm branch + lifetime; create an isolated West workspace with fresh deps (no shared symlinks); checkpoint and push before handoff; Trash the worktree only after `git status --short --ignored` is clean and the remote commit is verified.
