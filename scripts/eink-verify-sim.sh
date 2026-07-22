@@ -30,6 +30,8 @@ echo "OK: selftest + display init + 32 MiB LittleFS"
 
 python3 scripts/eink-check-el133-driver.py
 
+python3 scripts/eink-check-rt1170-profiles.py
+
 # Runtime: mock-SPI ztest asserts the exact init + refresh opcode order
 ./scripts/build-el133-ztest.sh
 

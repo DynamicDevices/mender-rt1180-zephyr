@@ -207,7 +207,6 @@ static int ensure_wall_clock(void)
 {
 	struct timespec tspec;
 	int64_t now = (int64_t)time(NULL);
-	int ret;
 
 	/* Already past 2024-01-01 — good enough for Amz signature windows. */
 	if (now >= 1704067200LL) {
@@ -235,6 +234,7 @@ static int ensure_wall_clock(void)
 #if defined(CONFIG_SNTP)
 	{
 		struct sntp_time sntp_time;
+		int ret;
 
 		ret = sntp_simple(CONFIG_APP_EINK_HTTP_SNTP_SERVER, 5000, &sntp_time);
 		if (ret) {
@@ -906,6 +906,15 @@ static int parse_config_json(const char *json, size_t json_len, struct eink_sche
 	ori = cJSON_GetObjectItemCaseSensitive(root, "orientation");
 	if (orientation && cJSON_IsNumber(ori)) {
 		*orientation = ori->valueint;
+	}
+
+	/* Optional cloud force-sync hint (cleared server-side after this GET). */
+	{
+		cJSON *sync_now = cJSON_GetObjectItemCaseSensitive(root, "sync_now");
+
+		if (cJSON_IsTrue(sync_now)) {
+			LOG_INF("cloud sync_now requested — full sync this wake");
+		}
 	}
 
 	sched = cJSON_GetObjectItemCaseSensitive(root, "schedule");

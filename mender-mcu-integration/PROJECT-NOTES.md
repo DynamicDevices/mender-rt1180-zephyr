@@ -85,6 +85,8 @@ Use **separate** `west build -d …` directories so EVK, FRDM, and `native_sim` 
 | FRDM-IMXRT1186 CM33 | `build-frdm-rt1186/` | `./scripts/build-rt1186-frdm.sh` |
 | `native_sim` (Phase 0b) | `build-native_sim/` | `./scripts/build-native-sim.sh` |
 | MIMXRT1170-EVK CM7 | `build-rt1170-evk/` | `./scripts/build-rt1170-evk.sh` |
+| MIMXRT1170-EVK LCD lab | `build-rt1170-evk-lcd/` | `./scripts/build-rt1170-evk-lcd.sh` (`rk055hdmipi4ma0`) |
+| MIMXRT1170-EVK EL133 lab | `build-rt1170-evk-eink/` | `./scripts/build-rt1170-evk-eink.sh` (SPI; no MIPI shield) |
 
 Override with `BUILD_DIR=…` (build scripts) or `MENDER_BUILD_DIR=…` (deployment scripts). **Do not reuse** the legacy shared `build/` directory across boards — if you still have an old mixed tree, remove it: `rm -rf build` (outputs only — not tracked sources).
 
@@ -124,6 +126,9 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 | `scripts/create-native-sim-deployment.sh` | Build noop-update artifact (`device_type` `native_sim`) and create **one** Hosted Mender deployment (`MENDER_DEPLOY_TARGET=device` \| `device_type` \| `group`; default group **`simulator`**) |
 | `scripts/build-rt1180-evk.sh` | Sysbuild Mender for EVK CM33 (default `build-rt1180-evk/`) |
 | `scripts/build-rt1186-frdm.sh` | Sysbuild Mender for FRDM-IMXRT1186 CM33 (default `build-frdm-rt1186/`) |
+| `scripts/build-rt1170-evk.sh` | Sysbuild Mender for MIMXRT1170-EVK CM7 (default `build-rt1170-evk/`) |
+| `scripts/build-rt1170-evk-lcd.sh` | EVK + Rocktech RK055 MIPI LCD preview lab (`rk055hdmipi4ma0`; default `build-rt1170-evk-lcd/`) |
+| `scripts/build-rt1170-evk-eink.sh` | EVK SPI EL133 lab (no MIPI shield; default `build-rt1170-evk-eink/`) |
 | `scripts/generate-sbom.sh` | Run `west spdx` for EVK and FRDM build trees (WS3; requires prior sysbuild) |
 | `scripts/create-rt1180-deployment.sh` | Upload `zephyr.mender` (default `device_type` `mimxrt1180_evk`, `build-rt1180-evk/`) — **one** deployment (default group **`rt1180-lab`**) |
 | `scripts/create-rt1186-frdm-deployment.sh` | Same as above for FRDM (`device_type` `frdm_imxrt1186`, `build-frdm-rt1186/`) |
@@ -135,6 +140,7 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 | `scripts/safety-checkpoint.sh` | Commit + push a labelled checkpoint on a feature branch (no amend/force) |
 | `scripts/build-el133-ztest.sh` | Build + run EL133UF1 mock-SPI sequence ztest on `native_sim` |
 | `scripts/eink-verify-sim.sh` | Offline e-ink verify gate (fixtures, selftest, driver check, ztest, file:// sync) |
+| `scripts/eink-check-rt1170-profiles.py` | Static RT1170 lab LCD/EL133 + Active ESL profile contract checks |
 | `scripts/eink-duty-smoke.sh` | native_sim battery duty-cycle smoke (gallery cache + schedule `next_wake` + SNVS stub) |
 | `scripts/run-native-sim-etabelone.sh` | Live e-tabelone → ES6F → native_sim scheduled-display proof |
 
@@ -326,6 +332,29 @@ west flash -d build-rt1170-evk
 ```
 
 **Status:** host sysbuild + `zephyr.mender` validate **done**; hardware Phase 1–2 **TBD**.
+
+### Lab display profiles (mutually exclusive)
+
+| Profile | Script | Display | Notes |
+|---------|--------|---------|-------|
+| Baseline Mender | `build-rt1170-evk.sh` | none | ENET + OTA |
+| **LCD preview** | `build-rt1170-evk-lcd.sh` | Rocktech **RK055HDMIPI4MA0** 5.5″ 720×1280 MIPI (J48) | `APP_EINK_DISPLAY_LCD_PREVIEW`; EVK SDRAM FB; **no** LPSPI1 EL133 |
+| **EL133 SPI** | `build-rt1170-evk-eink.sh` | Spectra 6 EL133UF1 on LPSPI1 | Overlay GPIOs placeholder (`status=disabled`); interim `dummy_dc` until schematic; **no** MIPI shield |
+| OCRAM / duty | `*_eink_sram.*` | streaming | Product-shaped on EVK silicon |
+
+LCDIF pinmux conflicts with `lpspi1` — never enable Rocktech shield and EL133 in one image.
+
+### Active ESL custom board (product)
+
+Canonical HW: [AESL-HW-RT1170-EINK-SPEC Rev 0.7](https://docs.google.com/document/d/1Zrje-6nrLAaI-ybceKSXUtsPTWGLB2za3GwrCAGfrfw/edit).
+
+| Topic | Direction |
+|-------|-----------|
+| SDRAM | **DNP** footprint; see [SDRAM-DECISION.md](docs/SDRAM-DECISION.md) |
+| FlexSPI1 | 16–32 MB XIP (MCUboot + A/B) |
+| FlexSPI2 | 64 MB assets + OTA staging — [mimxrt1170_custom_eink_flexspi2.overlay](boards/mimxrt1170_custom_eink_flexspi2.overlay) |
+| Display | SPI EL133 only (no MIPI LCD) |
+| Conf fragment | [mimxrt1170_aesl_eink.conf](boards/mimxrt1170_aesl_eink.conf) |
 
 ### Improv BLE provisioning with IW612
 
@@ -1654,6 +1683,8 @@ Track overlay-repo history on [DynamicDevices/mender-rt1180-zephyr](https://gith
 | Headless display path (`dummy_dc` 1200×1600) | **Proven** | `eink display ready (dummy_dc)` |
 | Packed-frame fixtures (size/CRC) | **Proven** | `scripts/gen-eink-frame.py` |
 | EL133 driver sequence invariants (mock) | **Proven** | `scripts/eink-check-el133-driver.py` |
+| RT1170 LCD/EL133/AESL profile contracts | **Proven** | `scripts/eink-check-rt1170-profiles.py` |
+| Spectra→RGB565 LCD preview map | **Proven** | `test_nibble_to_rgb565` in `eink selftest` |
 | SDL visual colour/split | Optional | Needs 32-bit SDL2; `native_sim_eink_sdl.overlay` |
 | e-tabelone `file://` fixture HTTP | Implemented | Local JSON under store root |
 | EVK SPI wiring | **Pending schematic** | Overlay pins are placeholders (`*_eink_el133.overlay`) |

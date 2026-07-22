@@ -246,3 +246,13 @@ uint32_t eink_frame_nibble_to_argb(uint8_t nibble)
 		return 0xFF808080u;
 	}
 }
+
+uint16_t eink_frame_nibble_to_rgb565(uint8_t nibble)
+{
+	uint32_t argb = eink_frame_nibble_to_argb(nibble);
+	uint8_t r = (uint8_t)((argb >> 16) & 0xffu);
+	uint8_t g = (uint8_t)((argb >> 8) & 0xffu);
+	uint8_t b = (uint8_t)(argb & 0xffu);
+
+	return (uint16_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+}

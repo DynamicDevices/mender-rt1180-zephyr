@@ -16,8 +16,19 @@ Generator: `scripts/gen-eink-frame.py`.
 ## Display API boundary
 
 Application code talks only to `eink_display_*` / Zephyr `display_*`.
-Simulator uses SDL (ARGB8888 conversion from L_4). Hardware uses out-of-tree
-`eink,el133uf1` driver (dual CS GPIO, full-frame write, blanking-gated refresh).
+Simulator uses SDL (ARGB8888 conversion from L_4). Hardware profiles:
+
+| Profile | Backend | Geometry |
+|---------|---------|----------|
+| `native_sim` | SDL / `dummy_dc` | 1200×1600 (or landscape window) |
+| EVK LCD lab (`APP_EINK_DISPLAY_LCD_PREVIEW`) | Rocktech RK055 MIPI via LCDIF | Scale ES6F → **720×1280** RGB565 |
+| EVK / product EL133 | `eink,el133uf1` stream | **1200×1600** L_4 Spectra 6 |
+
+LCD lab and EL133/`lpspi1` are **mutually exclusive** on the EVK (LCDIF vs
+LPSPI1 pinmux). Product Active ESL board: EL133 + dual FlexSPI, **no** MIPI
+LCD, SDRAM DNP — see PROJECT-NOTES and AESL-HW-RT1170-EINK-SPEC Rev 0.7.
+
+Build helpers: `scripts/build-rt1170-evk-lcd.sh`, `scripts/build-rt1170-evk-eink.sh`.
 
 ## Scheduler pure core
 
@@ -56,7 +67,14 @@ eink location clear
 
 Persisted under `{APP_EINK_STORE_ROOT}/location.json`. A future GNSS driver
 should call `eink_location_set()` / `eink_location_clear()` — do not invent
-DTS/drivers here until the hardware path is confirmed.
+DTS/drivers here until the hardware path is confirmed (UART/SPI/modem TBD for
+Jaguar/RT1170). Remaining GNSS work is **hardware bring-up + driver**, not
+cloud or shell API.
+
+Device `GET …/config` may include `"sync_now": true` when an operator requested
+force-sync; the cloud clears the flag after that response. Clients should treat
+it as a hint to complete a full sync this wake (log/observe; optional freshness
+invalidation). It is not a push wake.
 
 Production accepts **ES6F** raw, or an **LZ4 frame** whose decompressed
 payload is a complete ES6F v1 file (magic `04 22 4D 18`, same as `lz4 -f`).

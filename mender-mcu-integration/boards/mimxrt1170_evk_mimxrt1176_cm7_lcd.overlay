@@ -1,0 +1,48 @@
+/*
+ * EVK lab (rev B default): carve LittleFS from the large NOR tail after A/B.
+ * Keeps 128 KiB storage_partition for Mender NVS; rest is /lfs1 e-ink store.
+ *
+ * Upstream mimxrt1170_evk@B uses w25q512nw (64 MiB). Do not reference the
+ * older is25wp128 label from the base dtsi.
+ *
+ * Pair with boards/mimxrt1170_evk_mimxrt1176_cm7_lcd.conf and
+ * ./scripts/build-rt1170-evk-lcd.sh (--shield rk055hdmipi4ma0).
+ */
+/delete-node/ &storage_partition;
+
+/ {
+	fstab {
+		compatible = "zephyr,fstab";
+
+		eink_lfs: eink_lfs {
+			compatible = "zephyr,fstab,littlefs";
+			mount-point = "/lfs1";
+			partition = <&eink_storage_partition>;
+			automount;
+			read-size = <16>;
+			prog-size = <16>;
+			cache-size = <256>;
+			lookahead-size = <128>;
+			block-cycles = <512>;
+		};
+	};
+};
+
+&w25q512nw {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		storage_partition: partition@e20000 {
+			label = "storage";
+			reg = <0x00e20000 DT_SIZE_K(128)>;
+		};
+
+		/* ~49.75 MiB gallery / staging on EVK lab NOR */
+		eink_storage_partition: partition@e40000 {
+			label = "eink-storage";
+			reg = <0x00e40000 0x031c0000>;
+		};
+	};
+};

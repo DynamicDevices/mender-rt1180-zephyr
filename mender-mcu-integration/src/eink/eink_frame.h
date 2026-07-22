@@ -110,4 +110,7 @@ int eink_frame_build(uint8_t *out, size_t out_cap, const uint8_t *payload, uint8
 /** Map Spectra6 nibble to approximate ARGB8888 for SDL. */
 uint32_t eink_frame_nibble_to_argb(uint8_t nibble);
 
+/** Map Spectra6 nibble to RGB565 for MIPI LCD lab preview. */
+uint16_t eink_frame_nibble_to_rgb565(uint8_t nibble);
+
 #endif /* EINK_FRAME_H */

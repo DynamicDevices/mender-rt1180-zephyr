@@ -240,6 +240,17 @@ if APP_EINK
 		  remain disabled on the custom-board production / OCRAM-only
 		  profile.
 
+	config APP_EINK_DISPLAY_LCD_PREVIEW
+		bool "Rocktech MIPI LCD preview (lab EVK stand-in)"
+		depends on APP_EINK && DISPLAY
+		default n
+		help
+		  Blit a scaled RGB565 preview of ES6F onto zephyr,display
+		  (Rocktech RK055HDMIPI4MA0 720x1280 via --shield rk055hdmipi4ma0).
+		  Lab-only: uses an ~1.8 MiB RGB565 framebuffer (EVK SDRAM).
+		  Mutually exclusive with EL133/LPSPI1 e-ink images (LCDIF vs
+		  lpspi1 pinmux). Not for the Active ESL product board.
+
 	config APP_EINK_BATTERY_DUTY_CYCLE
 		bool "Cold-boot duty-cycle wake machine (SNVS field mode)"
 		default n

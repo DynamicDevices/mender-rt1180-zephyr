@@ -1,16 +1,20 @@
 /*
- * Custom-board dual-FlexSPI map (provisional — pinmux TBD with hardware).
+ * Active ESL custom board — dual FlexSPI map (AESL-HW-RT1170-EINK-SPEC Rev 0.7).
  *
- * FlexSPI1: XIP / MCUboot / slot0 / slot1 / small NVS
- * FlexSPI2: OTA staging (raw) + e-ink LittleFS gallery
+ * FlexSPI1 (16–32 MB XIP): MCUboot + slot0 + slot1 + small NVS
+ * FlexSPI2 (64 MB data):   OTA staging + e-ink LittleFS gallery
  *
- * Part numbers and sizes are placeholders until Michael confirms BOM.
+ * SDRAM: DNP on product BOM (streaming ES6F / EL133; no production FB).
+ * Display: SPI EL133UF1 only — no Rocktech / MIPI LCDIF on this board.
+ *
+ * Pinmux / part numbers TBD with schematic freeze. Partition sizes below match
+ * the preferred baseline; adjust when BOM NOR densities are locked.
  */
 / {
 	fstab {
 		compatible = "zephyr,fstab";
 		lfs1: lfs1 {
-			compatible = "zephyr,fstab-littlefs";
+			compatible = "zephyr,fstab,littlefs";
 			mount-point = "/lfs1";
 			partition = <&eink_storage>;
 			read-size = <16>;
@@ -21,11 +25,28 @@
 			automount;
 		};
 	};
+
+	/*
+	 * Optional rail GPIOs for eink_power_iw612_set() / eink_power_panel_set():
+	 *
+	 * zephyr,user {
+	 *	iw612-enable-gpios = <&gpio3 0 GPIO_ACTIVE_HIGH>;
+	 *	panel-enable-gpios = <&gpio3 1 GPIO_ACTIVE_HIGH>;
+	 * };
+	 */
 };
 
-/* Placeholder partitions — enable FlexSPI2 node once custom DTS exists. */
-/* &flexspi2 {
+/*
+ * Enable FlexSPI2 + partitions once custom DTS / pinmux exists.
+ *
+ * Example layout (64 MiB FlexSPI2):
+ *   0x00000000–0x007FFFFF  8 MiB  ota-staging
+ *   0x00800000–0x03FFFFFF 56 MiB  eink-storage (LittleFS)
+ *
+ * &flexspi2 {
  *	status = "okay";
+ *	pinctrl-0 = <&pinmux_flexspi2>;
+ *	pinctrl-names = "default";
  *	partitions {
  *		compatible = "fixed-partitions";
  *		#address-cells = <1>;
@@ -41,15 +62,3 @@
  *	};
  * };
  */
-
-/*
- * Optional rail GPIOs for eink_power_iw612_set() / eink_power_panel_set():
- *
- * / {
- *	zephyr,user {
- *		iw612-enable-gpios = <&gpio3 0 GPIO_ACTIVE_HIGH>;
- *		panel-enable-gpios = <&gpio3 1 GPIO_ACTIVE_HIGH>;
- *	};
- * };
- */
-
