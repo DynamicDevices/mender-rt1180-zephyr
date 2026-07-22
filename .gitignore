@@ -1,13 +1,13 @@
 # West workspace dependencies (west update — do not commit)
-# Trailing-slash rules ignore directories; bare names also cover shared symlinks in worktrees.
-zephyr/
-modules/
-bootloader/
-.west/
-zephyr
-modules
-bootloader
-.west
+# Anchor to repo root so mender-mcu-integration/modules/* stays trackable.
+/zephyr/
+/modules/
+/bootloader/
+/.west/
+/zephyr
+/modules
+/bootloader
+/.west
 
 # Local tooling and caches
 .tools/

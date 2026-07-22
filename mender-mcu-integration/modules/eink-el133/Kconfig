@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+
+config ZEPHYR_EINK_EL133_MODULE
+	bool
+	default y
+
+menuconfig EL133UF1
+	bool "EL133UF1 Spectra 6 e-ink display"
+	default y
+	depends on DT_HAS_EINK_EL133UF1_ENABLED
+	select DISPLAY
+	help
+	  Out-of-tree Zephyr driver for the EL133UF1 dual-controller
+	  Spectra 6 panel (1200x1600, L_4 packed payload).

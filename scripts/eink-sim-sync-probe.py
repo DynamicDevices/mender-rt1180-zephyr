@@ -17,10 +17,11 @@ ANSI = re.compile(r"\x1b\[[0-9;]*[mKJ]")
 
 
 def main() -> int:
+    repo_root = Path(__file__).resolve().parent.parent
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--bin",
-        default="/data_drive/dd/mender-rt1170/build-native_sim-eink/zephyr/zephyr.exe",
+        default=str(repo_root / "build-native_sim-eink/zephyr/zephyr.exe"),
     )
     ap.add_argument("--device", default="sim-local")
     ap.add_argument("--image", default="/tmp/eink-zephyr/images/white.es6f")
