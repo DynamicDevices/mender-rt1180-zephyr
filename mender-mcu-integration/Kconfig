@@ -109,15 +109,25 @@ if APP_EINK
 		range 30 86400
 
 	config APP_EINK_HTTP_GALLERY_DEFER
-		bool "Defer gallery ES6F downloads until after paint+telemetry"
+		bool "Defer gallery ES6F downloads until after paint"
 		depends on APP_EINK_HTTP
 		default y
 		help
-		  Download and paint the due image first, post telemetry, then
-		  cache the remaining schedule images on the HTTP workqueue.
-		  Keeps radio-awake time to first visible frame much shorter.
+		  Download and paint the due image first, then cache the remaining
+		  schedule images on the HTTP workqueue (after deferred telemetry
+		  when that option is enabled). Keeps time-to-first-frame short.
 		  On CONFIG_APP_EINK_BATTERY_DUTY_CYCLE, gallery is skipped so
-		  the radio can drop immediately after telemetry.
+		  the radio can drop immediately after telemetry flush.
+
+	config APP_EINK_HTTP_TELEMETRY_DEFER
+		bool "Fire-and-forget telemetry after paint"
+		depends on APP_EINK_HTTP
+		default y
+		help
+		  Queue telemetry POST on the HTTP workqueue after the primary
+		  paint so sync_once can return without waiting for the round
+		  trip. Callers that power the radio down (duty-cycle wake)
+		  must call eink_http_flush_deferred() first.
 
 	config APP_EINK_HTTP_FAST_PATH
 		bool "Telem-only sync when schedule is fresh and image is cached"
@@ -152,8 +162,10 @@ if APP_EINK
 		depends on APP_EINK_HTTP
 		default y
 		help
-		  Remember the last successful config body CRC32. Unchanged
-		  bodies reuse the prior schedule/image URL table.
+		  Remember the last successful config body CRC32 and ETag.
+		  Unchanged bodies reuse the prior schedule/image URL table.
+		  When the server returns 304 Not Modified (If-None-Match),
+		  skip the body entirely and reuse the RAM cache.
 
 	config APP_EINK_STORE_QUICK_CACHE_CHECK
 		bool "Treat ES6F cache hits as valid from header+size only"

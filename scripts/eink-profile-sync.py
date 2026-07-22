@@ -356,7 +356,11 @@ def main() -> int:
                     f"- Paint/tick {s['paint']} ms — profile display blit / SDL present."
                 )
             if s["telem"] > 200:
-                print(f"- Telemetry {s['telem']} ms — fire-and-forget or batch.")
+                print(f"- Telemetry {s['telem']} ms — enable TELEMETRY_DEFER or batch.")
+            if s["config"] > 500:
+                print(
+                    f"- Config {s['config']} ms — check 304/ETag path and TLS session cache."
+                )
         if warm and warm["sync"] and warm["sync"]["config"] > 200:
             print(
                 f"- Config fetch {warm['sync']['config']} ms on warm path — "

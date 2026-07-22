@@ -52,6 +52,8 @@ int eink_wake_run_once(void)
 			if (ret < 0) {
 				LOG_WRN("sync_once failed (%d) — backoff then sleep", ret);
 			}
+			/* Deferred telem must finish before IW612 drops. */
+			(void)eink_http_flush_deferred(K_SECONDS(60));
 		}
 		(void)eink_power_iw612_set(false);
 	}

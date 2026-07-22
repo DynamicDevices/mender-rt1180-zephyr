@@ -48,6 +48,7 @@ class Bridge:
         self.image_urls: dict[str, str] = {}
         self.lock = threading.Lock()
         self._id_locks: dict[str, threading.Lock] = {}
+        self._config_etag: str | None = None
         self.converter = Path(__file__).with_name("gen-eink-frame.py")
         cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -112,9 +113,13 @@ class Bridge:
         with self.lock:
             self.image_urls = next_urls
         out = json.dumps(config, separators=(",", ":")).encode()
+        etag = f'"{hashlib.sha256(out).hexdigest()[:16]}"'
+        with self.lock:
+            self._config_etag = etag
         print(
             f"bridge: config images={len(next_urls)} bytes={len(out)} "
-            f"upstream={fetch_ms:.0f} ms total={(time.perf_counter() - t0) * 1000:.0f} ms",
+            f"etag={etag} upstream={fetch_ms:.0f} ms "
+            f"total={(time.perf_counter() - t0) * 1000:.0f} ms",
             flush=True,
         )
         # Warm ES6F cache in the background so gallery GETs are usually hits.
@@ -126,6 +131,11 @@ class Bridge:
                 daemon=True,
             ).start()
         return out
+
+    @property
+    def config_etag(self) -> str | None:
+        with self.lock:
+            return self._config_etag
 
     def _prefetch_all(self, image_ids: list[str]) -> None:
         t0 = time.perf_counter()
@@ -240,19 +250,39 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: object) -> None:
         print(f"bridge: {fmt % args}", flush=True)
 
-    def send_body(self, status: int, content_type: str, body: bytes) -> None:
+    def send_body(
+        self,
+        status: int,
+        content_type: str,
+        body: bytes,
+        *,
+        etag: str | None = None,
+    ) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        if etag:
+            self.send_header("ETag", etag)
         self.end_headers()
-        self.wfile.write(body)
+        if body:
+            self.wfile.write(body)
 
     def do_GET(self) -> None:  # noqa: N802
         try:
             parsed = urllib.parse.urlsplit(self.path)
             config_path = f"/node/v0/device/{self.bridge.device_id}/config"
             if parsed.path == config_path:
-                self.send_body(200, "application/json", self.bridge.config())
+                body = self.bridge.config()
+                etag = self.bridge.config_etag
+                inm = self.headers.get("If-None-Match")
+                if etag and inm and inm.strip() == etag:
+                    print("bridge: config 304 Not Modified", flush=True)
+                    self.send_response(304)
+                    self.send_header("ETag", etag)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                self.send_body(200, "application/json", body, etag=etag)
                 return
             prefix = "/images/"
             if parsed.path.startswith(prefix) and parsed.path.endswith(".es6f"):

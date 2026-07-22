@@ -11,6 +11,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include <zephyr/kernel.h>
+
 /* Dev S3 presigned URLs are ~1.7–2 KiB; keep headroom for redirects/query growth. */
 #define EINK_HTTP_URL_MAX 2048
 #define EINK_HTTP_MAX_IMAGES 16
@@ -50,6 +52,12 @@ int eink_http_post_telemetry(const struct eink_schedule *sched,
 
 /** Fetch config, download/validate frames, update scheduler, and post telemetry. */
 int eink_http_sync_once(void);
+
+/**
+ * Wait for deferred telemetry (and any in-flight HTTP work that must finish
+ * before radio-off). No-op when APP_EINK_HTTP_TELEMETRY_DEFER is disabled.
+ */
+int eink_http_flush_deferred(k_timeout_t timeout);
 
 /**
  * True when this wake should power the radio for e-tabelone.

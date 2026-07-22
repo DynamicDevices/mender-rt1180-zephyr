@@ -80,6 +80,8 @@ struct body_ctx {
 	int err;
 	char location[EINK_HTTP_LOCATION_MAX];
 	bool location_set;
+	char etag[128];
+	bool etag_set;
 };
 
 struct hdr_scan {
@@ -87,6 +89,10 @@ struct hdr_scan {
 	char *location;
 	size_t location_cap;
 	bool *location_set;
+	bool collecting_etag;
+	char *etag;
+	size_t etag_cap;
+	bool *etag_set;
 };
 
 static struct eink_http_config cfg;
@@ -104,6 +110,7 @@ static int sync_once_result;
 #if defined(CONFIG_APP_EINK_HTTP_CONFIG_CACHE)
 static uint32_t cached_config_crc;
 static bool config_cache_valid;
+static char cached_config_etag[128];
 static struct eink_schedule cached_sched;
 static struct eink_http_image cached_images[EINK_HTTP_MAX_IMAGES];
 static size_t cached_image_count;
@@ -117,6 +124,19 @@ static struct {
 	char skip_id[EINK_ID_MAX];
 	bool pending;
 } gallery_job;
+#endif
+
+#if defined(CONFIG_APP_EINK_HTTP_TELEMETRY_DEFER)
+static struct {
+	struct eink_schedule sched;
+	char last_job[EINK_ID_MAX];
+	int64_t next_wake;
+	int64_t now;
+	bool pending;
+	int result;
+} telem_job;
+static struct k_work telem_work;
+static struct k_sem telem_done;
 #endif
 
 static uint8_t cjson_arena[EINK_CJSON_ARENA_SIZE] __aligned(8);
@@ -165,6 +185,11 @@ static void cjson_arena_leave(void)
 
 static int eink_http_sync_once_inner(void);
 static void ensure_http_queue(void);
+#if defined(CONFIG_APP_EINK_HTTP_TELEMETRY_DEFER)
+static void telem_work_handler(struct k_work *work);
+static int queue_deferred_telem(const struct eink_schedule *sched, const char *last_job,
+				int64_t next_wake, int64_t now);
+#endif
 #if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER)
 static void gallery_work_handler(struct k_work *work);
 #endif
@@ -378,6 +403,16 @@ static int connect_url(const struct url_parts *u)
 			LOG_ERR("TLS_PEER_VERIFY failed: %d", ret);
 			goto out;
 		}
+		{
+			int cache = TLS_SESSION_CACHE_ENABLED;
+
+			ret = zsock_setsockopt(sock, SOL_TLS, TLS_SESSION_CACHE, &cache,
+					       sizeof(cache));
+			if (ret < 0) {
+				/* Non-fatal: continue with full handshakes. */
+				LOG_DBG("TLS_SESSION_CACHE enable failed: %d", -errno);
+			}
+		}
 #else
 		ret = -ENOTSUP;
 		goto out;
@@ -473,30 +508,48 @@ static int on_hdr_field2(struct http_parser *parser, const char *at, size_t leng
 {
 	ARG_UNUSED(parser);
 	g_scan.collecting_location = (length == 8 && strncasecmp(at, "Location", 8) == 0);
+	g_scan.collecting_etag = (length == 4 && strncasecmp(at, "ETag", 4) == 0);
 	return 0;
 }
 
 static int on_hdr_value2(struct http_parser *parser, const char *at, size_t length)
 {
 	ARG_UNUSED(parser);
-	if (!g_scan.collecting_location || g_scan.location == NULL) {
+	if (g_scan.collecting_location && g_scan.location != NULL) {
+		if (length >= g_scan.location_cap) {
+			length = g_scan.location_cap - 1;
+		}
+		memcpy(g_scan.location, at, length);
+		g_scan.location[length] = '\0';
+		if (g_scan.location_set) {
+			*g_scan.location_set = true;
+		}
+		g_scan.collecting_location = false;
 		return 0;
 	}
-	if (length >= g_scan.location_cap) {
-		length = g_scan.location_cap - 1;
+	if (g_scan.collecting_etag && g_scan.etag != NULL) {
+		/* Trim leading whitespace common in folded header values. */
+		while (length > 0 && (*at == ' ' || *at == '\t')) {
+			at++;
+			length--;
+		}
+		if (length >= g_scan.etag_cap) {
+			length = g_scan.etag_cap - 1;
+		}
+		memcpy(g_scan.etag, at, length);
+		g_scan.etag[length] = '\0';
+		if (g_scan.etag_set) {
+			*g_scan.etag_set = true;
+		}
+		g_scan.collecting_etag = false;
+		return 0;
 	}
-	memcpy(g_scan.location, at, length);
-	g_scan.location[length] = '\0';
-	if (g_scan.location_set) {
-		*g_scan.location_set = true;
-	}
-	g_scan.collecting_location = false;
 	return 0;
 }
 
 static int do_http(const char *url, enum http_method method, const char *payload,
 		   size_t payload_len, bool send_auth, struct body_ctx *body,
-		   struct download_ctx *dl, int32_t timeout_ms)
+		   struct download_ctx *dl, int32_t timeout_ms, const char *extra_hdr)
 {
 	/* Static to keep TLS + large URL paths off the shell stack. */
 	static struct url_parts parts;
@@ -504,7 +557,7 @@ static int do_http(const char *url, enum http_method method, const char *payload
 	struct http_request req;
 	struct http_parser_settings parser_cb;
 	char auth_hdr[320];
-	const char *headers[4];
+	const char *headers[5];
 	size_t h = 0;
 	int sock;
 	int ret;
@@ -525,6 +578,9 @@ static int do_http(const char *url, enum http_method method, const char *payload
 		g_scan.location = body->location;
 		g_scan.location_cap = sizeof(body->location);
 		g_scan.location_set = &body->location_set;
+		g_scan.etag = body->etag;
+		g_scan.etag_cap = sizeof(body->etag);
+		g_scan.etag_set = &body->etag_set;
 	} else if (dl) {
 		g_scan.location = dl->location;
 		g_scan.location_cap = sizeof(dl->location);
@@ -564,6 +620,9 @@ static int do_http(const char *url, enum http_method method, const char *payload
 			 cfg.auth_token);
 		headers[h++] = auth_hdr;
 	}
+	if (extra_hdr != NULL && extra_hdr[0] != '\0') {
+		headers[h++] = extra_hdr;
+	}
 	headers[h] = NULL;
 	req.header_fields = headers;
 
@@ -582,16 +641,25 @@ static int do_http(const char *url, enum http_method method, const char *payload
 }
 
 static int http_get_body(const char *url, bool send_auth, uint8_t *buf, size_t cap, size_t *out_len,
-			 int *status_code)
+			 int *status_code, const char *if_none_match, char *etag_out,
+			 size_t etag_cap)
 {
 	static char current[EINK_HTTP_URL_MAX];
 	static char next[EINK_HTTP_URL_MAX];
+	static char if_none_hdr[160];
 	struct body_ctx ctx = {
 		.buf = buf,
 		.cap = cap,
 	};
 	int redirects = 0;
 	int ret;
+	const char *extra = NULL;
+
+	if (if_none_match != NULL && if_none_match[0] != '\0') {
+		snprintk(if_none_hdr, sizeof(if_none_hdr), "If-None-Match: %s\r\n",
+			 if_none_match);
+		extra = if_none_hdr;
+	}
 
 	strncpy(current, url, sizeof(current) - 1);
 	current[sizeof(current) - 1] = '\0';
@@ -602,13 +670,19 @@ static int http_get_body(const char *url, bool send_auth, uint8_t *buf, size_t c
 		ctx.status_code = 0;
 		ctx.location_set = false;
 		ctx.location[0] = '\0';
+		ctx.etag_set = false;
+		ctx.etag[0] = '\0';
 		ret = do_http(current, HTTP_GET, NULL, 0, send_auth, &ctx, NULL,
-			      EINK_HTTP_TIMEOUT_MS);
+			      EINK_HTTP_TIMEOUT_MS, extra);
 		if (ret) {
 			return ret;
 		}
 		if (status_code) {
 			*status_code = ctx.status_code;
+		}
+		if (etag_out != NULL && etag_cap > 0 && ctx.etag_set) {
+			strncpy(etag_out, ctx.etag, etag_cap - 1);
+			etag_out[etag_cap - 1] = '\0';
 		}
 		if ((ctx.status_code == 301 || ctx.status_code == 302 || ctx.status_code == 307 ||
 		     ctx.status_code == 308) &&
@@ -617,7 +691,15 @@ static int http_get_body(const char *url, bool send_auth, uint8_t *buf, size_t c
 			strncpy(current, next, sizeof(current) - 1);
 			current[sizeof(current) - 1] = '\0';
 			redirects++;
+			/* Conditional headers apply to the original resource only. */
+			extra = NULL;
 			continue;
+		}
+		if (ctx.status_code == 304) {
+			if (out_len) {
+				*out_len = 0;
+			}
+			return 0;
 		}
 		if (ctx.status_code < 200 || ctx.status_code >= 300) {
 			LOG_WRN("HTTP GET %s -> %d", current, ctx.status_code);
@@ -663,7 +745,7 @@ static int http_download_to_file(const char *url, bool send_auth, const char *pa
 		ctx.location[0] = '\0';
 
 		ret = do_http(current, HTTP_GET, NULL, 0, send_auth && !is_s3_url(current), NULL,
-			      &ctx, EINK_HTTP_DOWNLOAD_TIMEOUT_MS);
+			      &ctx, EINK_HTTP_DOWNLOAD_TIMEOUT_MS, NULL);
 		if (ret == 0) {
 			ret = fs_sync(ctx.fp);
 		}
@@ -734,7 +816,8 @@ static int http_post_json(const char *url, const char *json)
 
 	ctx.buf = discard;
 	ctx.cap = sizeof(discard);
-	ret = do_http(url, HTTP_POST, json, strlen(json), true, &ctx, NULL, EINK_HTTP_TIMEOUT_MS);
+	ret = do_http(url, HTTP_POST, json, strlen(json), true, &ctx, NULL, EINK_HTTP_TIMEOUT_MS,
+		      NULL);
 	if (ret) {
 		return ret;
 	}
@@ -882,6 +965,9 @@ int eink_http_init(const struct eink_http_config *c)
 	}
 	k_mutex_init(&mu);
 	k_sem_init(&sync_once_done, 0, 1);
+#if defined(CONFIG_APP_EINK_HTTP_TELEMETRY_DEFER)
+	k_sem_init(&telem_done, 0, 1);
+#endif
 	cfg = *c;
 	if (cfg.tls_sec_tag == 0) {
 #if defined(CONFIG_MENDER_NET_CA_CERTIFICATE_TAG_PRIMARY)
@@ -927,13 +1013,17 @@ int eink_http_fetch_config(struct eink_schedule *out_sched, struct eink_http_ima
 {
 	static uint8_t body[EINK_HTTP_CFG_BUF];
 	static char url[EINK_HTTP_URL_MAX];
+	static char resp_etag[128];
 	size_t n = 0;
 	int status = 0;
 	int ret;
+	const char *if_none = NULL;
 
 	if (!inited || !cfg.enabled || out_sched == NULL) {
 		return -EINVAL;
 	}
+
+	resp_etag[0] = '\0';
 
 	if (strncmp(cfg.api_base, "file://", 7) == 0) {
 		char path[768];
@@ -948,11 +1038,39 @@ int eink_http_fetch_config(struct eink_schedule *out_sched, struct eink_http_ima
 		snprintf(url, sizeof(url), "%s/node/v0/device/%s/config", cfg.api_base,
 			 cfg.device_id);
 		LOG_INF("GET %s", url);
-		ret = http_get_body(url, true, body, sizeof(body) - 1, &n, &status);
+#if defined(CONFIG_APP_EINK_HTTP_CONFIG_CACHE)
+		if (config_cache_valid && cached_config_etag[0] != '\0') {
+			if_none = cached_config_etag;
+		}
+#endif
+		ret = http_get_body(url, true, body, sizeof(body) - 1, &n, &status, if_none,
+				    resp_etag, sizeof(resp_etag));
 		if (ret) {
 			LOG_WRN("config HTTP transport failed: %d status=%d len=%u", ret, status,
 				(unsigned)n);
 			return ret;
+		}
+		if (status == 304) {
+#if defined(CONFIG_APP_EINK_HTTP_CONFIG_CACHE)
+			if (config_cache_valid) {
+				memcpy(out_sched, &cached_sched, sizeof(*out_sched));
+				if (images != NULL && image_count != NULL) {
+					size_t copy = MIN(image_cap, cached_image_count);
+
+					memcpy(images, cached_images, copy * sizeof(images[0]));
+					*image_count = copy;
+				}
+				if (orientation) {
+					*orientation = cached_orientation;
+				}
+				LOG_INF("config 304 Not Modified — reusing %u jobs / %u images",
+					(unsigned)out_sched->count,
+					image_count ? (unsigned)*image_count : 0U);
+				return 0;
+			}
+#endif
+			LOG_WRN("config 304 without local cache");
+			return -ENOENT;
 		}
 		body[n] = '\0';
 	}
@@ -971,6 +1089,10 @@ int eink_http_fetch_config(struct eink_schedule *out_sched, struct eink_http_ima
 			}
 			if (orientation) {
 				*orientation = cached_orientation;
+			}
+			if (resp_etag[0] != '\0') {
+				strncpy(cached_config_etag, resp_etag,
+					sizeof(cached_config_etag) - 1);
 			}
 			LOG_INF("config unchanged (crc=0x%08x) — reusing %u jobs / %u images",
 				crc, (unsigned)out_sched->count,
@@ -1009,6 +1131,10 @@ int eink_http_fetch_config(struct eink_schedule *out_sched, struct eink_http_ima
 		memcpy(cached_images, images, cached_image_count * sizeof(cached_images[0]));
 	}
 	cached_orientation = orientation ? *orientation : 0;
+	if (resp_etag[0] != '\0') {
+		strncpy(cached_config_etag, resp_etag, sizeof(cached_config_etag) - 1);
+		cached_config_etag[sizeof(cached_config_etag) - 1] = '\0';
+	}
 	config_cache_valid = true;
 #endif
 	LOG_INF("parsed %u jobs / %u images", (unsigned)out_sched->count,
@@ -1299,6 +1425,72 @@ static void sync_once_work_handler(struct k_work *work)
 	k_sem_give(&sync_once_done);
 }
 
+#if defined(CONFIG_APP_EINK_HTTP_TELEMETRY_DEFER)
+static void telem_work_handler(struct k_work *work)
+{
+	int64_t t0 = k_uptime_get();
+
+	ARG_UNUSED(work);
+	if (!telem_job.pending) {
+		k_sem_give(&telem_done);
+		return;
+	}
+	telem_job.result = eink_http_post_telemetry(&telem_job.sched, telem_job.last_job,
+						    telem_job.next_wake, -1);
+	if (telem_job.result == 0) {
+		(void)eink_store_save_last_sync(telem_job.now);
+	}
+	telem_job.pending = false;
+	LOG_INF("prof: telem deferred done ret=%d in %lld ms", telem_job.result,
+		(long long)(k_uptime_get() - t0));
+	k_sem_give(&telem_done);
+}
+
+static int queue_deferred_telem(const struct eink_schedule *sched, const char *last_job,
+				int64_t next_wake, int64_t now)
+{
+	ensure_http_queue();
+	if (k_work_busy_get(&telem_work) != 0 || telem_job.pending) {
+		LOG_WRN("telem defer busy — posting inline");
+		return eink_http_post_telemetry(sched, last_job, next_wake, -1);
+	}
+	memset(&telem_job, 0, sizeof(telem_job));
+	if (sched != NULL) {
+		memcpy(&telem_job.sched, sched, sizeof(telem_job.sched));
+	}
+	if (last_job != NULL) {
+		strncpy(telem_job.last_job, last_job, sizeof(telem_job.last_job) - 1);
+	}
+	telem_job.next_wake = next_wake;
+	telem_job.now = now;
+	telem_job.pending = true;
+	telem_job.result = 0;
+	(void)k_sem_take(&telem_done, K_NO_WAIT);
+	k_work_init(&telem_work, telem_work_handler);
+	(void)k_work_submit_to_queue(&http_q, &telem_work);
+	LOG_INF("telemetry deferred");
+	return 0;
+}
+
+int eink_http_flush_deferred(k_timeout_t timeout)
+{
+	if (!telem_job.pending && k_work_busy_get(&telem_work) == 0) {
+		return telem_job.result;
+	}
+	if (k_sem_take(&telem_done, timeout) != 0) {
+		LOG_WRN("telem flush timed out");
+		return -ETIMEDOUT;
+	}
+	return telem_job.result;
+}
+#else
+int eink_http_flush_deferred(k_timeout_t timeout)
+{
+	ARG_UNUSED(timeout);
+	return 0;
+}
+#endif
+
 #if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER)
 static void gallery_work_handler(struct k_work *work)
 {
@@ -1407,12 +1599,17 @@ static int sync_telem_only(int64_t t_sync)
 	next_wake = eink_scheduler_get_next_wakeup(now, cfg.poll_interval_seconds);
 	LOG_INF("schedule next_wake unix=%lld (fast path)", (long long)next_wake);
 
+#if defined(CONFIG_APP_EINK_HTTP_TELEMETRY_DEFER)
+	ret = queue_deferred_telem(&sched, last_job, next_wake, now);
+	ms_telem = 0;
+#else
 	t_mark = k_uptime_get();
 	ret = eink_http_post_telemetry(&sched, last_job, next_wake, -1);
 	ms_telem = k_uptime_get() - t_mark;
 	if (ret == 0) {
 		(void)eink_store_save_last_sync(now);
 	}
+#endif
 	LOG_INF("prof: sync total=%lld ms config=0 primary=0 paint=%lld "
 		"gallery=0 (0 dl) telem=%lld (fast)",
 		(long long)(k_uptime_get() - t_sync), (long long)ms_paint,
@@ -1560,6 +1757,12 @@ static int eink_http_sync_once_inner(void)
 		int telem_ret;
 
 		LOG_INF("schedule next_wake unix=%lld", (long long)next_wake);
+#if defined(CONFIG_APP_EINK_HTTP_TELEMETRY_DEFER)
+		/* Telemetry off critical path; gallery follows on same queue. */
+		t_mark = k_uptime_get();
+		telem_ret = queue_deferred_telem(&sched, last_job, next_wake, now);
+		ms_telem = k_uptime_get() - t_mark;
+#else
 		/* Telemetry before gallery so awake-to-ack stays short. */
 		t_mark = k_uptime_get();
 		telem_ret = eink_http_post_telemetry(&sched, last_job, next_wake, -1);
@@ -1567,6 +1770,7 @@ static int eink_http_sync_once_inner(void)
 		if (telem_ret == 0) {
 			(void)eink_store_save_last_sync(now);
 		}
+#endif
 
 #if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER)
 		ms_gallery = 0;
