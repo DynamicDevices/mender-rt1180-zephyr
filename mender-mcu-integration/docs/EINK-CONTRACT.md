@@ -44,6 +44,11 @@ JPEG/PNG remain rejected by magic. Expand timing is selectable:
 
 Overlay fragment: `eink-lz4-on-display.conf`. Helper: `scripts/eink-lz4-wrap.py`.
 
+**Server / bridge:** Cloudflare Etablone defaults packed delivery to
+`.es6f.lz4` (`delivery_format: es6f.lz4`); `?format=es6f` keeps raw.
+The native_sim host bridge (`scripts/eink-etabelone-bridge.py`) defaults to
+LZ4 (`--no-lz4` for raw). Both use the same `lz4 -f` frame contract.
+
 **Power A/B (measure on real HW):** WiFi-on joules dominate MCU; panel/controller
 during refresh also matters. Expand-on-download lengthens the radio/flash window
 (write full ES6F while/after transfer). Expand-on-display shortens transfer and

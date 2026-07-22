@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Translate live e-tabelone JPEG/PNG assets to ES6F for native_sim.
+"""Translate live e-tabelone JPEG/PNG assets to ES6F (optionally LZ4) for native_sim.
 
-The production firmware remains ES6F-only. This development bridge fetches the
-real config/schedule, rewrites image URLs to a local endpoint, and lazily
-converts each source asset into the exact packed frame consumed by Zephyr.
+Production firmware accepts raw ES6F or an LZ4 *frame* whose payload is a full
+ES6F v1 file (magic 04 22 4D 18). This development bridge fetches the real
+config/schedule, rewrites image URLs to a local endpoint, and lazily converts
+each source asset into that packed frame (default: LZ4-framed for smaller
+radio transfers).
 
 After each config fetch, remaining images are prefetched in parallel so gallery
-downloads usually hit the host ES6F cache.
+downloads usually hit the host cache.
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ class Bridge:
         cache_dir: Path,
         token: str,
         prefetch_workers: int = 4,
+        lz4: bool = True,
     ) -> None:
         self.upstream = upstream.rstrip("/")
         self.device_id = device_id
@@ -45,12 +48,18 @@ class Bridge:
         self.token = token
         self.prefetch_workers = max(1, prefetch_workers)
         self.prefetch_enabled = True
+        self.lz4 = lz4
         self.image_urls: dict[str, str] = {}
         self.lock = threading.Lock()
         self._id_locks: dict[str, threading.Lock] = {}
         self._config_etag: str | None = None
         self.converter = Path(__file__).with_name("gen-eink-frame.py")
+        self.lz4_wrap = Path(__file__).with_name("eink-lz4-wrap.py")
         cache_dir.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def image_suffix(self) -> str:
+        return ".es6f.lz4" if self.lz4 else ".es6f"
 
     def _id_lock(self, image_id: str) -> threading.Lock:
         with self.lock:
@@ -108,7 +117,7 @@ class Bridge:
             if parsed.scheme != "https":
                 raise RuntimeError("upstream image URL must use HTTPS")
             next_urls[image_id] = image_url
-            image["url"] = f"{self.public_base}/images/{image_id}.es6f"
+            image["url"] = f"{self.public_base}/images/{image_id}{self.image_suffix}"
 
         with self.lock:
             self.image_urls = next_urls
@@ -182,7 +191,10 @@ class Bridge:
 
         # URL hash changes whenever e-tabelone points this ID at another asset.
         key = hashlib.sha256(source_url.split("?", 1)[0].encode()).hexdigest()[:16]
-        output = self.cache_dir / f"{image_id}-{key}.es6f"
+        raw_output = self.cache_dir / f"{image_id}-{key}.es6f"
+        output = (
+            self.cache_dir / f"{image_id}-{key}.es6f.lz4" if self.lz4 else raw_output
+        )
         if output.exists():
             data = output.read_bytes()
             print(
@@ -228,11 +240,27 @@ class Bridge:
                     check=True,
                 )
                 conv_ms = (time.perf_counter() - t_conv) * 1000
-                os.replace(temp_output, output)
+                os.replace(temp_output, raw_output)
+                lz4_ms = 0.0
+                if self.lz4:
+                    t_lz4 = time.perf_counter()
+                    subprocess.run(
+                        [
+                            sys.executable,
+                            str(self.lz4_wrap),
+                            str(raw_output),
+                            "-o",
+                            str(output),
+                        ],
+                        check=True,
+                    )
+                    lz4_ms = (time.perf_counter() - t_lz4) * 1000
             data = output.read_bytes()
             print(
-                f"bridge: convert {image_id} src={len(source)} B es6f={len(data)} B "
+                f"bridge: convert {image_id} src={len(source)} B "
+                f"out={len(data)} B lz4={self.lz4} "
                 f"fetch={fetch_ms:.0f} ms convert={conv_ms:.0f} ms "
+                f"lz4={lz4_ms:.0f} ms "
                 f"total={(time.perf_counter() - t0) * 1000:.0f} ms",
                 flush=True,
             )
@@ -285,14 +313,23 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_body(200, "application/json", body, etag=etag)
                 return
             prefix = "/images/"
-            if parsed.path.startswith(prefix) and parsed.path.endswith(".es6f"):
-                image_id = parsed.path[len(prefix) : -len(".es6f")]
-                self.send_body(
-                    200,
-                    "application/octet-stream",
-                    self.bridge.image(image_id),
-                )
-                return
+            if parsed.path.startswith(prefix):
+                name = parsed.path[len(prefix) :]
+                if name.endswith(".es6f.lz4"):
+                    image_id = name[: -len(".es6f.lz4")]
+                elif name.endswith(".es6f"):
+                    image_id = name[: -len(".es6f")]
+                else:
+                    image_id = ""
+                if image_id:
+                    body = self.bridge.image(image_id)
+                    ctype = (
+                        "application/vnd.etablone.es6f+lz4"
+                        if body[:4] == b"\x04\x22\x4d\x18"
+                        else "application/octet-stream"
+                    )
+                    self.send_body(200, ctype, body)
+                    return
             self.send_body(404, "text/plain", b"not found\n")
         except KeyError:
             self.send_body(404, "text/plain", b"unknown image\n")
@@ -341,6 +378,12 @@ def main() -> None:
         default=int(os.environ.get("EINK_BRIDGE_PREFETCH_WORKERS", "4")),
         help="parallel convert workers after each config fetch",
     )
+    parser.add_argument(
+        "--lz4",
+        action=argparse.BooleanOptionalAction,
+        default=os.environ.get("EINK_BRIDGE_LZ4", "1") != "0",
+        help="serve LZ4-framed ES6F (default on; use --no-lz4 for raw ES6F)",
+    )
     args = parser.parse_args()
 
     bridge = Bridge(
@@ -350,6 +393,7 @@ def main() -> None:
         args.cache_dir,
         os.environ.get(args.token_env, ""),
         prefetch_workers=max(1, args.prefetch_workers),
+        lz4=bool(args.lz4),
     )
     if os.environ.get("EINK_BRIDGE_PREFETCH", "1") == "0":
         bridge.prefetch_enabled = False
@@ -358,7 +402,8 @@ def main() -> None:
     server = ThreadingHTTPServer((args.listen, args.port), Handler)
     print(
         f"bridge: {args.upstream} -> {args.public_base} "
-        f"device={args.device_id} (production remains ES6F-only)",
+        f"device={args.device_id} format="
+        f"{'es6f.lz4' if bridge.lz4 else 'es6f'}",
         flush=True,
     )
     server.serve_forever()
