@@ -17,6 +17,10 @@
 		zephyr,display = &dummy_dc;
 	};
 
+	aliases {
+		gnss = &gnss_emul;
+	};
+
 	fstab {
 		compatible = "zephyr,fstab";
 
@@ -37,6 +41,12 @@
 		compatible = "zephyr,dummy-dc";
 		height = <1600>;
 		width = <1200>;
+	};
+
+	/* Zephyr GNSS emulator — feeds APP_EINK_GNSS → eink_location. */
+	gnss_emul: gnss-emul {
+		compatible = "zephyr,gnss-emul";
+		status = "okay";
 	};
 };
 

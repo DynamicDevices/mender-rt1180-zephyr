@@ -85,6 +85,8 @@ Use **separate** `west build -d …` directories so EVK, FRDM, and `native_sim` 
 | FRDM-IMXRT1186 CM33 | `build-frdm-rt1186/` | `./scripts/build-rt1186-frdm.sh` |
 | `native_sim` (Phase 0b) | `build-native_sim/` | `./scripts/build-native-sim.sh` |
 | MIMXRT1170-EVK CM7 | `build-rt1170-evk/` | `./scripts/build-rt1170-evk.sh` |
+| MIMXRT1170-EVK LCD lab | `build-rt1170-evk-lcd/` | `./scripts/build-rt1170-evk-lcd.sh` (`rk055hdmipi4ma0`) |
+| MIMXRT1170-EVK EL133 lab | `build-rt1170-evk-eink/` | `./scripts/build-rt1170-evk-eink.sh` (SPI; no MIPI shield) |
 
 Override with `BUILD_DIR=…` (build scripts) or `MENDER_BUILD_DIR=…` (deployment scripts). **Do not reuse** the legacy shared `build/` directory across boards — if you still have an old mixed tree, remove it: `rm -rf build` (outputs only — not tracked sources).
 
@@ -124,6 +126,9 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 | `scripts/create-native-sim-deployment.sh` | Build noop-update artifact (`device_type` `native_sim`) and create **one** Hosted Mender deployment (`MENDER_DEPLOY_TARGET=device` \| `device_type` \| `group`; default group **`simulator`**) |
 | `scripts/build-rt1180-evk.sh` | Sysbuild Mender for EVK CM33 (default `build-rt1180-evk/`) |
 | `scripts/build-rt1186-frdm.sh` | Sysbuild Mender for FRDM-IMXRT1186 CM33 (default `build-frdm-rt1186/`) |
+| `scripts/build-rt1170-evk.sh` | Sysbuild Mender for MIMXRT1170-EVK CM7 (default `build-rt1170-evk/`) |
+| `scripts/build-rt1170-evk-lcd.sh` | EVK + Rocktech RK055 MIPI LCD preview lab (`rk055hdmipi4ma0`; default `build-rt1170-evk-lcd/`) |
+| `scripts/build-rt1170-evk-eink.sh` | EVK SPI EL133 lab (no MIPI shield; default `build-rt1170-evk-eink/`) |
 | `scripts/generate-sbom.sh` | Run `west spdx` for EVK and FRDM build trees (WS3; requires prior sysbuild) |
 | `scripts/create-rt1180-deployment.sh` | Upload `zephyr.mender` (default `device_type` `mimxrt1180_evk`, `build-rt1180-evk/`) — **one** deployment (default group **`rt1180-lab`**) |
 | `scripts/create-rt1186-frdm-deployment.sh` | Same as above for FRDM (`device_type` `frdm_imxrt1186`, `build-frdm-rt1186/`) |
@@ -135,6 +140,7 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 | `scripts/safety-checkpoint.sh` | Commit + push a labelled checkpoint on a feature branch (no amend/force) |
 | `scripts/build-el133-ztest.sh` | Build + run EL133UF1 mock-SPI sequence ztest on `native_sim` |
 | `scripts/eink-verify-sim.sh` | Offline e-ink verify gate (fixtures, selftest, driver check, ztest, file:// sync) |
+| `scripts/eink-check-rt1170-profiles.py` | Static RT1170 lab LCD/EL133 + Active ESL profile contract checks |
 | `scripts/eink-duty-smoke.sh` | native_sim battery duty-cycle smoke (gallery cache + schedule `next_wake` + SNVS stub) |
 | `scripts/run-native-sim-etabelone.sh` | Live e-tabelone → ES6F → native_sim scheduled-display proof |
 
@@ -203,21 +209,27 @@ west build -p --sysbuild \
 
 **Zephyr version:** upstream `frdm_imxrt1186` landed in Zephyr **v4.4.0**. This manifest pins **`revision: v4.4.0`** in `west.yml` (was v4.2.0 for EVK-only bring-up). Run `west update` after pulling manifest changes.
 
-### Device identity (stable MAC)
+### Device identity (SoC UID)
 
-Hosted Mender registers devices by **identity** JSON from the integration app: `{"mac": "…"}` — MAC of the **first-up** Ethernet interface (`netup_get_mac_address()` in `src/utils/netup.c` after `netup_wait_for_network()`).
+Canonical identity is the **SoC unique ID** from Zephyr `hwinfo` (`soc_uid_get_hex()` in `src/utils/soc_uid.c`): **uppercase hex, no separators** — same string Active ESL onboard stores as `board_id` / BLE DIS Serial `0x2A25`.
 
-| Board | Why overlay | Lab identity MAC (typical) |
-|-------|-------------|----------------------------|
-| **EVK** | Upstream sets `zephyr,random-mac-address` on NETC switch ports → new pending device every boot | **02:11:80:00:00:01** on `swp0` (cable to host port) |
-| **FRDM** | Upstream uses shared placeholder `00:00:00:01:xx:xx` MACs — not fleet-safe | **02:11:86:00:00:01** on `swp0` |
-| **native_sim** | TAP MAC fixed in Kconfig | **02:00:5e:00:53:31** (unchanged) |
+| Consumer | Field | Notes |
+|----------|-------|-------|
+| **Hosted Mender** | `{"soc_uid": "<hex>"}` | Replaces former `{"mac": "…"}`. Existing MAC-keyed lab devices need re-accept. |
+| **Etablone** | `device_id` | Defaults to SoC UID when `CONFIG_APP_EINK_HTTP_DEVICE_ID` is empty. Auth = Bearer `device_token`, not the UID. |
+| **Onboard Worker** | `board_id` | Already SoC UID (cloud lane). BLE advert suffix = last 4 hex for discovery only. |
 
-**Overlay wiring:** Zephyr auto-applies `boards/<board>_<soc>_<core>.overlay` from the app tree — no `DTC_OVERLAY_FILE` in build scripts. Pattern follows Josef’s RT1064 `local-mac-address` on the Ethernet node; RT118x uses NETC (`enetc_psi*`, `switch_port*`) instead of legacy ENET.
+**CRA:** SoC UID is a **public identifier**, not a credential. Do not accept API/claim/OTA on UID alone.
 
-**Why MAC overlay (not hwinfo):** Mender MCU exposes only a `get_identity` callback; the integration app hard-codes MAC-from-interface. `hwinfo` (SoC UID) or a custom identity key would need application changes and server-side acceptance rules — reasonable for production (ELE/OTP, S2), but MAC overlay is zero code churn for lab fleet stability.
+**Lab MAC overlays** (stable `local-mac-address` on NETC / TAP) remain useful for L2/DHCP debugging but are **not** Mender identity anymore.
 
-**Caveats:** Identity follows whichever interface is **first up** at check-in (usually `swp0` when cabled). Multiple lab boards of the same type need **unique** MACs per unit before accept. Production must use **EdgeLock / per-unit provisioning** (S2–S4), not shared lab MACs.
+| Board | hwinfo source | Typical hex length |
+|-------|---------------|--------------------|
+| **RT1170** | OCOTP FUSEN 16/17 (`hwinfo_imxrt`) | 16 hex (8 bytes) |
+| **RT118x** | OCOTP shadow (16 bytes) | 32 hex |
+| **native_sim** | `--*-hwinfo-device-id` / hostid | 8 hex (uint32 BE) |
+
+**Caveats:** Changing identity attribute (`mac` → `soc_uid`) creates **new** pending devices in Hosted Mender. Production still needs per-device auth keys/tokens (S2–S4), not UID-as-secret.
 
 ### Mbed TLS 4.x / Zephyr 4.4 (mender-mcu device auth)
 
@@ -326,6 +338,31 @@ west flash -d build-rt1170-evk
 ```
 
 **Status:** host sysbuild + `zephyr.mender` validate **done**; hardware Phase 1–2 **TBD**.
+
+### Lab display profiles (mutually exclusive)
+
+| Profile | Script | Display | Notes |
+|---------|--------|---------|-------|
+| Baseline Mender | `build-rt1170-evk.sh` | none | ENET + OTA; Zephyr shell on UART |
+| **LCD preview** | `build-rt1170-evk-lcd.sh` | Rocktech **RK055HDMIPI4MA0** 5.5″ 720×1280 MIPI (J48) | `APP_EINK_DISPLAY_LCD_PREVIEW`; EVK SDRAM FB; **no** LPSPI1 EL133; `eink` shell like native_sim |
+| **EL133 SPI** | `build-rt1170-evk-eink.sh` | Spectra 6 EL133UF1 on LPSPI1 | Overlay GPIOs placeholder (`status=disabled`); interim `dummy_dc` until schematic; **no** MIPI shield; `eink` shell |
+
+Interactive console: MCU-Link / USB serial **115200 8N1** — same `eink show|sync|creds|…` and `fs` shell as `native_sim` (see `boards/mimxrt1170_eink_shell.conf`).
+| OCRAM / duty | `*_eink_sram.*` | streaming | Product-shaped on EVK silicon |
+
+LCDIF pinmux conflicts with `lpspi1` — never enable Rocktech shield and EL133 in one image.
+
+### Active ESL custom board (product)
+
+Canonical HW: [AESL-HW-RT1170-EINK-SPEC Rev 0.7](https://docs.google.com/document/d/1Zrje-6nrLAaI-ybceKSXUtsPTWGLB2za3GwrCAGfrfw/edit).
+
+| Topic | Direction |
+|-------|-----------|
+| SDRAM | **DNP** footprint; see [SDRAM-DECISION.md](docs/SDRAM-DECISION.md) |
+| FlexSPI1 | 16–32 MB XIP (MCUboot + A/B) |
+| FlexSPI2 | 64 MB assets + OTA staging — [mimxrt1170_custom_eink_flexspi2.overlay](boards/mimxrt1170_custom_eink_flexspi2.overlay) |
+| Display | SPI EL133 only (no MIPI LCD) |
+| Conf fragment | [mimxrt1170_aesl_eink.conf](boards/mimxrt1170_aesl_eink.conf) |
 
 ### Improv BLE provisioning with IW612
 
@@ -538,7 +575,7 @@ Mender/system workqueue.
 
 Credentials for e-tabelone live in Bitwarden / device settings — never commit tokens.
 Shell: `eink creds <base> <device_id> <token>` then `eink sync` (token `none`/`-` = omit Bearer).
-Location (optional): `eink location set <lat> <lng> [accuracy_m]` / `eink location clear` — see [EINK-CONTRACT.md](docs/EINK-CONTRACT.md).
+Location (optional): `eink location set <lat> <lng> [accuracy_m]` / `eink location clear` — see [EINK-CONTRACT.md](docs/EINK-CONTRACT.md). GNSS bridge: `CONFIG_APP_EINK_GNSS` + DT alias `gnss` (`zephyr,gnss-emul` on native_sim; NMEA-generic EVK scaffold in `*_gnss.overlay`).
 
 ### Hardware discussion spec (document control)
 
@@ -788,6 +825,8 @@ Mender addresses CRA themes around **secure distribution** and **operational vul
 - **Practical split:** treat this repo as the **MCU firmware CRA/PSTI technical baseline** (OTA + boot integrity + future ELE); treat **UK Statement of Compliance / CE marking** as product-line deliverables above this integration layer.
 
 For the **unified delivery plan** (workstreams, milestones, checklists), see [CRA compliance programme](#cra-compliance-programme-firmware-technical-baseline) below.
+
+**Active ESL / RT1170:** product-line gap analysis and CAAM (non-ELE) roadmap live in [`docs/CRA-COMPLIANCE.md`](docs/CRA-COMPLIANCE.md).
 
 ## CRA compliance programme (firmware technical baseline)
 
@@ -1654,6 +1693,8 @@ Track overlay-repo history on [DynamicDevices/mender-rt1180-zephyr](https://gith
 | Headless display path (`dummy_dc` 1200×1600) | **Proven** | `eink display ready (dummy_dc)` |
 | Packed-frame fixtures (size/CRC) | **Proven** | `scripts/gen-eink-frame.py` |
 | EL133 driver sequence invariants (mock) | **Proven** | `scripts/eink-check-el133-driver.py` |
+| RT1170 LCD/EL133/AESL profile contracts | **Proven** | `scripts/eink-check-rt1170-profiles.py` |
+| Spectra→RGB565 LCD preview map | **Proven** | `test_nibble_to_rgb565` in `eink selftest` |
 | SDL visual colour/split | Optional | Needs 32-bit SDL2; `native_sim_eink_sdl.overlay` |
 | e-tabelone `file://` fixture HTTP | Implemented | Local JSON under store root |
 | EVK SPI wiring | **Pending schematic** | Overlay pins are placeholders (`*_eink_el133.overlay`) |

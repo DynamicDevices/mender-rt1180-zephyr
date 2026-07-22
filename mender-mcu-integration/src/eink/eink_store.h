@@ -42,6 +42,15 @@ bool eink_store_has_image_quick(const char *image_id);
 int eink_store_save_last_sync(int64_t unix_sec);
 int eink_store_load_last_sync(int64_t *unix_sec);
 
+/**
+ * Persist / reload SHA-256 of the LZ4-framed bytes for /node/v2 gallery hash-diff.
+ * Hex is lowercase; byte_size is the compressed .es6f.lz4 length.
+ */
+int eink_store_save_content_hash(const char *image_id, const char *sha256_hex,
+				 uint32_t byte_size);
+int eink_store_load_content_hash(const char *image_id, char *sha256_hex, size_t cap,
+				 uint32_t *byte_size);
+
 /** Write payload file for image_id (atomic replace). */
 int eink_store_put_image(const char *image_id, const uint8_t *es6f, size_t len);
 

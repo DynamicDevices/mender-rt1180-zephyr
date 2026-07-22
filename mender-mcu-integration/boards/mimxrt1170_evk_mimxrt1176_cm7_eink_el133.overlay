@@ -1,8 +1,19 @@
 /*
  * PLACEHOLDER pins for EL133UF1 on RT1170 EVK LPSPI1 / Arduino-style headers.
- * Replace GPIO numbers from the real schematic before hardware bring-up.
  *
- * Dual CS is driver-owned (cs0/cs1); SPI CS from controller is unused.
+ * Lab profile: ./scripts/build-rt1170-evk-eink.sh
+ * Do NOT combine with --shield rk055hdmipi4ma0 (LCDIF pinmux conflicts with
+ * lpspi1 — see Zephyr mimxrt1170_evk pinctrl notes).
+ *
+ * Dual CS is driver-owned (cs0/cs1); SPI controller CS is unused.
+ *
+ * GPIO numbers below are placeholders — replace from EVKB schematic + loom
+ * before enabling the node (status = "okay") and switching zephyr,display
+ * from dummy_dc to el133uf1.
+ *
+ * Provisional Arduino / LPSPI1 map to review against HUG:
+ *   LPSPI1 SCK/SDO/SDI on Arduino SPI header (GPIO_AD_28..31 class)
+ *   BUSY / CS0 / CS1 / DC / RESET on free GPIOs (TBD)
  */
 &lpspi1 {
 	status = "okay";
@@ -12,15 +23,23 @@
 
 / {
 	chosen {
-		zephyr,display = &el133uf1;
+		/* Interim until EL133 node is enabled with real GPIOs. */
+		zephyr,display = &dummy_dc;
+	};
+
+	dummy_dc: dummy_dc {
+		compatible = "zephyr,dummy-dc";
+		height = <1600>;
+		width = <1200>;
 	};
 
 	el133uf1: el133uf1 {
 		compatible = "eink,el133uf1";
-		status = "disabled"; /* enable when wiring confirmed */
+		/* Enable after GPIO map is confirmed from schematic. */
+		status = "disabled";
 		spi-dev = <&lpspi1>;
 		spi-max-frequency = <5000000>;
-		/* TODO: map from schematic */
+		/* TODO: map from EVKB schematic + EL133 loom */
 		busy-gpios = <&gpio1 0 GPIO_ACTIVE_HIGH>;
 		cs0-gpios = <&gpio1 1 GPIO_ACTIVE_LOW>;
 		cs1-gpios = <&gpio1 2 GPIO_ACTIVE_LOW>;

@@ -76,7 +76,7 @@ static const struct device *display_dev(void)
 	return DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 }
 
-#if defined(CONFIG_APP_EINK_FULL_FRAMEBUFFER)
+#if defined(CONFIG_APP_EINK_FULL_FRAMEBUFFER) && defined(CONFIG_EL133UF1)
 struct mem_stream {
 	const uint8_t *p;
 	size_t left;
@@ -185,6 +185,7 @@ static int stream_fill_cb(void *user, uint8_t *dst, size_t max_len)
 }
 #endif
 
+#if !defined(CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW)
 static int write_sdl_from_halves(int (*read_row)(void *user, uint16_t y, bool right, uint8_t *row300),
 				 void *user)
 {
@@ -286,6 +287,81 @@ static int write_sdl_from_halves(int (*read_row)(void *user, uint16_t y, bool ri
 	desc.pitch = sdl_w;
 	return display_write(dev, 0, 0, &desc, frame);
 }
+#endif /* !CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW */
+
+#if defined(CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW)
+/* Rocktech RK055: 720x1280 RGB565 (~1.8 MiB) — EVK SDRAM lab profile only. */
+#define EINK_LCD_W 720u
+#define EINK_LCD_H 1280u
+
+static uint16_t eink_lcd_fb[EINK_LCD_W * EINK_LCD_H];
+
+static int write_lcd_preview_from_halves(
+	int (*read_row)(void *user, uint16_t y, bool right, uint8_t *row300), void *user)
+{
+	const struct device *dev = display_dev();
+	struct display_capabilities caps;
+	struct display_buffer_descriptor desc;
+	uint8_t left_row[300];
+	uint8_t right_row[300];
+	uint16_t lcd_w;
+	uint16_t lcd_h;
+	int ret;
+
+	display_get_capabilities(dev, &caps);
+	lcd_w = caps.x_resolution;
+	lcd_h = caps.y_resolution;
+	if (lcd_w == 0 || lcd_h == 0) {
+		return -EINVAL;
+	}
+	if (lcd_w > EINK_LCD_W || lcd_h > EINK_LCD_H) {
+		LOG_ERR("LCD %ux%u exceeds preview FB %ux%u", lcd_w, lcd_h, EINK_LCD_W,
+			EINK_LCD_H);
+		return -ENOMEM;
+	}
+
+	ret = display_set_pixel_format(dev, PIXEL_FORMAT_RGB_565);
+	if (ret < 0 && ret != -ENOTSUP) {
+		LOG_WRN("display_set_pixel_format RGB565: %d", ret);
+	}
+
+	for (uint16_t ly = 0; ly < lcd_h; ly++) {
+		uint16_t src_y = (uint16_t)(((uint32_t)ly * EINK_PANEL_HEIGHT) / lcd_h);
+
+		ret = read_row(user, src_y, false, left_row);
+		if (ret < 0) {
+			return ret;
+		}
+		ret = read_row(user, src_y, true, right_row);
+		if (ret < 0) {
+			return ret;
+		}
+		for (uint16_t lx = 0; lx < lcd_w; lx++) {
+			uint16_t src_x =
+				(uint16_t)(((uint32_t)lx * EINK_PANEL_WIDTH) / lcd_w);
+			const uint8_t *half =
+				(src_x < EINK_HALF_WIDTH) ? left_row : right_row;
+			uint16_t hx = (src_x < EINK_HALF_WIDTH) ?
+					      src_x :
+					      (uint16_t)(src_x - EINK_HALF_WIDTH);
+			uint8_t nib = ((hx & 1u) == 0) ? (half[hx / 2u] >> 4)
+						       : (half[hx / 2u] & 0x0f);
+
+			eink_lcd_fb[(size_t)ly * lcd_w + lx] =
+				eink_frame_nibble_to_rgb565(nib);
+		}
+	}
+
+	memset(&desc, 0, sizeof(desc));
+	desc.buf_size = (uint32_t)lcd_w * lcd_h * sizeof(uint16_t);
+	desc.width = lcd_w;
+	desc.height = lcd_h;
+	desc.pitch = lcd_w;
+	LOG_INF("LCD preview blit %ux%u RGB565 from ES6F %ux%u", lcd_w, lcd_h,
+		EINK_PANEL_WIDTH, EINK_PANEL_HEIGHT);
+	return display_write(dev, 0, 0, &desc, eink_lcd_fb);
+}
+#endif /* CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW */
 
 static int stream_read_row(void *user, uint16_t y, bool right, uint8_t *row300)
 {
@@ -375,7 +451,11 @@ static int write_stream_to_display(struct stream_file *s)
 #endif
 #endif
 	} else {
+#if defined(CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW)
+		ret = write_lcd_preview_from_halves(stream_read_row, s);
+#else
 		ret = write_sdl_from_halves(stream_read_row, s);
+#endif
 	}
 
 	if (ret < 0) {
@@ -417,7 +497,11 @@ static int write_payload_to_display(const uint8_t *payload)
 		ret = display_write(dev, 0, 0, &desc, payload);
 #endif
 	} else {
+#if defined(CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW)
+		ret = write_lcd_preview_from_halves(fb_read_row, (void *)payload);
+#else
 		ret = write_sdl_from_halves(fb_read_row, (void *)payload);
+#endif
 	}
 
 	if (ret < 0) {
@@ -538,8 +622,9 @@ int eink_display_init(void)
 	memset(&status, 0, sizeof(status));
 	status.state = EINK_DISPLAY_IDLE;
 	inited = true;
-	LOG_INF("eink display ready (%s)%s", dev->name,
-		IS_ENABLED(CONFIG_APP_EINK_FULL_FRAMEBUFFER) ? " [full-FB]" : " [stream]");
+	LOG_INF("eink display ready (%s)%s%s", dev->name,
+		IS_ENABLED(CONFIG_APP_EINK_FULL_FRAMEBUFFER) ? " [full-FB]" : " [stream]",
+		IS_ENABLED(CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW) ? " [lcd-preview]" : "");
 	return 0;
 }
 

@@ -28,7 +28,22 @@ flash_bytes=$(stat -c%s flash.bin)
 test "$flash_bytes" -eq 33554432
 echo "OK: selftest + display init + 32 MiB LittleFS"
 
+# SoC UID identity: hwinfo -device_id drives Etablone device_id + shell uid.
+UID_LOG=$(mktemp)
+rm -f flash.bin
+timeout 8 ./build-native_sim-eink/zephyr/zephyr.exe -device_id=0xC0FFEE01 \
+  >"$UID_LOG" 2>&1 <<'EOF' || true
+eink uid
+EOF
+grep -q "device=C0FFEE01" "$UID_LOG"
+grep -q "soc_uid=C0FFEE01" "$UID_LOG"
+echo "OK: SoC UID identity (device=C0FFEE01 / eink uid)"
+
 python3 scripts/eink-check-el133-driver.py
+
+python3 scripts/eink-check-rt1170-profiles.py
+
+python3 scripts/eink-contract-checks.py
 
 # Runtime: mock-SPI ztest asserts the exact init + refresh opcode order
 ./scripts/build-el133-ztest.sh

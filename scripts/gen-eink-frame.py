@@ -6,8 +6,6 @@ import struct
 import zlib
 from pathlib import Path
 
-from PIL import Image, ImageOps
-
 WIDTH, HEIGHT = 1200, 1600
 HALF = 480_000
 PAYLOAD = 960_000
@@ -56,6 +54,13 @@ def fill_image(path: Path, crop: bool = False, rotate_to_panel: bool = False) ->
     Pass rotate_to_panel=True for Spectra6 / eink-scheduler-rust (90° CW when
     source aspect disagrees with the portrait panel).
     """
+    try:
+        from PIL import Image, ImageOps
+    except ImportError as exc:
+        raise SystemExit(
+            "Pillow (PIL) is required for --image; install with: pip install pillow"
+        ) from exc
+
     with Image.open(path) as source:
         source = ImageOps.exif_transpose(source)
         source = source.convert("RGB")

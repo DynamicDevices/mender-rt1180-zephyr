@@ -18,6 +18,7 @@ LOG_MODULE_REGISTER(mender_app, LOG_LEVEL_DBG);
 #include "utils/callbacks.h"
 #include "utils/netup.h"
 #include "utils/certs.h"
+#include "utils/soc_uid.h"
 
 #include <string.h>
 #include <zephyr/kernel.h>
@@ -61,6 +62,9 @@ LOG_MODULE_REGISTER(mender_app, LOG_LEVEL_DBG);
 #if defined(CONFIG_APP_EINK_SELFTEST)
 #include "eink_selftest.h"
 #endif
+#if defined(CONFIG_APP_EINK_GNSS)
+#include "eink_gnss.h"
+#endif
 #endif
 
 #ifdef CONFIG_MENDER_CLIENT_INVENTORY_DISABLE
@@ -100,8 +104,8 @@ mender_restart_cb(void) {
     return MENDER_OK;
 }
 
-static char              mac_address[18] = { 0 };
-static mender_identity_t mender_identity = { .name = "mac", .value = mac_address };
+static char              soc_uid_hex[SOC_UID_HEX_MAX];
+static mender_identity_t mender_identity = { .name = "soc_uid", .value = soc_uid_hex };
 
 MENDER_FUNC_WEAK mender_err_t
 mender_get_identity_cb(const mender_identity_t **identity) {
@@ -145,6 +149,11 @@ main(void) {
     if (0 != eink_scheduler_init()) {
         LOG_ERR("eink scheduler init failed");
     }
+#if defined(CONFIG_APP_EINK_GNSS)
+    if (0 != eink_gnss_init()) {
+        LOG_WRN("eink gnss init failed (shell location still works)");
+    }
+#endif
 #if defined(CONFIG_APP_EINK_HTTP)
     {
         struct eink_http_config hcfg = { 0 };
@@ -156,6 +165,12 @@ main(void) {
 #if defined(CONFIG_MENDER_NET_CA_CERTIFICATE_TAG_PRIMARY)
         hcfg.tls_sec_tag = CONFIG_MENDER_NET_CA_CERTIFICATE_TAG_PRIMARY;
 #endif
+        /* SoC UID is the Etablone device_id SoT when Kconfig leaves it empty. */
+        if (hcfg.device_id[0] == '\0') {
+            if (0 != soc_uid_get_hex(hcfg.device_id, sizeof(hcfg.device_id))) {
+                LOG_WRN("SoC UID unavailable; set APP_EINK_HTTP_DEVICE_ID or eink creds");
+            }
+        }
         hcfg.enabled = IS_ENABLED(CONFIG_APP_EINK_HTTP_ENABLE) && (hcfg.device_id[0] != '\0');
         if (!hcfg.enabled) {
             /* Keep client initialized for shell-driven sync/fixture use. */
@@ -163,7 +178,7 @@ main(void) {
                 strncpy(hcfg.api_base, "file:///tmp/eink-zephyr", sizeof(hcfg.api_base) - 1);
             }
             if (hcfg.device_id[0] == '\0') {
-                strncpy(hcfg.device_id, "native-sim", sizeof(hcfg.device_id) - 1);
+                (void)soc_uid_get_hex(hcfg.device_id, sizeof(hcfg.device_id));
             }
         }
         (void)eink_http_init(&hcfg);
@@ -234,7 +249,10 @@ main(void) {
 #endif
 
     if (IS_ENABLED(CONFIG_APP_MENDER_CLIENT_ENABLE)) {
-        netup_get_mac_address(mender_identity.value);
+        if (0 != soc_uid_get_hex(mender_identity.value, sizeof(soc_uid_hex))) {
+            LOG_ERR("SoC UID unavailable; cannot set Mender identity");
+            goto END;
+        }
 
         /* Initialize mender-client */
         mender_client_config_t    mender_client_config    = { .device_type = CONFIG_MENDER_DEVICE_TYPE, .recommissioning = false };

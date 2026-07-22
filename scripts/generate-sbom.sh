@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
-# Generate SPDX SBOMs for RT118x CM33 sysbuild trees (CRA WS3).
-# Requires a completed west sysbuild in each target directory first.
+# Generate SPDX SBOMs for Mender MCU sysbuild trees (CRA WS3).
+#
+# Zephyr west spdx requires CMake file-based API query files created *before*
+# the build (`west spdx --init -d BUILD_DIR`). If a build tree was created
+# without that init step, re-init + rebuild before expecting a full SBOM.
+#
+# Requires: Python package `reuse` (west spdx dependency).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT}"
+
+if [[ -d "${ROOT}/.tools/bin" ]]; then
+  export PATH="${ROOT}/.tools/bin:${PATH}"
+fi
 
 if [[ -f zephyr/zephyr-env.sh ]]; then
   # shellcheck source=/dev/null
@@ -12,74 +21,148 @@ fi
 
 EVK_DIR="${EVK_BUILD_DIR:-build-rt1180-evk}"
 FRDM_DIR="${FRDM_BUILD_DIR:-build-frdm-rt1186}"
+RT1170_DIR="${RT1170_BUILD_DIR:-build-rt1170-evk}"
 OUT_DIR="${SBOM_OUT_DIR:-sbom}"
 ARTIFACT_NAME="${CONFIG_MENDER_ARTIFACT_NAME:-dev-1}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+ARCHIVE_RC=0
+RC_NAME="${SBOM_RC_NAME:-}"
 
 usage() {
   cat <<EOF
-Usage: generate-sbom.sh [--evk-only | --frdm-only]
+Usage: generate-sbom.sh [--evk-only | --frdm-only | --rt1170-only] [--archive-rc [NAME]]
 
-Run west spdx for RT118x Mender sysbuild output directories (app + MCUboot child images).
+Run west spdx for Mender sysbuild output directories (app + MCUboot child images).
+
+Options:
+  --archive-rc [NAME]  After SPDX generation, copy outputs into
+                       sbom/rc/<NAME>/ (default NAME=ARTIFACT_NAME-STAMP)
+                       and write MANIFEST.txt for the release-candidate gate.
 
 Environment:
   EVK_BUILD_DIR          Default: build-rt1180-evk
   FRDM_BUILD_DIR         Default: build-frdm-rt1186
+  RT1170_BUILD_DIR       Default: build-rt1170-evk
   SBOM_OUT_DIR           Default: sbom (created under workspace root)
   CONFIG_MENDER_ARTIFACT_NAME  Label for output filenames (default: dev-1)
+  SBOM_RC_NAME           Override archive directory name when using --archive-rc
 
-Prerequisite: run ./scripts/build-rt1180-evk.sh and/or ./scripts/build-rt1186-frdm.sh first.
+Prerequisite:
+  1. west spdx --init -d <sysbuild-dir>   # once, before west build
+  2. matching build script completed
+  3. pip install reuse   # for the same Python that runs west
 
-See PROJECT-NOTES — CRA compliance programme (WS3, milestone M-009).
+See mender-mcu-integration/docs/CRA-COMPLIANCE.md (WS3) and
+mender-mcu-integration/docs/CRA-ADVISORY-WATCH.md (RC ship gate).
 EOF
 }
 
-TARGETS=(evk frdm)
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
-elif [[ "${1:-}" == "--evk-only" ]]; then
-  TARGETS=(evk)
-elif [[ "${1:-}" == "--frdm-only" ]]; then
-  TARGETS=(frdm)
-elif [[ -n "${1:-}" ]]; then
-  echo "error: unknown option: $1" >&2
-  usage >&2
+TARGETS=(evk frdm rt1170)
+ARGS=("$@")
+i=0
+while [[ $i -lt ${#ARGS[@]} ]]; do
+  a="${ARGS[$i]}"
+  case "$a" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --evk-only) TARGETS=(evk) ;;
+    --frdm-only) TARGETS=(frdm) ;;
+    --rt1170-only) TARGETS=(rt1170) ;;
+    --archive-rc)
+      ARCHIVE_RC=1
+      next="${ARGS[$((i + 1))]:-}"
+      if [[ -n "$next" && "$next" != -* ]]; then
+        RC_NAME="$next"
+        i=$((i + 1))
+      fi
+      ;;
+    *)
+      echo "error: unknown option: $a" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+  i=$((i + 1))
+done
+
+if ! python3 -c 'import reuse' 2>/dev/null; then
+  echo "error: Python package 'reuse' is required for west spdx" >&2
+  echo "  Install with: python3 -m pip install --user reuse" >&2
   exit 1
 fi
 
 mkdir -p "${OUT_DIR}"
+GENERATED=()
 
 run_spdx() {
   local label="$1"
   local build_dir="$2"
   local app_dir="${build_dir}/mender-mcu-integration"
   local mcuboot_dir="${build_dir}/mcuboot"
+  local dest="${OUT_DIR}/${label}-${ARTIFACT_NAME}-${STAMP}"
 
   if [[ ! -d "${app_dir}" ]]; then
     echo "error: missing ${app_dir} — run the matching build script first" >&2
     exit 1
   fi
 
-  local out_app="${OUT_DIR}/${label}-${ARTIFACT_NAME}-${STAMP}-app.spdx"
-  local out_boot="${OUT_DIR}/${label}-${ARTIFACT_NAME}-${STAMP}-mcuboot.spdx"
-
-  echo "==> ${label}: west spdx (application) ${build_dir}"
-  west spdx -d "${app_dir}" -o "${out_app}"
+  mkdir -p "${dest}/app"
+  echo "==> ${label}: west spdx (application) ${app_dir}"
+  if ! west spdx -d "${app_dir}" -s "${dest}/app" -n "etablone-${label}-app-${ARTIFACT_NAME}"; then
+    echo "error: west spdx failed for ${app_dir}" >&2
+    echo "hint: west spdx --init -d ${build_dir} && rebuild, then re-run" >&2
+    exit 1
+  fi
 
   if [[ -d "${mcuboot_dir}" ]]; then
-    echo "==> ${label}: west spdx (MCUboot) ${build_dir}"
-    west spdx -d "${mcuboot_dir}" -o "${out_boot}"
+    mkdir -p "${dest}/mcuboot"
+    echo "==> ${label}: west spdx (MCUboot) ${mcuboot_dir}"
+    if ! west spdx -d "${mcuboot_dir}" -s "${dest}/mcuboot" -n "etablone-${label}-mcuboot-${ARTIFACT_NAME}"; then
+      echo "warning: MCUboot SBOM failed for ${mcuboot_dir}" >&2
+    fi
   else
     echo "warning: ${mcuboot_dir} not found — skipping MCUboot SBOM" >&2
   fi
+
+  echo "    outputs under ${dest}/"
+  GENERATED+=("${dest}")
 }
 
 for t in "${TARGETS[@]}"; do
   case "${t}" in
     evk) run_spdx "evk" "${EVK_DIR}" ;;
     frdm) run_spdx "frdm" "${FRDM_DIR}" ;;
+    rt1170) run_spdx "rt1170" "${RT1170_DIR}" ;;
   esac
 done
 
 echo "OK: SBOM files written under ${OUT_DIR}/"
+
+if [[ "${ARCHIVE_RC}" -eq 1 ]]; then
+  if [[ ${#GENERATED[@]} -eq 0 ]]; then
+    echo "error: --archive-rc requested but no SBOM outputs were produced" >&2
+    exit 1
+  fi
+  if [[ -z "${RC_NAME}" ]]; then
+    RC_NAME="${ARTIFACT_NAME}-${STAMP}"
+  fi
+  RC_DIR="${OUT_DIR}/rc/${RC_NAME}"
+  mkdir -p "${RC_DIR}"
+  {
+    echo "SBOM release-candidate archive"
+    echo "created_utc=${STAMP}"
+    echo "artifact_name=${ARTIFACT_NAME}"
+    echo "rc_name=${RC_NAME}"
+    echo "targets=${TARGETS[*]}"
+    echo "sources:"
+    for d in "${GENERATED[@]}"; do
+      base="$(basename "${d}")"
+      cp -a "${d}" "${RC_DIR}/"
+      echo "  - ${base}"
+    done
+  } | tee "${RC_DIR}/MANIFEST.txt"
+  echo "OK: RC archive ${RC_DIR}/ (see MANIFEST.txt)"
+  echo "Ship gate checklist: mender-mcu-integration/docs/CRA-ADVISORY-WATCH.md §3"
+fi

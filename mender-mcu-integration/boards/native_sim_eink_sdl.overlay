@@ -27,6 +27,10 @@
 		zephyr,display = &sdl_dc;
 	};
 
+	aliases {
+		gnss = &gnss_emul;
+	};
+
 	fstab {
 		compatible = "zephyr,fstab";
 
@@ -41,6 +45,11 @@
 			lookahead-size = <128>;
 			block-cycles = <512>;
 		};
+	};
+
+	gnss_emul: gnss-emul {
+		compatible = "zephyr,gnss-emul";
+		status = "okay";
 	};
 };
 

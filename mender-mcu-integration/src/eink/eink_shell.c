@@ -10,7 +10,12 @@
 #if defined(CONFIG_APP_EINK_LOCATION)
 #include "eink_location.h"
 #endif
+#if defined(CONFIG_APP_EINK_GNSS)
+#include "eink_gnss.h"
+#endif
+#include "utils/soc_uid.h"
 
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <zephyr/shell/shell.h>
@@ -86,6 +91,9 @@ static int cmd_location(const struct shell *sh, size_t argc, char **argv)
 			shell_error(sh, "location get failed: %d", ret);
 			return ret;
 		}
+#if defined(CONFIG_APP_EINK_GNSS)
+		shell_print(sh, "gnss: %s", eink_gnss_ready() ? "ready" : "unavailable");
+#endif
 		if (!fix.valid) {
 			shell_print(sh, "location: none");
 			return 0;
@@ -182,9 +190,11 @@ static int cmd_http_start(const struct shell *sh, size_t argc, char **argv)
 
 static int cmd_creds(const struct shell *sh, size_t argc, char **argv)
 {
-	/* eink creds <base_url> <device_id> <token> */
+	/* eink creds <base_url> <device_id> <token>
+	 * device_id should be SoC UID hex (or leave product default empty).
+	 */
 	if (argc < 4) {
-		shell_error(sh, "usage: eink creds <base_url> <device_id> <token>");
+		shell_error(sh, "usage: eink creds <base_url> <device_id|soc_uid_hex> <token>");
 		return -EINVAL;
 	}
 	int ret = eink_http_set_credentials(argv[1], argv[2], argv[3]);
@@ -197,6 +207,22 @@ static int cmd_creds(const struct shell *sh, size_t argc, char **argv)
 	return 0;
 }
 #endif
+
+static int cmd_uid(const struct shell *sh, size_t argc, char **argv)
+{
+	char uid[SOC_UID_HEX_MAX];
+	int ret;
+
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+	ret = soc_uid_get_hex(uid, sizeof(uid));
+	if (ret) {
+		shell_error(sh, "SoC UID unavailable: %d", ret);
+		return ret;
+	}
+	shell_print(sh, "soc_uid=%s", uid);
+	return 0;
+}
 
 static int cmd_sched_tick(const struct shell *sh, size_t argc, char **argv)
 {
@@ -212,6 +238,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(eink_cmds,
 	SHELL_CMD_ARG(show, NULL, "Show ES6F frame file", cmd_show, 2, 1),
 	SHELL_CMD(clear, NULL, "Clear panel (white)", cmd_clear),
 	SHELL_CMD(status, NULL, "Display status", cmd_status),
+	SHELL_CMD(uid, NULL, "Print SoC UID hex (device identity SoT)", cmd_uid),
 	SHELL_CMD(tick, NULL, "Run one scheduler tick (local/fixture)", cmd_sched_tick),
 #if defined(CONFIG_APP_EINK_LOCATION)
 	SHELL_CMD_ARG(location, NULL,

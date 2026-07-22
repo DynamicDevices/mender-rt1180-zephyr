@@ -8,6 +8,9 @@
 #if defined(CONFIG_APP_EINK_LOCATION)
 #include "eink_location.h"
 #endif
+#if defined(CONFIG_APP_EINK_GNSS)
+#include "eink_gnss.h"
+#endif
 #if defined(CONFIG_APP_EINK_LZ4)
 #include "eink_lz4.h"
 #include "lz4frame.h"
@@ -288,6 +291,102 @@ static int test_location_telemetry_json(void)
 }
 #endif
 
+#if defined(CONFIG_APP_EINK_GNSS)
+static int test_gnss_apply_to_location(void)
+{
+	struct gnss_data data = { 0 };
+	struct eink_location_fix fix;
+	int ret;
+
+	ret = eink_location_clear();
+	if (ret != 0) {
+		return ret;
+	}
+
+	data.info.fix_status = GNSS_FIX_STATUS_GNSS_FIX;
+	data.info.fix_quality = GNSS_FIX_QUALITY_GNSS_SPS;
+	data.info.satellites_cnt = 8;
+	data.info.hdop = 1000; /* 1.0 → ~5 m */
+	/* 53.4808°N, 2.2426°W in nanodegrees */
+	data.nav_data.latitude = 53480800000LL;
+	data.nav_data.longitude = -2242600000LL;
+
+	ret = eink_gnss_apply_data(&data);
+	if (ret != 0) {
+		return ret;
+	}
+	ret = eink_location_get(&fix);
+	if (ret != 0 || !fix.valid) {
+		return -EINVAL;
+	}
+	if (fix.latitude < 53.48 || fix.latitude > 53.49 || fix.longitude > -2.24 ||
+	    fix.longitude < -2.25) {
+		return -ERANGE;
+	}
+	if (fix.accuracy_m < 4.0 || fix.accuracy_m > 6.0) {
+		return -ERANGE;
+	}
+
+	/* NO_FIX must not clear the last good fix. */
+	data.info.fix_status = GNSS_FIX_STATUS_NO_FIX;
+	ret = eink_gnss_apply_data(&data);
+	if (ret != 0) {
+		return ret;
+	}
+	ret = eink_location_get(&fix);
+	if (ret != 0 || !fix.valid) {
+		return -EFAULT;
+	}
+
+	return eink_location_clear();
+}
+#endif
+
+static int test_nibble_to_rgb565(void)
+{
+	struct {
+		uint8_t nib;
+		uint16_t want;
+	} cases[] = {
+		{ EINK_COLOR_BLACK, 0x0000 },
+		{ EINK_COLOR_WHITE, 0xFFFF },
+		{ EINK_COLOR_YELLOW, 0xFFE0 },
+		{ EINK_COLOR_RED, 0xF800 },
+		{ EINK_COLOR_BLUE, 0x001F },
+		{ EINK_COLOR_GREEN, 0x07E0 },
+		{ 0x0A /* unknown → grey */, 0x8410 },
+		/* High nibble must be ignored (packed L4 sibling). */
+		{ (uint8_t)(0xF0u | EINK_COLOR_RED), 0xF800 },
+	};
+
+	for (size_t i = 0; i < ARRAY_SIZE(cases); i++) {
+		uint16_t got = eink_frame_nibble_to_rgb565(cases[i].nib);
+
+		if (got != cases[i].want) {
+			LOG_ERR("rgb565 nib=0x%02x got=0x%04x want=0x%04x", cases[i].nib, got,
+				cases[i].want);
+			return -EINVAL;
+		}
+	}
+
+	/* Nearest-neighbour scale sample used by LCD preview (1200→720). */
+	{
+		const uint16_t panel_w = EINK_PANEL_WIDTH;
+		const uint16_t lcd_w = 720u;
+		uint16_t lx0_src = (uint16_t)(((uint32_t)0 * panel_w) / lcd_w);
+		uint16_t lx_mid_src = (uint16_t)(((uint32_t)(lcd_w / 2u) * panel_w) / lcd_w);
+		uint16_t lx_last_src =
+			(uint16_t)(((uint32_t)(lcd_w - 1u) * panel_w) / lcd_w);
+
+		if (lx0_src != 0 || lx_mid_src != 600 || lx_last_src != 1198) {
+			LOG_ERR("lcd scale map unexpected %u %u %u", lx0_src, lx_mid_src,
+				lx_last_src);
+			return -ERANGE;
+		}
+	}
+	return 0;
+}
+
 int eink_selftest_run(void)
 {
 	int fails = 0;
@@ -295,6 +394,9 @@ int eink_selftest_run(void)
 
 	r = test_frame_stream_crc();
 	LOG_INF("test_frame_stream_crc: %d", r);
+	fails += (r != 0);
+	r = test_nibble_to_rgb565();
+	LOG_INF("test_nibble_to_rgb565: %d", r);
 	fails += (r != 0);
 	r = test_scheduler_latest_overdue();
 	LOG_INF("test_scheduler_latest_overdue: %d", r);
@@ -316,6 +418,11 @@ int eink_selftest_run(void)
 #if defined(CONFIG_APP_EINK_LOCATION)
 	r = test_location_telemetry_json();
 	LOG_INF("test_location_telemetry_json: %d", r);
+	fails += (r != 0);
+#endif
+#if defined(CONFIG_APP_EINK_GNSS)
+	r = test_gnss_apply_to_location();
+	LOG_INF("test_gnss_apply_to_location: %d", r);
 	fails += (r != 0);
 #endif
 	if (fails) {

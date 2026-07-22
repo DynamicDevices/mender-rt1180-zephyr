@@ -90,9 +90,14 @@ if APP_EINK
 		default "https://api.dev.e-tabelone.com"
 
 	config APP_EINK_HTTP_DEVICE_ID
-		string "e-tabelone device id"
+		string "e-tabelone device id (empty = SoC UID hex)"
 		depends on APP_EINK_HTTP
 		default ""
+		help
+		  Leave empty so the app uses the SoC unique ID (hwinfo,
+		  uppercase hex) as Etablone device_id — same string as Active
+		  ESL onboard board_id. Override only for lab fixtures.
+		  Auth remains the Bearer device token, not this id.
 
 	config APP_EINK_HTTP_AUTH_TOKEN
 		string "e-tabelone Bearer token (dev only; prefer runtime settings)"
@@ -107,6 +112,17 @@ if APP_EINK
 		depends on APP_EINK_HTTP
 		default 300
 		range 30 86400
+
+	config APP_EINK_HTTP_V2_SYNC
+		bool "Use /node/v2 radio-on-time sync (Cloudflare)"
+		depends on APP_EINK_HTTP
+		default n
+		help
+		  POST /node/v2/device/{id}/sync folds telemetry + config +
+		  hash-diff download[] into one control-plane RTT. Asset bytes
+		  still use GET /node/v0/.../assets/{id}.es6f.lz4. Falls back
+		  to /node/v0 for file:// fixtures. Keep /node/v0 path when
+		  this is disabled (AWS dual-run).
 
 	config APP_EINK_HTTP_GALLERY_DEFER
 		bool "Defer gallery ES6F downloads until after paint"
@@ -240,6 +256,17 @@ if APP_EINK
 		  remain disabled on the custom-board production / OCRAM-only
 		  profile.
 
+	config APP_EINK_DISPLAY_LCD_PREVIEW
+		bool "Rocktech MIPI LCD preview (lab EVK stand-in)"
+		depends on APP_EINK && DISPLAY
+		default n
+		help
+		  Blit a scaled RGB565 preview of ES6F onto zephyr,display
+		  (Rocktech RK055HDMIPI4MA0 720x1280 via --shield rk055hdmipi4ma0).
+		  Lab-only: uses an ~1.8 MiB RGB565 framebuffer (EVK SDRAM).
+		  Mutually exclusive with EL133/LPSPI1 e-ink images (LCDIF vs
+		  lpspi1 pinmux). Not for the Active ESL product board.
+
 	config APP_EINK_BATTERY_DUTY_CYCLE
 		bool "Cold-boot duty-cycle wake machine (SNVS field mode)"
 		default n
@@ -305,8 +332,18 @@ if APP_EINK
 		  Persist a last-known fix under the e-ink store root and include
 		  latitude/longitude (and optional location_accuracy_m) in
 		  POST …/telemetry when a fix is present. Omit fields when no
-		  fix. Lab/native_sim: eink location set|clear. Real GNSS can
-		  call eink_location_set() later — no GNSS driver here.
+		  fix. Lab: eink location set|clear. GNSS bridge:
+		  CONFIG_APP_EINK_GNSS → eink_location_set() from Zephyr GNSS.
+
+	config APP_EINK_GNSS
+		bool "Zephyr GNSS driver → location telemetry bridge"
+		depends on APP_EINK_LOCATION && GNSS
+		default n
+		help
+		  Bind DT alias gnss, resume the device, and push fixes into
+		  eink_location_set(). native_sim uses zephyr,gnss-emul; EVK
+		  lab uses gnss-nmea-generic on a UART (pins TBD). Product BOM
+		  may swap to a vendor-compatible (u-blox / Quectel / …).
 
 	config APP_EINK_SELFTEST
 		bool "Run e-ink unit self-tests at boot"

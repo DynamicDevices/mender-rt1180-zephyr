@@ -1,0 +1,25 @@
+/*
+ * EVK lab: generic NMEA GNSS on Arduino UART (LPUART2).
+ *
+ * Pinmux/module TBD — status disabled until loom/schematic confirms which
+ * UART and module (u-blox M8/F9, Quectel LC76, …). Enable with:
+ *   status = "okay"; on &lpuart2 and the gnss node, plus CONFIG_APP_EINK_GNSS.
+ *
+ * Product board should replace this with the BOM-compatible binding.
+ */
+/ {
+	aliases {
+		gnss = &gnss0;
+	};
+};
+
+&lpuart2 {
+	/* Keep disabled until GNSS loom is wired (conflicts TBD with other lab uses). */
+	status = "disabled";
+	current-speed = <9600>;
+
+	gnss0: gnss-nmea-generic {
+		compatible = "gnss-nmea-generic";
+		status = "disabled";
+	};
+};
