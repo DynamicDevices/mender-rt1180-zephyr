@@ -204,11 +204,17 @@ int eink_location_set(double latitude, double longitude, double accuracy_m)
 int eink_location_clear(void)
 {
 	char path[300];
+	struct fs_dirent entry;
 	int ret;
 
 	path_location(path, sizeof(path));
-	ret = fs_unlink(path);
-	if (ret < 0 && ret != -ENOENT) {
+	ret = fs_stat(path, &entry);
+	if (ret == 0) {
+		ret = fs_unlink(path);
+		if (ret < 0) {
+			return ret;
+		}
+	} else if (ret != -ENOENT) {
 		return ret;
 	}
 	memset(&cached, 0, sizeof(cached));

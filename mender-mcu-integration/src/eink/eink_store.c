@@ -22,6 +22,19 @@ LOG_MODULE_REGISTER(eink_store, LOG_LEVEL_INF);
 
 static char root[256] = "/tmp/eink-zephyr";
 
+/** Unlink if present; avoid Zephyr ERR logs on missing paths (-ENOENT). */
+static void unlink_if_exists(const char *path)
+{
+	struct fs_dirent entry;
+
+	if (path == NULL || path[0] == '\0') {
+		return;
+	}
+	if (fs_stat(path, &entry) == 0) {
+		(void)fs_unlink(path);
+	}
+}
+
 static int ensure_dir(const char *path)
 {
 	struct fs_dirent entry;
@@ -717,8 +730,8 @@ int eink_store_accept_temp_image(const char *image_id, const char *temp_path)
 			LOG_ERR("reject temp LZ4 %s: bad size", image_id);
 			return -EINVAL;
 		}
-		(void)fs_unlink(path_es6f);
-		(void)fs_unlink(path_lz4);
+		unlink_if_exists(path_es6f);
+		unlink_if_exists(path_lz4);
 		ret = fs_rename(temp_path, path_lz4);
 		if (ret < 0) {
 			LOG_ERR("accept rename %s -> %s: %d", temp_path, path_lz4, ret);
@@ -744,8 +757,8 @@ int eink_store_accept_temp_image(const char *image_id, const char *temp_path)
 			return ret;
 		}
 
-		(void)fs_unlink(path_es6f);
-		(void)fs_unlink(path_lz4);
+		unlink_if_exists(path_es6f);
+		unlink_if_exists(path_lz4);
 		ret = fs_rename(temp_path, path_es6f);
 		if (ret < 0) {
 			LOG_ERR("accept rename %s -> %s: %d", temp_path, path_es6f, ret);
