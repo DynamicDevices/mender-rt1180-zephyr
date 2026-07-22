@@ -28,6 +28,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/net/http/client.h>
 #include <zephyr/net/http/parser.h>
+#include <zephyr/sys/crc.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/net/tls_credentials.h>
 #include <zephyr/sys/timeutil.h>
@@ -38,7 +39,8 @@
 
 LOG_MODULE_REGISTER(eink_http, LOG_LEVEL_INF);
 
-#define EINK_HTTP_RECV_BUF 2048
+/* Large enough to drain a full TCP window fragment in fewer http_client loops. */
+#define EINK_HTTP_RECV_BUF 32768
 #define EINK_HTTP_CFG_BUF 24576
 #define EINK_HTTP_TIMEOUT_MS (30 * MSEC_PER_SEC)
 #define EINK_HTTP_DOWNLOAD_TIMEOUT_MS (120 * MSEC_PER_SEC)
@@ -95,8 +97,27 @@ static struct k_work_q http_q;
 static K_THREAD_STACK_DEFINE(http_stack, EINK_HTTP_STACK_SIZE);
 static struct k_work_delayable sync_work;
 static struct k_work sync_once_work;
+static struct k_work gallery_work;
 static struct k_sem sync_once_done;
 static int sync_once_result;
+
+#if defined(CONFIG_APP_EINK_HTTP_CONFIG_CACHE)
+static uint32_t cached_config_crc;
+static bool config_cache_valid;
+static struct eink_schedule cached_sched;
+static struct eink_http_image cached_images[EINK_HTTP_MAX_IMAGES];
+static size_t cached_image_count;
+static int cached_orientation;
+#endif
+
+#if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER)
+static struct {
+	struct eink_http_image images[EINK_HTTP_MAX_IMAGES];
+	size_t count;
+	char skip_id[EINK_ID_MAX];
+	bool pending;
+} gallery_job;
+#endif
 
 static uint8_t cjson_arena[EINK_CJSON_ARENA_SIZE] __aligned(8);
 static size_t cjson_arena_used;
@@ -144,12 +165,13 @@ static void cjson_arena_leave(void)
 
 static int eink_http_sync_once_inner(void);
 static void ensure_http_queue(void);
+#if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER)
+static void gallery_work_handler(struct k_work *work);
+#endif
 
 /* S3 pre-signed URLs reject requests when the client clock is in 1970. */
 static int ensure_wall_clock(void)
 {
-#if defined(CONFIG_SNTP)
-	struct sntp_time sntp_time;
 	struct timespec tspec;
 	int64_t now = (int64_t)time(NULL);
 	int ret;
@@ -159,26 +181,48 @@ static int ensure_wall_clock(void)
 		return 0;
 	}
 
-	ret = sntp_simple(CONFIG_APP_EINK_HTTP_SNTP_SERVER, 5000, &sntp_time);
-	if (ret) {
-		LOG_WRN("SNTP sync failed: %d (S3 downloads may 403)", ret);
-		return ret;
+	/*
+	 * Prefer a recently persisted sync timestamp over a cold SNTP RTT
+	 * (DNS + UDP to pool.ntp.org). Good enough until the next full sync.
+	 */
+	{
+		int64_t last_sync = 0;
+
+		if (eink_store_load_last_sync(&last_sync) == 0 && last_sync >= 1704067200LL) {
+			tspec.tv_sec = (time_t)last_sync;
+			tspec.tv_nsec = 0;
+			if (sys_clock_settime(SYS_CLOCK_REALTIME, &tspec) == 0) {
+				LOG_INF("wall clock restored from last_sync %lld",
+					(long long)last_sync);
+				return 0;
+			}
+		}
 	}
 
-	tspec.tv_sec = (time_t)sntp_time.seconds;
-	tspec.tv_nsec = ((uint64_t)sntp_time.fraction * (1000ULL * 1000ULL * 1000ULL)) >> 32;
-	ret = sys_clock_settime(SYS_CLOCK_REALTIME, &tspec);
-	if (ret) {
-		LOG_WRN("sys_clock_settime failed: %d", ret);
-		return ret;
+#if defined(CONFIG_SNTP)
+	{
+		struct sntp_time sntp_time;
+
+		ret = sntp_simple(CONFIG_APP_EINK_HTTP_SNTP_SERVER, 5000, &sntp_time);
+		if (ret) {
+			LOG_WRN("SNTP sync failed: %d (S3 downloads may 403)", ret);
+			return ret;
+		}
+
+		tspec.tv_sec = (time_t)sntp_time.seconds;
+		tspec.tv_nsec =
+			((uint64_t)sntp_time.fraction * (1000ULL * 1000ULL * 1000ULL)) >> 32;
+		ret = sys_clock_settime(SYS_CLOCK_REALTIME, &tspec);
+		if (ret) {
+			LOG_WRN("sys_clock_settime failed: %d", ret);
+			return ret;
+		}
+		LOG_INF("wall clock set from SNTP (%s) to %lld",
+			CONFIG_APP_EINK_HTTP_SNTP_SERVER, (long long)tspec.tv_sec);
+		return 0;
 	}
-	LOG_INF("wall clock set from SNTP (%s) to %lld", CONFIG_APP_EINK_HTTP_SNTP_SERVER,
-		(long long)tspec.tv_sec);
-	return 0;
 #else
-	if ((int64_t)time(NULL) < 1704067200LL) {
-		LOG_WRN("wall clock unset and CONFIG_SNTP=n; S3 pre-signed URLs will 403");
-	}
+	LOG_WRN("wall clock unset and CONFIG_SNTP=n; S3 pre-signed URLs will 403");
 	return 0;
 #endif
 }
@@ -913,6 +957,29 @@ int eink_http_fetch_config(struct eink_schedule *out_sched, struct eink_http_ima
 		body[n] = '\0';
 	}
 
+#if defined(CONFIG_APP_EINK_HTTP_CONFIG_CACHE)
+	{
+		uint32_t crc = crc32_ieee(body, n);
+
+		if (config_cache_valid && crc == cached_config_crc) {
+			memcpy(out_sched, &cached_sched, sizeof(*out_sched));
+			if (images != NULL && image_count != NULL) {
+				size_t copy = MIN(image_cap, cached_image_count);
+
+				memcpy(images, cached_images, copy * sizeof(images[0]));
+				*image_count = copy;
+			}
+			if (orientation) {
+				*orientation = cached_orientation;
+			}
+			LOG_INF("config unchanged (crc=0x%08x) — reusing %u jobs / %u images",
+				crc, (unsigned)out_sched->count,
+				image_count ? (unsigned)*image_count : 0U);
+			return 0;
+		}
+	}
+#endif
+
 	ret = parse_config_json((const char *)body, n, out_sched, images, image_cap, image_count,
 				orientation);
 	if (ret) {
@@ -931,6 +998,19 @@ int eink_http_fetch_config(struct eink_schedule *out_sched, struct eink_http_ima
 		}
 		return ret;
 	}
+#if defined(CONFIG_APP_EINK_HTTP_CONFIG_CACHE)
+	cached_config_crc = crc32_ieee(body, n);
+	memcpy(&cached_sched, out_sched, sizeof(cached_sched));
+	cached_image_count = image_count ? *image_count : 0;
+	if (cached_image_count > ARRAY_SIZE(cached_images)) {
+		cached_image_count = ARRAY_SIZE(cached_images);
+	}
+	if (images != NULL && cached_image_count > 0) {
+		memcpy(cached_images, images, cached_image_count * sizeof(cached_images[0]));
+	}
+	cached_orientation = orientation ? *orientation : 0;
+	config_cache_valid = true;
+#endif
 	LOG_INF("parsed %u jobs / %u images", (unsigned)out_sched->count,
 		image_count ? (unsigned)*image_count : 0U);
 	return 0;
@@ -1040,10 +1120,16 @@ int eink_http_download_image(const char *image_id, const char *url)
 			return ret;
 		}
 	} else if (strncmp(url, "http://", 7) == 0 || strncmp(url, "https://", 8) == 0) {
+		int64_t t0 = k_uptime_get();
+		int64_t t_http;
+		int64_t t_val;
+
 		LOG_INF("downloading image %s", image_id);
 		ret = http_download_to_file(url, true, tmp_path);
+		t_http = k_uptime_get() - t0;
 		if (ret) {
-			LOG_WRN("download transport failed: %d", ret);
+			LOG_WRN("download transport failed: %d (http %lld ms)", ret,
+				(long long)t_http);
 			return ret;
 		}
 		ret = load_fs_body(tmp_path, magic, sizeof(magic), &n);
@@ -1056,6 +1142,17 @@ int eink_http_download_image(const char *image_id, const char *url)
 			(void)fs_unlink(tmp_path);
 			return -ENOTSUP;
 		}
+		LOG_INF("validating downloaded image %s", image_id);
+		t_val = k_uptime_get();
+		ret = eink_store_accept_temp_image(image_id, tmp_path);
+		t_val = k_uptime_get() - t_val;
+		if (ret) {
+			(void)fs_unlink(tmp_path);
+		}
+		LOG_INF("prof: image %s http=%lld ms validate=%lld ms total=%lld ms ret=%d",
+			image_id, (long long)t_http, (long long)t_val,
+			(long long)(k_uptime_get() - t0), ret);
+		return ret;
 	} else {
 		return -EINVAL;
 	}
@@ -1202,7 +1299,133 @@ static void sync_once_work_handler(struct k_work *work)
 	k_sem_give(&sync_once_done);
 }
 
+#if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER)
+static void gallery_work_handler(struct k_work *work)
+{
+	int64_t t0 = k_uptime_get();
+	size_t ok = 0;
+	size_t fail = 0;
+
+	ARG_UNUSED(work);
+	if (!gallery_job.pending) {
+		return;
+	}
+	LOG_INF("gallery cache start (%u images)", (unsigned)gallery_job.count);
+	for (size_t i = 0; i < gallery_job.count; i++) {
+		int ret;
+
+		if (gallery_job.skip_id[0] != '\0' &&
+		    strcmp(gallery_job.images[i].image_id, gallery_job.skip_id) == 0) {
+			continue;
+		}
+		if (eink_store_has_valid_image(gallery_job.images[i].image_id)) {
+			LOG_INF("gallery image %s already cached",
+				gallery_job.images[i].image_id);
+			continue;
+		}
+		ret = eink_http_download_image(gallery_job.images[i].image_id,
+					       gallery_job.images[i].url);
+		if (ret) {
+			LOG_WRN("gallery image %s download failed: %d",
+				gallery_job.images[i].image_id, ret);
+			fail++;
+		} else {
+			ok++;
+		}
+	}
+	gallery_job.pending = false;
+	LOG_INF("prof: gallery deferred done ok=%u fail=%u in %lld ms", (unsigned)ok,
+		(unsigned)fail, (long long)(k_uptime_get() - t0));
+}
+#endif
+
 /* Heavy sync (TLS + large JSON + downloads) always runs on http_q. */
+
+#if defined(CONFIG_APP_EINK_HTTP_FAST_PATH)
+static bool sync_is_fresh(int64_t now, int64_t last_sync)
+{
+	uint32_t max_age = CONFIG_APP_EINK_HTTP_SYNC_MAX_AGE_SEC;
+
+	if (now < 1700000000LL || last_sync <= 0) {
+		return false;
+	}
+	return (now - last_sync) < (int64_t)max_age;
+}
+
+bool eink_http_radio_sync_needed(void)
+{
+	char due[EINK_ID_MAX];
+	int64_t last_sync = 0;
+	int64_t now;
+	int due_ret;
+
+	if (!inited || !cfg.enabled) {
+		return false;
+	}
+	now = (int64_t)time(NULL);
+	(void)eink_store_load_last_sync(&last_sync);
+	due_ret = eink_scheduler_due_image(due, sizeof(due));
+	if (due_ret < 0) {
+		return true;
+	}
+	/* New job to acknowledge / possibly download — radio required. */
+	if (due_ret > 0) {
+		return true;
+	}
+	/* Nothing new due: skip radio while last sync is still fresh. */
+	return !sync_is_fresh(now, last_sync);
+}
+
+static int sync_telem_only(int64_t t_sync)
+{
+	struct eink_schedule sched;
+	char last_job[EINK_ID_MAX];
+	int64_t now = (int64_t)time(NULL);
+	int64_t next_wake;
+	int64_t t_mark;
+	int64_t ms_paint = 0;
+	int64_t ms_telem = 0;
+	int ret;
+
+	memset(&sched, 0, sizeof(sched));
+	ret = eink_store_load_schedule(&sched);
+	if (ret || sched.count == 0) {
+		return ret ? ret : -ENOENT;
+	}
+
+	t_mark = k_uptime_get();
+	ret = eink_scheduler_tick();
+	if (ret == 0) {
+		ret = eink_scheduler_repaint();
+	}
+	ms_paint = k_uptime_get() - t_mark;
+	if (ret < 0) {
+		LOG_WRN("fast-path paint: %d", ret);
+	}
+
+	eink_scheduler_get_last_job(last_job, sizeof(last_job));
+	next_wake = eink_scheduler_get_next_wakeup(now, cfg.poll_interval_seconds);
+	LOG_INF("schedule next_wake unix=%lld (fast path)", (long long)next_wake);
+
+	t_mark = k_uptime_get();
+	ret = eink_http_post_telemetry(&sched, last_job, next_wake, -1);
+	ms_telem = k_uptime_get() - t_mark;
+	if (ret == 0) {
+		(void)eink_store_save_last_sync(now);
+	}
+	LOG_INF("prof: sync total=%lld ms config=0 primary=0 paint=%lld "
+		"gallery=0 (0 dl) telem=%lld (fast)",
+		(long long)(k_uptime_get() - t_sync), (long long)ms_paint,
+		(long long)ms_telem);
+	return ret;
+}
+#else
+bool eink_http_radio_sync_needed(void)
+{
+	return inited && cfg.enabled;
+}
+#endif
+
 static int eink_http_sync_once_inner(void)
 {
 	static struct eink_schedule sched;
@@ -1214,6 +1437,14 @@ static int eink_http_sync_once_inner(void)
 	char due_image[EINK_ID_MAX];
 	int64_t now;
 	int ret;
+	int64_t t_sync = k_uptime_get();
+	int64_t t_mark;
+	int64_t ms_config = 0;
+	int64_t ms_primary = 0;
+	int64_t ms_paint = 0;
+	int64_t ms_gallery = 0;
+	int64_t ms_telem = 0;
+	size_t gallery_downloads = 0;
 
 	if (!inited || !cfg.enabled) {
 		return -EINVAL;
@@ -1222,8 +1453,40 @@ static int eink_http_sync_once_inner(void)
 	due_image[0] = '\0';
 	memset(&sched, 0, sizeof(sched));
 	(void)ensure_wall_clock();
+
+#if defined(CONFIG_APP_EINK_HTTP_FAST_PATH)
+	{
+		int64_t last_sync = 0;
+		char probe_due[EINK_ID_MAX];
+		int due_ret;
+		bool need_download = false;
+
+		now = (int64_t)time(NULL);
+		(void)eink_store_load_last_sync(&last_sync);
+		due_ret = eink_scheduler_due_image(probe_due, sizeof(probe_due));
+		if (due_ret > 0) {
+			need_download = !eink_store_has_valid_image(probe_due);
+		} else if (due_ret == 0) {
+			if (eink_scheduler_current_image(probe_due, sizeof(probe_due)) > 0) {
+				need_download = !eink_store_has_valid_image(probe_due);
+			}
+		}
+		if (sync_is_fresh(now, last_sync) && !need_download) {
+			LOG_INF("sync fast path (telem-only, age=%lld s)",
+				(long long)(now - last_sync));
+			ret = sync_telem_only(t_sync);
+			if (ret == 0) {
+				return 0;
+			}
+			LOG_WRN("fast path failed (%d) — full sync", ret);
+		}
+	}
+#endif
+
+	t_mark = k_uptime_get();
 	ret = eink_http_fetch_config(&sched, images, ARRAY_SIZE(images), &image_count,
 				     &orientation);
+	ms_config = k_uptime_get() - t_mark;
 	if (ret) {
 		LOG_WRN("config fetch failed: %d", ret);
 		return ret;
@@ -1257,6 +1520,7 @@ static int eink_http_sync_once_inner(void)
 	if (due_image[0] != '\0') {
 		bool found = false;
 
+		t_mark = k_uptime_get();
 		for (size_t i = 0; i < image_count; i++) {
 			if (strcmp(images[i].image_id, due_image) != 0) {
 				continue;
@@ -1273,11 +1537,13 @@ static int eink_http_sync_once_inner(void)
 			}
 			break;
 		}
+		ms_primary = k_uptime_get() - t_mark;
 		if (!found) {
 			LOG_WRN("display image %s missing from config", due_image);
 		}
 	}
 
+	t_mark = k_uptime_get();
 	LOG_INF("scheduler tick after primary image");
 	ret = eink_scheduler_tick();
 	LOG_INF("scheduler tick result=%d", ret);
@@ -1285,28 +1551,90 @@ static int eink_http_sync_once_inner(void)
 		ret = eink_scheduler_repaint();
 		LOG_INF("scheduler repaint result=%d", ret);
 	}
-
-	for (size_t i = 0; i < image_count; i++) {
-		if (due_image[0] != '\0' && strcmp(images[i].image_id, due_image) == 0) {
-			continue;
-		}
-		if (eink_store_has_valid_image(images[i].image_id)) {
-			LOG_INF("gallery image %s already cached", images[i].image_id);
-			continue;
-		}
-		ret = eink_http_download_image(images[i].image_id, images[i].url);
-		if (ret) {
-			LOG_WRN("gallery image %s download failed: %d", images[i].image_id, ret);
-		}
-	}
+	ms_paint = k_uptime_get() - t_mark;
 
 	eink_scheduler_get_last_job(last_job, sizeof(last_job));
 	{
 		int64_t next_wake =
 			eink_scheduler_get_next_wakeup(now, cfg.poll_interval_seconds);
+		int telem_ret;
 
 		LOG_INF("schedule next_wake unix=%lld", (long long)next_wake);
-		return eink_http_post_telemetry(&sched, last_job, next_wake, -1);
+		/* Telemetry before gallery so awake-to-ack stays short. */
+		t_mark = k_uptime_get();
+		telem_ret = eink_http_post_telemetry(&sched, last_job, next_wake, -1);
+		ms_telem = k_uptime_get() - t_mark;
+		if (telem_ret == 0) {
+			(void)eink_store_save_last_sync(now);
+		}
+
+#if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER)
+		ms_gallery = 0;
+		gallery_downloads = 0;
+#if defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE)
+		/* Keep radio budget for paint+telem only on field duty-cycle wakes. */
+		LOG_INF("gallery skipped (battery duty-cycle)");
+#else
+		if (k_work_busy_get(&gallery_work) != 0) {
+			LOG_INF("gallery defer busy — leave prior job running");
+		} else {
+			gallery_job.count = 0;
+			gallery_job.skip_id[0] = '\0';
+			if (due_image[0] != '\0') {
+				strncpy(gallery_job.skip_id, due_image,
+					sizeof(gallery_job.skip_id) - 1);
+			}
+			for (size_t i = 0;
+			     i < image_count &&
+			     gallery_job.count < ARRAY_SIZE(gallery_job.images);
+			     i++) {
+				if (due_image[0] != '\0' &&
+				    strcmp(images[i].image_id, due_image) == 0) {
+					continue;
+				}
+				if (eink_store_has_valid_image(images[i].image_id)) {
+					continue;
+				}
+				gallery_job.images[gallery_job.count++] = images[i];
+			}
+			if (gallery_job.count == 0) {
+				gallery_job.pending = false;
+			} else {
+				gallery_job.pending = true;
+				gallery_downloads = gallery_job.count;
+				k_work_init(&gallery_work, gallery_work_handler);
+				(void)k_work_submit_to_queue(&http_q, &gallery_work);
+				LOG_INF("gallery deferred (%u images)",
+					(unsigned)gallery_job.count);
+			}
+		}
+#endif /* BATTERY_DUTY_CYCLE */
+#else
+		t_mark = k_uptime_get();
+		for (size_t i = 0; i < image_count; i++) {
+			if (due_image[0] != '\0' && strcmp(images[i].image_id, due_image) == 0) {
+				continue;
+			}
+			if (eink_store_has_valid_image(images[i].image_id)) {
+				LOG_INF("gallery image %s already cached", images[i].image_id);
+				continue;
+			}
+			gallery_downloads++;
+			ret = eink_http_download_image(images[i].image_id, images[i].url);
+			if (ret) {
+				LOG_WRN("gallery image %s download failed: %d", images[i].image_id,
+					ret);
+			}
+		}
+		ms_gallery = k_uptime_get() - t_mark;
+#endif
+
+		LOG_INF("prof: sync total=%lld ms config=%lld primary=%lld paint=%lld "
+			"gallery=%lld (%u dl) telem=%lld",
+			(long long)(k_uptime_get() - t_sync), (long long)ms_config,
+			(long long)ms_primary, (long long)ms_paint, (long long)ms_gallery,
+			(unsigned)gallery_downloads, (long long)ms_telem);
+		return telem_ret;
 	}
 }
 

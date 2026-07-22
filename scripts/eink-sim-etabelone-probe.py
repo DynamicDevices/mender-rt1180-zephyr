@@ -69,14 +69,19 @@ def main() -> int:
                 break
             buffer += chunk
             text = buffer.decode("utf-8", "replace")
-            if phase == 0 and "Received: 192.0.2." in text:
+            if phase == 0 and (
+                "Received: 192.0.2." in text
+                or "Network already has a preferred IPv4 address" in text
+                or "Address[1]: 192.0.2." in text
+            ):
                 send(f"eink creds {args.base} {args.device_id} none")
                 phase = 1
             elif phase == 1 and "credentials updated" in text:
                 send("eink sync")
                 phase = 2
             elif phase == 2 and ("sync ok" in text or "sync failed" in text):
-                drain_until = time.time() + 8.0
+                # Deferred logs + gallery can trail shell "sync ok"; wait for paint.
+                drain_until = time.time() + 120.0
                 while time.time() < drain_until:
                     readable, _, _ = select.select([master], [], [], 0.25)
                     if master in readable:
@@ -84,6 +89,27 @@ def main() -> int:
                             buffer += os.read(master, 16384)
                         except OSError:
                             break
+                    text = ANSI.sub("", buffer.decode("utf-8", "replace"))
+                    if "refresh done result=0" in text and "telemetry posted" in text:
+                        break
+                    if "fast path" in text and "telemetry posted" in text:
+                        break
+                    if "prof: sync total=" in text and "telemetry posted" in text:
+                        break
+                    if "sync failed" in text:
+                        break
+                # One short drain so trailing prof: lines land after telemetry.
+                drain_until = time.time() + 2.0
+                while time.time() < drain_until:
+                    readable, _, _ = select.select([master], [], [], 0.25)
+                    if master in readable:
+                        try:
+                            buffer += os.read(master, 16384)
+                        except OSError:
+                            break
+                    text = ANSI.sub("", buffer.decode("utf-8", "replace"))
+                    if "prof: sync total=" in text:
+                        break
                 break
     finally:
         text = ANSI.sub("", buffer.decode("utf-8", "replace"))
@@ -100,6 +126,9 @@ def main() -> int:
                     "refresh done",
                     "scheduler tick result",
                     "telemetry posted",
+                    "prof:",
+                    "gallery",
+                    "fast path",
                     "sync ok",
                     "sync failed",
                     "heap corruption",
@@ -110,22 +139,13 @@ def main() -> int:
 
         succeeded = (
             "Mender client disabled" in text
-            and "parsed " in text
             and "sync ok" in text
             and "heap corruption" not in text
             and "FATAL ERROR" not in text
+            and "telemetry posted" in text
             and (
-                (
-                    "show job=" in text
-                    and "refresh done result=0" in text
-                    and "telemetry posted" in text
-                )
-                or (
-                    "no new scheduled image due" in text
-                    and "show job=" in text
-                    and "refresh done result=0" in text
-                )
-                or "no new scheduled image due" in text
+                ("parsed " in text and "show job=" in text and "refresh done result=0" in text)
+                or "fast path" in text
             )
         )
         print("RESULT", "OK" if succeeded else "FAIL")

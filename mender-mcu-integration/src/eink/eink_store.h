@@ -25,6 +25,12 @@ int eink_store_image_path(const char *image_id, char *out, size_t out_cap);
 
 /** True if a valid ES6F already exists for image_id. */
 bool eink_store_has_valid_image(const char *image_id);
+/** Header + file-size check only (no payload CRC). */
+bool eink_store_has_image_quick(const char *image_id);
+
+/** Persist / reload last successful e-tabelone sync time (unix seconds). */
+int eink_store_save_last_sync(int64_t unix_sec);
+int eink_store_load_last_sync(int64_t *unix_sec);
 
 /** Write payload file for image_id (atomic replace). */
 int eink_store_put_image(const char *image_id, const uint8_t *es6f, size_t len);

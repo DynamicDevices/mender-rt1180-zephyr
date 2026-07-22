@@ -51,6 +51,12 @@ int eink_http_post_telemetry(const struct eink_schedule *sched,
 /** Fetch config, download/validate frames, update scheduler, and post telemetry. */
 int eink_http_sync_once(void);
 
+/**
+ * True when this wake should power the radio for e-tabelone.
+ * False when offline paint is enough (nothing new due + last sync still fresh).
+ */
+bool eink_http_radio_sync_needed(void);
+
 /** Start periodic sync on a dedicated workqueue. */
 int eink_http_start(void);
 

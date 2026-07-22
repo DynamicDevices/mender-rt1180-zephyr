@@ -40,14 +40,21 @@ int eink_wake_run_once(void)
 	}
 
 #if defined(CONFIG_APP_EINK_HTTP)
-	ret = eink_power_iw612_set(true);
-	if (ret == 0) {
-		ret = eink_http_sync_once();
-		if (ret < 0) {
-			LOG_WRN("sync_once failed (%d) — backoff then sleep", ret);
+#if defined(CONFIG_APP_EINK_WAKE_SKIP_RADIO_IF_CURRENT)
+	if (!eink_http_radio_sync_needed()) {
+		LOG_INF("wake: skip radio — schedule current, last sync fresh");
+	} else
+#endif
+	{
+		ret = eink_power_iw612_set(true);
+		if (ret == 0) {
+			ret = eink_http_sync_once();
+			if (ret < 0) {
+				LOG_WRN("sync_once failed (%d) — backoff then sleep", ret);
+			}
 		}
+		(void)eink_power_iw612_set(false);
 	}
-	(void)eink_power_iw612_set(false);
 	poll = CONFIG_APP_EINK_HTTP_POLL_INTERVAL;
 #endif
 

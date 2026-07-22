@@ -4,6 +4,9 @@
 The production firmware remains ES6F-only. This development bridge fetches the
 real config/schedule, rewrites image URLs to a local endpoint, and lazily
 converts each source asset into the exact packed frame consumed by Zephyr.
+
+After each config fetch, remaining images are prefetched in parallel so gallery
+downloads usually hit the host ES6F cache.
 """
 
 from __future__ import annotations
@@ -16,9 +19,11 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -31,16 +36,28 @@ class Bridge:
         public_base: str,
         cache_dir: Path,
         token: str,
+        prefetch_workers: int = 4,
     ) -> None:
         self.upstream = upstream.rstrip("/")
         self.device_id = device_id
         self.public_base = public_base.rstrip("/")
         self.cache_dir = cache_dir
         self.token = token
+        self.prefetch_workers = max(1, prefetch_workers)
+        self.prefetch_enabled = True
         self.image_urls: dict[str, str] = {}
         self.lock = threading.Lock()
+        self._id_locks: dict[str, threading.Lock] = {}
         self.converter = Path(__file__).with_name("gen-eink-frame.py")
         cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def _id_lock(self, image_id: str) -> threading.Lock:
+        with self.lock:
+            lock = self._id_locks.get(image_id)
+            if lock is None:
+                lock = threading.Lock()
+                self._id_locks[image_id] = lock
+            return lock
 
     def request(
         self, url: str, method: str = "GET", body: bytes | None = None
@@ -68,8 +85,10 @@ class Bridge:
             )
 
     def config(self) -> bytes:
+        t0 = time.perf_counter()
         url = f"{self.upstream}/node/v0/device/{self.device_id}/config"
         status, _, body = self.request(url)
+        fetch_ms = (time.perf_counter() - t0) * 1000
         if status != 200:
             raise RuntimeError(f"upstream config returned HTTP {status}")
         config = json.loads(body)
@@ -92,9 +111,55 @@ class Bridge:
 
         with self.lock:
             self.image_urls = next_urls
-        return json.dumps(config, separators=(",", ":")).encode()
+        out = json.dumps(config, separators=(",", ":")).encode()
+        print(
+            f"bridge: config images={len(next_urls)} bytes={len(out)} "
+            f"upstream={fetch_ms:.0f} ms total={(time.perf_counter() - t0) * 1000:.0f} ms",
+            flush=True,
+        )
+        # Warm ES6F cache in the background so gallery GETs are usually hits.
+        if next_urls and self.prefetch_enabled:
+            threading.Thread(
+                target=self._prefetch_all,
+                args=(list(next_urls.keys()),),
+                name="es6f-prefetch",
+                daemon=True,
+            ).start()
+        return out
+
+    def _prefetch_all(self, image_ids: list[str]) -> None:
+        t0 = time.perf_counter()
+        workers = min(self.prefetch_workers, len(image_ids))
+        ok = 0
+        fail = 0
+        print(
+            f"bridge: prefetch start n={len(image_ids)} workers={workers}",
+            flush=True,
+        )
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(self.image, image_id): image_id for image_id in image_ids
+            }
+            for fut in as_completed(futures):
+                image_id = futures[fut]
+                try:
+                    fut.result()
+                    ok += 1
+                except Exception as error:
+                    fail += 1
+                    print(
+                        f"bridge: prefetch {image_id} failed: {error}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+        print(
+            f"bridge: prefetch done ok={ok} fail={fail} "
+            f"in {(time.perf_counter() - t0) * 1000:.0f} ms",
+            flush=True,
+        )
 
     def image(self, image_id: str) -> bytes:
+        t0 = time.perf_counter()
         with self.lock:
             source_url = self.image_urls.get(image_id)
         if source_url is None:
@@ -109,29 +174,59 @@ class Bridge:
         key = hashlib.sha256(source_url.split("?", 1)[0].encode()).hexdigest()[:16]
         output = self.cache_dir / f"{image_id}-{key}.es6f"
         if output.exists():
-            return output.read_bytes()
-
-        status, content_type, source = self.request(source_url)
-        if status != 200:
-            raise RuntimeError(f"upstream image returned HTTP {status}")
-        suffix = ".png" if "png" in content_type.lower() else ".jpg"
-        with tempfile.TemporaryDirectory(prefix="etabelone-image-") as tmp:
-            source_path = Path(tmp) / f"source{suffix}"
-            temp_output = Path(tmp) / "converted.es6f"
-            source_path.write_bytes(source)
-            subprocess.run(
-                [
-                    sys.executable,
-                    str(self.converter),
-                    "--image",
-                    str(source_path),
-                    "--output",
-                    str(temp_output),
-                ],
-                check=True,
+            data = output.read_bytes()
+            print(
+                f"bridge: cache hit {image_id} {len(data)} B in "
+                f"{(time.perf_counter() - t0) * 1000:.0f} ms",
+                flush=True,
             )
-            os.replace(temp_output, output)
-        return output.read_bytes()
+            return data
+
+        with self._id_lock(image_id):
+            if output.exists():
+                data = output.read_bytes()
+                print(
+                    f"bridge: cache hit {image_id} {len(data)} B in "
+                    f"{(time.perf_counter() - t0) * 1000:.0f} ms",
+                    flush=True,
+                )
+                return data
+
+            t_fetch = time.perf_counter()
+            status, content_type, source = self.request(source_url)
+            fetch_ms = (time.perf_counter() - t_fetch) * 1000
+            if status != 200:
+                raise RuntimeError(f"upstream image returned HTTP {status}")
+            suffix = ".png" if "png" in content_type.lower() else ".jpg"
+            with tempfile.TemporaryDirectory(prefix="etabelone-image-") as tmp:
+                source_path = Path(tmp) / f"source{suffix}"
+                temp_output = Path(tmp) / "converted.es6f"
+                source_path.write_bytes(source)
+                t_conv = time.perf_counter()
+                subprocess.run(
+                    [
+                        sys.executable,
+                        str(self.converter),
+                        "--image",
+                        str(source_path),
+                        "--output",
+                        str(temp_output),
+                        # Pack landscape sources into portrait ES6F the way Spectra6
+                        # does; SDL present rotates CCW back to a full landscape window.
+                        "--rotate-to-panel",
+                    ],
+                    check=True,
+                )
+                conv_ms = (time.perf_counter() - t_conv) * 1000
+                os.replace(temp_output, output)
+            data = output.read_bytes()
+            print(
+                f"bridge: convert {image_id} src={len(source)} B es6f={len(data)} B "
+                f"fetch={fetch_ms:.0f} ms convert={conv_ms:.0f} ms "
+                f"total={(time.perf_counter() - t0) * 1000:.0f} ms",
+                flush=True,
+            )
+            return data
 
     def telemetry(self, body: bytes) -> tuple[int, str, bytes]:
         url = f"{self.upstream}/node/v0/device/{self.device_id}/telemetry"
@@ -210,15 +305,26 @@ def main() -> None:
         default="ETABELONE_TOKEN",
         help="optional environment variable holding upstream bearer token",
     )
+    parser.add_argument(
+        "--prefetch-workers",
+        type=int,
+        default=int(os.environ.get("EINK_BRIDGE_PREFETCH_WORKERS", "4")),
+        help="parallel convert workers after each config fetch",
+    )
     args = parser.parse_args()
 
-    Handler.bridge = Bridge(
+    bridge = Bridge(
         args.upstream,
         args.device_id,
         args.public_base,
         args.cache_dir,
         os.environ.get(args.token_env, ""),
+        prefetch_workers=max(1, args.prefetch_workers),
     )
+    if os.environ.get("EINK_BRIDGE_PREFETCH", "1") == "0":
+        bridge.prefetch_enabled = False
+
+    Handler.bridge = bridge
     server = ThreadingHTTPServer((args.listen, args.port), Handler)
     print(
         f"bridge: {args.upstream} -> {args.public_base} "

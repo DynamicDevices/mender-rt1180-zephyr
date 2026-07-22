@@ -11,7 +11,7 @@ mkdir -p /tmp/eink-zephyr/images
 
 python3 scripts/eink-check-fixtures.py
 
-./scripts/build-native-sim-eink.sh --incremental
+./scripts/build-native-sim-eink.sh
 
 LOG=$(mktemp)
 timeout 12 ./build-native_sim-eink/zephyr/zephyr.exe 2>&1 | tee "$LOG" || true

@@ -24,6 +24,12 @@ static int64_t now_unix(void)
 	return (int64_t)time(NULL);
 }
 
+/* native_sim boots at unix 0 until SNTP; cron "current slot" is meaningless then. */
+static bool wall_clock_ok(int64_t now)
+{
+	return now >= 1700000000LL;
+}
+
 int eink_scheduler_init(void)
 {
 	int64_t now = now_unix();
@@ -135,17 +141,20 @@ int eink_scheduler_repaint(void)
 	 * Current panel content = latest cron occurrence that is already in the
 	 * past (today's HH:MM if overdue, else yesterday's). Matches ESL
 	 * "keep showing last scheduled frame" when nothing new is due.
+	 * Before wall clock is set (native_sim pre-SNTP), prefer last_job.
 	 */
-	for (size_t i = 0; i < sched.count; i++) {
-		int64_t occ = eink_cron_next_run(sched.jobs[i].cron, now);
+	if (wall_clock_ok(now)) {
+		for (size_t i = 0; i < sched.count; i++) {
+			int64_t occ = eink_cron_next_run(sched.jobs[i].cron, now);
 
-		if (occ > now) {
-			occ -= 86400;
-		}
-		if (occ <= now && (!found || occ >= best_occ)) {
-			best_occ = occ;
-			best_i = i;
-			found = true;
+			if (occ > now) {
+				occ -= 86400;
+			}
+			if (occ <= now && (!found || occ >= best_occ)) {
+				best_occ = occ;
+				best_i = i;
+				found = true;
+			}
 		}
 	}
 	if (found) {
@@ -200,16 +209,18 @@ int eink_scheduler_current_image(char *out, size_t cap)
 	}
 	out[0] = '\0';
 	k_mutex_lock(&mu, K_FOREVER);
-	for (size_t i = 0; i < sched.count; i++) {
-		int64_t occ = eink_cron_next_run(sched.jobs[i].cron, now);
+	if (wall_clock_ok(now)) {
+		for (size_t i = 0; i < sched.count; i++) {
+			int64_t occ = eink_cron_next_run(sched.jobs[i].cron, now);
 
-		if (occ > now) {
-			occ -= 86400;
-		}
-		if (occ <= now && (!found || occ >= best_occ)) {
-			best_occ = occ;
-			best_i = i;
-			found = true;
+			if (occ > now) {
+				occ -= 86400;
+			}
+			if (occ <= now && (!found || occ >= best_occ)) {
+				best_occ = occ;
+				best_i = i;
+				found = true;
+			}
 		}
 	}
 	if (found) {

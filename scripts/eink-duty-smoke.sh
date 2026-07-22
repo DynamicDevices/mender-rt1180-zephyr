@@ -28,7 +28,7 @@ PY
 
 export BUILD_DIR=build-native_sim-eink-duty
 export NATIVE_SIM_EXTRA_CONF="eink-native-sim.conf;eink-native-sim-duty.conf"
-./scripts/build-native-sim-eink.sh --incremental
+./scripts/build-native-sim-eink.sh
 
 LOG=$(mktemp)
 # Duty cycle ends at k_sleep(K_FOREVER) after SNVS stub returns — timeout the binary.

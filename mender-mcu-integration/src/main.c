@@ -175,6 +175,26 @@ main(void) {
         goto END;
     }
 #endif
+#if defined(CONFIG_APP_EINK) && defined(CONFIG_ARCH_POSIX) && \
+	!defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE)
+    /*
+     * Simulator only: always restore the last displayed / scheduled frame at
+     * boot so SDL is never left on the blank transparency grid. Real hardware
+     * paints on the duty-cycle wake path (or after sync), not here.
+     */
+    {
+        int shown = eink_scheduler_tick();
+
+        if (shown == 0) {
+            shown = eink_scheduler_repaint();
+        }
+        if (shown > 0) {
+            LOG_INF("sim boot: restored last panel content");
+        } else {
+            LOG_INF("sim boot: no stored frame to restore yet");
+        }
+    }
+#endif
 #if defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE)
     /* One cold-boot transaction then SNVS — skip always-on Mender poll loop. */
     if (0 != certs_add_credentials()) {

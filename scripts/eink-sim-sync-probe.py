@@ -106,8 +106,8 @@ def main() -> int:
                 feed("eink sync")
                 phase = 2
             elif phase == 2 and ("sync ok" in text or "sync failed" in text):
-                # Zephyr deferred logging can flush after shell_print("sync ok").
-                drain_until = time.time() + 8.0
+                # Critical path ends at telemetry; gallery may still be queued.
+                drain_until = time.time() + 60.0
                 while time.time() < drain_until:
                     r, _, _ = select.select([master], [], [], 0.25)
                     if master not in r:
@@ -120,7 +120,24 @@ def main() -> int:
                         break
                     buf += more
                     text = ANSI.sub("", buf.decode("utf-8", "replace"))
-                    if "telemetry posted" in text or "scheduler tick result=" in text:
+                    if "sync failed" in text:
+                        break
+                    has_telem = (
+                        "telemetry posted" in text
+                        or "schedule next_wake unix=" in text
+                    )
+                    if not has_telem:
+                        continue
+                    if "gallery deferred (" in text:
+                        if (
+                            "gallery deferred done" in text
+                            or "accepted image bars" in text
+                            or "importing fixture image bars" in text
+                            or "gallery image bars already cached" in text
+                        ):
+                            break
+                        continue
+                    if "prof: sync total=" in text:
                         break
                 break
     finally:
@@ -148,6 +165,7 @@ def main() -> int:
                 "next_wake",
                 "gallery",
                 "failed",
+                "prof:",
             )
         ):
             print(line)
@@ -155,12 +173,21 @@ def main() -> int:
     ok = (
         "sync ok" in text
         and "parsed" in text
-        and ("accepted image white" in text or "importing fixture image white" in text)
+        and (
+            "accepted image white" in text
+            or "importing fixture image white" in text
+            or "display image white already cached" in text
+            or "due image white already cached" in text
+            or "will show current scheduled image white" in text
+        )
         and (
             "accepted image bars" in text
             or "importing fixture image bars" in text
+            or "gallery image bars already cached" in text
             or "gallery image bars" in text
-            or "already cached" in text
+            or "gallery deferred done" in text
+            # Warm store: nothing left to cache (defer queued 0).
+            or "gallery=0 (0 dl)" in text
         )
         and ("show job=j1" in text or "refresh done result=0" in text)
         and "schedule next_wake unix=" in text

@@ -49,11 +49,20 @@ def fill_bars() -> bytes:
                 out.append(pack_nibble(palette[idx % len(palette)]))
     return bytes(left + right)
 
-def fill_image(path: Path, crop: bool = False) -> bytes:
-    """Scale an ordinary image and quantize it to packed Spectra-6 colours."""
+def fill_image(path: Path, crop: bool = False, rotate_to_panel: bool = False) -> bytes:
+    """Scale an ordinary image and quantize it to packed Spectra-6 colours.
+
+    Default: EXIF-correct, then centre-crop/pad to upright 1200x1600.
+    Pass rotate_to_panel=True for Spectra6 / eink-scheduler-rust (90° CW when
+    source aspect disagrees with the portrait panel).
+    """
     with Image.open(path) as source:
+        source = ImageOps.exif_transpose(source)
         source = source.convert("RGB")
-        if crop:
+        if rotate_to_panel and (source.width > source.height) != (WIDTH > HEIGHT):
+            # image crate rotate90 is clockwise; PIL ROTATE_90 is counter-clockwise.
+            source = source.transpose(Image.Transpose.ROTATE_270)
+        if crop or not rotate_to_panel:
             source = ImageOps.fit(
                 source, (WIDTH, HEIGHT), method=Image.Resampling.LANCZOS,
             )
@@ -117,6 +126,19 @@ def main() -> None:
         action="store_true",
         help="centre-crop image to 1200x1600 instead of padding white",
     )
+    ap.add_argument(
+        "--rotate-to-panel",
+        dest="rotate_to_panel",
+        action="store_true",
+        default=False,
+        help="90° CW when source aspect disagrees with portrait panel",
+    )
+    ap.add_argument(
+        "--no-rotate-to-panel",
+        dest="rotate_to_panel",
+        action="store_false",
+        help="centre-crop/pad upright into portrait (default)",
+    )
     ap.add_argument("--orientation", type=int, default=0)
     args = ap.parse_args()
     if args.solid:
@@ -124,7 +146,7 @@ def main() -> None:
     elif args.lr:
         payload = fill_lr(COLORS[args.lr[0]], COLORS[args.lr[1]])
     elif args.image:
-        payload = fill_image(args.image, args.crop)
+        payload = fill_image(args.image, crop=args.crop, rotate_to_panel=args.rotate_to_panel)
     else:
         payload = fill_bars()
     out = Path(args.output)

@@ -108,6 +108,62 @@ if APP_EINK
 		default 300
 		range 30 86400
 
+	config APP_EINK_HTTP_GALLERY_DEFER
+		bool "Defer gallery ES6F downloads until after paint+telemetry"
+		depends on APP_EINK_HTTP
+		default y
+		help
+		  Download and paint the due image first, post telemetry, then
+		  cache the remaining schedule images on the HTTP workqueue.
+		  Keeps radio-awake time to first visible frame much shorter.
+		  On CONFIG_APP_EINK_BATTERY_DUTY_CYCLE, gallery is skipped so
+		  the radio can drop immediately after telemetry.
+
+	config APP_EINK_HTTP_FAST_PATH
+		bool "Telem-only sync when schedule is fresh and image is cached"
+		depends on APP_EINK_HTTP
+		default y
+		help
+		  If the last successful sync is within SYNC_MAX_AGE_SEC and the
+		  due/current frame is already in the store, skip config fetch
+		  and image download — only POST telemetry. Cuts ~1–2 s of
+		  radio-awake time on warm wakes.
+
+	config APP_EINK_HTTP_SYNC_MAX_AGE_SEC
+		int "Max age of last sync before a full config fetch"
+		depends on APP_EINK_HTTP_FAST_PATH
+		default 300
+		range 30 86400
+		help
+		  After this many seconds since last_sync, the next sync does a
+		  full config fetch even if the panel image is already cached.
+
+	config APP_EINK_WAKE_SKIP_RADIO_IF_CURRENT
+		bool "Duty-cycle wake: skip radio when nothing new is due"
+		depends on APP_EINK_HTTP && APP_EINK_BATTERY_DUTY_CYCLE
+		default y
+		help
+		  After offline paint, if no new job is due and last_sync is
+		  still fresh, leave IW612 off for this wake. Telemetry waits
+		  until a later wake that needs config/download or age expiry.
+
+	config APP_EINK_HTTP_CONFIG_CACHE
+		bool "Skip config re-parse when body CRC is unchanged"
+		depends on APP_EINK_HTTP
+		default y
+		help
+		  Remember the last successful config body CRC32. Unchanged
+		  bodies reuse the prior schedule/image URL table.
+
+	config APP_EINK_STORE_QUICK_CACHE_CHECK
+		bool "Treat ES6F cache hits as valid from header+size only"
+		depends on APP_EINK
+		default y
+		help
+		  has_valid_image() checks magic/geometry/file size without a
+		  full payload CRC. Full CRC still runs when accepting a new
+		  download. Speeds gallery skip checks on LittleFS.
+
 	config APP_EINK_HTTP_SNTP_SERVER
 		string "SNTP server for wall-clock (S3 pre-signed URLs)"
 		depends on APP_EINK_HTTP && SNTP

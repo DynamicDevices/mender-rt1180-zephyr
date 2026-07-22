@@ -65,6 +65,92 @@ static void path_sched(char *out, size_t n)
 	snprintf(out, n, "%s/schedule.json", root);
 }
 
+static void path_sync_meta(char *out, size_t n)
+{
+	snprintf(out, n, "%s/sync_meta.json", root);
+}
+
+int eink_store_save_last_sync(int64_t unix_sec)
+{
+	char path[300];
+	char tmp[320];
+	struct fs_file_t f;
+	char json[80];
+	int len;
+	int ret;
+
+	path_sync_meta(path, sizeof(path));
+	snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+	len = snprintf(json, sizeof(json), "{\"last_sync_unix\":%lld}\n",
+		       (long long)unix_sec);
+	fs_file_t_init(&f);
+	ret = fs_open(&f, tmp, FS_O_CREATE | FS_O_WRITE | FS_O_TRUNC);
+	if (ret < 0) {
+		return ret;
+	}
+	ret = fs_write(&f, json, len);
+	if (ret != len) {
+		(void)fs_close(&f);
+		(void)fs_unlink(tmp);
+		return ret < 0 ? ret : -EIO;
+	}
+	ret = fs_sync(&f);
+	(void)fs_close(&f);
+	if (ret < 0) {
+		(void)fs_unlink(tmp);
+		return ret;
+	}
+	ret = fs_rename(tmp, path);
+	if (ret < 0) {
+		(void)fs_unlink(tmp);
+		return ret;
+	}
+	return 0;
+}
+
+int eink_store_load_last_sync(int64_t *unix_sec)
+{
+	char path[300];
+	char line[96];
+	struct fs_file_t f;
+	struct fs_dirent entry;
+	const char *key = "\"last_sync_unix\":";
+	char *p;
+	ssize_t n;
+	int ret;
+
+	if (unix_sec == NULL) {
+		return -EINVAL;
+	}
+	*unix_sec = 0;
+	path_sync_meta(path, sizeof(path));
+	ret = fs_stat(path, &entry);
+	if (ret == -ENOENT) {
+		return 0;
+	}
+	if (ret < 0) {
+		return ret;
+	}
+	fs_file_t_init(&f);
+	ret = fs_open(&f, path, FS_O_READ);
+	if (ret < 0) {
+		return ret;
+	}
+	n = fs_read(&f, line, sizeof(line) - 1);
+	(void)fs_close(&f);
+	if (n <= 0) {
+		return n < 0 ? (int)n : 0;
+	}
+	line[n] = '\0';
+	p = strstr(line, key);
+	if (!p) {
+		return 0;
+	}
+	p += strlen(key);
+	*unix_sec = (int64_t)strtoll(p, NULL, 10);
+	return 0;
+}
+
 int eink_store_save_state(const char *last_job_id)
 {
 	char path[300];
@@ -84,13 +170,16 @@ int eink_store_save_state(const char *last_job_id)
 		return ret;
 	}
 	ret = fs_write(&f, json, len);
-	if (ret == len) {
-		ret = fs_sync(&f);
-	}
-	(void)fs_close(&f);
-	if (ret < 0 || ret != len) {
+	if (ret != len) {
+		(void)fs_close(&f);
 		(void)fs_unlink(tmp);
 		return ret < 0 ? ret : -EIO;
+	}
+	ret = fs_sync(&f);
+	(void)fs_close(&f);
+	if (ret < 0) {
+		(void)fs_unlink(tmp);
+		return ret;
 	}
 	ret = fs_rename(tmp, path);
 	if (ret < 0) {
@@ -351,7 +440,11 @@ bool eink_store_has_valid_image(const char *image_id)
 	if (eink_store_image_path(image_id, path, sizeof(path)) != 0) {
 		return false;
 	}
+#if defined(CONFIG_APP_EINK_STORE_QUICK_CACHE_CHECK)
+	return eink_store_has_image_quick(image_id);
+#else
 	return eink_store_validate_path(path, NULL) == 0;
+#endif
 }
 
 struct eink_fs_stream {
@@ -433,6 +526,41 @@ static int fs_stream_seek(void *user, size_t offset)
 	return fs_seek(&s->f, (off_t)offset, FS_SEEK_SET);
 }
 
+bool eink_store_has_image_quick(const char *image_id)
+{
+	char path[300];
+	struct fs_dirent ent;
+	struct eink_fs_stream stream;
+	uint8_t hdr_raw[EINK_FRAME_HEADER_SIZE];
+	struct eink_frame_header hdr;
+	int ret;
+	int n;
+
+	if (eink_store_image_path(image_id, path, sizeof(path)) != 0) {
+		return false;
+	}
+	ret = fs_stat(path, &ent);
+	if (ret < 0 || ent.type != FS_DIR_ENTRY_FILE) {
+		return false;
+	}
+	if (ent.size != EINK_FRAME_FILE_SIZE) {
+		return false;
+	}
+	ret = fs_stream_open(&stream, path);
+	if (ret < 0) {
+		return false;
+	}
+	n = fs_stream_read(&stream, hdr_raw, sizeof(hdr_raw));
+	fs_stream_close(&stream);
+	if (n != (int)sizeof(hdr_raw)) {
+		return false;
+	}
+	if (eink_frame_header_parse(hdr_raw, sizeof(hdr_raw), &hdr) != 0) {
+		return false;
+	}
+	return hdr.payload_len == EINK_PAYLOAD_LEN;
+}
+
 int eink_store_validate_path(const char *path, struct eink_frame_header *out_hdr)
 {
 	struct eink_fs_stream stream;
@@ -505,13 +633,16 @@ int eink_store_put_image(const char *image_id, const uint8_t *es6f, size_t len)
 		return ret;
 	}
 	ret = fs_write(&f, es6f, len);
-	if (ret == (int)len) {
-		ret = fs_sync(&f);
-	}
-	(void)fs_close(&f);
-	if (ret < 0 || ret != (int)len) {
+	if (ret != (int)len) {
+		(void)fs_close(&f);
 		(void)fs_unlink(tmp);
 		return ret < 0 ? ret : -EIO;
+	}
+	ret = fs_sync(&f);
+	(void)fs_close(&f);
+	if (ret < 0) {
+		(void)fs_unlink(tmp);
+		return ret;
 	}
 	ret = fs_rename(tmp, path);
 	if (ret < 0) {

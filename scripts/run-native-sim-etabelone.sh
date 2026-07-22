@@ -23,11 +23,11 @@ if [[ -n "$(ss -H -ltn "( sport = :8765 )")" ]]; then
 fi
 
 if [[ "$MODE" == "--sdl" ]]; then
-    ./scripts/build-native-sim-eink-sdl.sh --incremental
+    ./scripts/build-native-sim-eink-sdl.sh
     BINARY="build-native_sim-eink-sdl/zephyr/zephyr.exe"
     HOLD="${EINK_SIM_HOLD_SECONDS:-30}"
 else
-    ./scripts/build-native-sim-eink.sh --incremental
+    ./scripts/build-native-sim-eink.sh
     BINARY="build-native_sim-eink/zephyr/zephyr.exe"
     HOLD="${EINK_SIM_HOLD_SECONDS:-0}"
 fi

@@ -189,47 +189,102 @@ static int write_sdl_from_halves(int (*read_row)(void *user, uint16_t y, bool ri
 				 void *user)
 {
 	const struct device *dev = display_dev();
-	static uint32_t rowbuf[EINK_PANEL_WIDTH * EINK_ROW_STRIP];
+	struct display_capabilities caps;
 	uint8_t left_row[300];
 	uint8_t right_row[300];
 	struct display_buffer_descriptor desc;
+	uint16_t sdl_w;
+	uint16_t sdl_h;
+	uint16_t rows_to_write;
+	uint16_t copy_w;
 	int ret;
 
-	for (uint16_t y = 0; y < EINK_PANEL_HEIGHT; y += EINK_ROW_STRIP) {
-		uint16_t rows = MIN(EINK_ROW_STRIP, EINK_PANEL_HEIGHT - y);
+	display_get_capabilities(dev, &caps);
+	sdl_w = caps.x_resolution;
+	sdl_h = caps.y_resolution;
+	if (sdl_w == 0 || sdl_h == 0) {
+		return -EINVAL;
+	}
 
-		for (uint16_t r = 0; r < rows; r++) {
-			uint16_t yy = y + r;
+	/*
+	 * SDL window is landscape 1600x1200; ES6F is panel-native 1200x1600.
+	 * Rotate 90° CCW into the window so the image fills edge-to-edge
+	 * (same mapping as Spectra6 landscape↔portrait helpers).
+	 * If the window already matches the panel, copy 1:1 and white-pad.
+	 */
+	static uint32_t frame[1600 * 1200];
+	const size_t frame_cap = sizeof(frame) / sizeof(frame[0]);
+	const bool rotate_ccw =
+		(sdl_w == EINK_PANEL_HEIGHT && sdl_h == EINK_PANEL_WIDTH);
 
-			ret = read_row(user, yy, false, left_row);
+	if ((size_t)sdl_w * sdl_h > frame_cap) {
+		return -ENOMEM;
+	}
+
+	for (size_t i = 0; i < (size_t)sdl_w * sdl_h; i++) {
+		frame[i] = 0xFFFFFFFFu;
+	}
+
+	if (rotate_ccw) {
+		for (uint16_t y = 0; y < EINK_PANEL_HEIGHT; y++) {
+			ret = read_row(user, y, false, left_row);
 			if (ret < 0) {
 				return ret;
 			}
-			ret = read_row(user, yy, true, right_row);
+			ret = read_row(user, y, true, right_row);
 			if (ret < 0) {
 				return ret;
 			}
 			for (uint16_t x = 0; x < EINK_PANEL_WIDTH; x++) {
 				const uint8_t *half =
 					(x < EINK_HALF_WIDTH) ? left_row : right_row;
-				uint16_t hx =
-					(x < EINK_HALF_WIDTH) ? x : (uint16_t)(x - EINK_HALF_WIDTH);
+				uint16_t hx = (x < EINK_HALF_WIDTH) ?
+						      x :
+						      (uint16_t)(x - EINK_HALF_WIDTH);
+				uint8_t nib = ((hx & 1u) == 0) ? (half[hx / 2u] >> 4)
+							       : (half[hx / 2u] & 0x0f);
+				/* (x,y) -> (y, width-1-x) */
+				uint16_t sx = y;
+				uint16_t sy = (uint16_t)(EINK_PANEL_WIDTH - 1u - x);
+
+				frame[(size_t)sy * sdl_w + sx] =
+					eink_frame_nibble_to_argb(nib);
+			}
+		}
+	} else {
+		rows_to_write = MIN(EINK_PANEL_HEIGHT, sdl_h);
+		copy_w = MIN(EINK_PANEL_WIDTH, sdl_w);
+
+		for (uint16_t y = 0; y < rows_to_write; y++) {
+			ret = read_row(user, y, false, left_row);
+			if (ret < 0) {
+				return ret;
+			}
+			ret = read_row(user, y, true, right_row);
+			if (ret < 0) {
+				return ret;
+			}
+			for (uint16_t x = 0; x < copy_w; x++) {
+				const uint8_t *half =
+					(x < EINK_HALF_WIDTH) ? left_row : right_row;
+				uint16_t hx = (x < EINK_HALF_WIDTH) ?
+						      x :
+						      (uint16_t)(x - EINK_HALF_WIDTH);
 				uint8_t nib = ((hx & 1u) == 0) ? (half[hx / 2u] >> 4)
 							       : (half[hx / 2u] & 0x0f);
 
-				rowbuf[r * EINK_PANEL_WIDTH + x] = eink_frame_nibble_to_argb(nib);
+				frame[(size_t)y * sdl_w + x] =
+					eink_frame_nibble_to_argb(nib);
 			}
 		}
-		desc.buf_size = (uint32_t)EINK_PANEL_WIDTH * rows * 4u;
-		desc.width = EINK_PANEL_WIDTH;
-		desc.height = rows;
-		desc.pitch = EINK_PANEL_WIDTH;
-		ret = display_write(dev, 0, y, &desc, rowbuf);
-		if (ret < 0) {
-			return ret;
-		}
 	}
-	return 0;
+
+	memset(&desc, 0, sizeof(desc));
+	desc.buf_size = (uint32_t)sdl_w * sdl_h * 4u;
+	desc.width = sdl_w;
+	desc.height = sdl_h;
+	desc.pitch = sdl_w;
+	return display_write(dev, 0, 0, &desc, frame);
 }
 
 static int stream_read_row(void *user, uint16_t y, bool right, uint8_t *row300)

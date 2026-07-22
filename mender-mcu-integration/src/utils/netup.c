@@ -33,6 +33,9 @@ LOG_MODULE_DECLARE(mender_app, LOG_LEVEL_DBG);
 #include <zephyr/kernel.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/net_mgmt.h>
+#if defined(CONFIG_NET_DHCPV4)
+#include <zephyr/net/dhcpv4.h>
+#endif
 #if defined(CONFIG_WIFI)
 #include <zephyr/net/wifi_mgmt.h>
 #endif
@@ -83,8 +86,14 @@ event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event, struct ne
 
     for (i = 0; i < NET_IF_MAX_IPV4_ADDR; i++) {
         char buf[NET_IPV4_ADDR_LEN];
+        enum net_addr_type type = iface->config.ip.ipv4->unicast[i].ipv4.addr_type;
 
-        if (iface->config.ip.ipv4->unicast[i].ipv4.addr_type != NET_ADDR_DHCP) {
+        /* Accept DHCP and static/manual addresses (native_sim NET_CONFIG). */
+        if (type != NET_ADDR_DHCP && type != NET_ADDR_OVERRIDABLE &&
+            type != NET_ADDR_AUTOCONF && type != NET_ADDR_MANUAL) {
+            continue;
+        }
+        if (iface->config.ip.ipv4->unicast[i].ipv4.address.family != AF_INET) {
             continue;
         }
 
@@ -93,7 +102,11 @@ event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event, struct ne
                 net_addr_ntop(AF_INET, &iface->config.ip.ipv4->unicast[i].ipv4.address.in_addr, buf, sizeof(buf)));
         LOG_INF("    Subnet[%d]: %s", net_if_get_by_iface(iface), net_addr_ntop(AF_INET, &iface->config.ip.ipv4->unicast[i].netmask, buf, sizeof(buf)));
         LOG_INF("    Router[%d]: %s", net_if_get_by_iface(iface), net_addr_ntop(AF_INET, &iface->config.ip.ipv4->gw, buf, sizeof(buf)));
-        LOG_INF("Lease time[%d]: %u seconds", net_if_get_by_iface(iface), iface->config.dhcpv4.lease_time);
+#if defined(CONFIG_NET_DHCPV4)
+        if (type == NET_ADDR_DHCP) {
+            LOG_INF("Lease time[%d]: %u seconds", net_if_get_by_iface(iface), iface->config.dhcpv4.lease_time);
+        }
+#endif
     }
 
     // Network is up \o/
@@ -120,7 +133,7 @@ netup_wait_for_network(void) {
 #if !defined(CONFIG_IMPROV_WIFI)
     wifi_connect(iface);
 #endif
-#else
+#elif defined(CONFIG_NET_DHCPV4)
     /* For WIFI, it is expected that the dhcp client is started somehow by the network management.
     This is the case for example for ESP32-S3 with configuration option WIFI_STA_AUTO_DHCPV4 */
     net_dhcpv4_start(iface);
@@ -130,9 +143,15 @@ netup_wait_for_network(void) {
      * Improv may have connected using stored credentials before this callback
      * was registered. Register first, then check the current state so the
      * IPv4 event cannot be missed between the check and the wait.
+     * Static NET_CONFIG addresses are also already present here.
      */
     if (NULL != net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED)) {
+        char buf[NET_IPV4_ADDR_LEN];
+        const struct in_addr *addr = net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED);
+
         LOG_INF("Network already has a preferred IPv4 address");
+        LOG_INF("   Address[%d]: %s", net_if_get_by_iface(iface),
+                net_addr_ntop(AF_INET, addr, buf, sizeof(buf)));
         return 0;
     }
 
