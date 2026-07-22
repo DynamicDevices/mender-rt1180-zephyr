@@ -1251,8 +1251,20 @@ int eink_http_download_image(const char *image_id, const char *url)
 			size_t hn = 0;
 
 			ret = load_fs_body(tmp_path, head, sizeof(head), &hn);
-			if (ret == 0 && eink_lz4_is_frame(head, hn)) {
+			if (ret) {
+				(void)fs_unlink(tmp_path);
+				return ret;
+			}
+			if (looks_like_jpeg_or_png(head, hn)) {
+				LOG_ERR("reject JPEG/PNG for image %s (packed ES6F only)",
+					image_id);
+				(void)fs_unlink(tmp_path);
+				return -ENOTSUP;
+			}
+			if (eink_lz4_is_frame(head, hn)) {
+#if defined(CONFIG_APP_EINK_LZ4_EXPAND_ON_DOWNLOAD)
 				char unc_path[384];
+				int64_t t_lz4;
 				int expanded;
 
 				if (strlen(tmp_path) + 5 >= sizeof(unc_path)) {
@@ -1261,8 +1273,14 @@ int eink_http_download_image(const char *image_id, const char *url)
 				}
 				memcpy(unc_path, tmp_path, strlen(tmp_path));
 				memcpy(unc_path + strlen(tmp_path), ".unc", 5);
+				LOG_INF("LZ4 frame detected for %s — expanding on download",
+					image_id);
+				t_lz4 = k_uptime_get();
 				expanded = eink_lz4_expand_if_framed(tmp_path, unc_path);
+				t_lz4 = k_uptime_get() - t_lz4;
 				if (expanded < 0) {
+					LOG_WRN("LZ4 expand failed: %d (%lld ms)", expanded,
+						(long long)t_lz4);
 					(void)fs_unlink(tmp_path);
 					return expanded;
 				}
@@ -1273,7 +1291,13 @@ int eink_http_download_image(const char *image_id, const char *url)
 						(void)fs_unlink(unc_path);
 						return ret;
 					}
+					LOG_INF("prof: image %s lz4_expand=%lld ms", image_id,
+						(long long)t_lz4);
 				}
+#else
+				LOG_INF("LZ4 frame kept compressed for %s (expand-on-display)",
+					image_id);
+#endif
 			}
 		}
 #endif
@@ -1302,6 +1326,7 @@ int eink_http_download_image(const char *image_id, const char *url)
 		}
 #if defined(CONFIG_APP_EINK_LZ4)
 		if (eink_lz4_is_frame(magic, n)) {
+#if defined(CONFIG_APP_EINK_LZ4_EXPAND_ON_DOWNLOAD)
 			char unc_path[384];
 			int64_t t_lz4;
 			int expanded;
@@ -1312,7 +1337,7 @@ int eink_http_download_image(const char *image_id, const char *url)
 			}
 			memcpy(unc_path, tmp_path, strlen(tmp_path));
 			memcpy(unc_path + strlen(tmp_path), ".unc", 5);
-			LOG_INF("LZ4 frame detected for %s — expanding", image_id);
+			LOG_INF("LZ4 frame detected for %s — expanding on download", image_id);
 			t_lz4 = k_uptime_get();
 			expanded = eink_lz4_expand_if_framed(tmp_path, unc_path);
 			t_lz4 = k_uptime_get() - t_lz4;
@@ -1328,6 +1353,9 @@ int eink_http_download_image(const char *image_id, const char *url)
 				LOG_INF("prof: image %s lz4_expand=%lld ms", image_id,
 					(long long)t_lz4);
 			}
+#else
+			LOG_INF("LZ4 frame kept compressed for %s (expand-on-display)", image_id);
+#endif
 		}
 #endif
 		LOG_INF("validating downloaded image %s", image_id);

@@ -35,8 +35,21 @@ Client: `src/eink/eink_http.c` (Zephyr sockets + `HTTP_CLIENT`, TLS via mbedTLS/
 
 Production accepts **ES6F** raw, or an **LZ4 frame** whose decompressed
 payload is a complete ES6F v1 file (magic `04 22 4D 18`, same as `lz4 -f`).
-JPEG/PNG remain rejected by magic. Device expand is streaming (no full-frame
-RAM). Helper: `scripts/eink-lz4-wrap.py`. Kconfig: `CONFIG_APP_EINK_LZ4`.
+JPEG/PNG remain rejected by magic. Expand timing is selectable:
+
+| Kconfig | Store | When CPU/flash pay for expand |
+|---------|--------|-------------------------------|
+| `APP_EINK_LZ4_EXPAND_ON_DOWNLOAD` (default) | raw `.es6f` | During sync (often WiFi still relevant) |
+| `APP_EINK_LZ4_EXPAND_ON_DISPLAY` | `.es6f.lz4` | During paint (`prof: lz4_materialize=…`) |
+
+Overlay fragment: `eink-lz4-on-display.conf`. Helper: `scripts/eink-lz4-wrap.py`.
+
+**Power A/B (measure on real HW):** WiFi-on joules dominate MCU; panel/controller
+during refresh also matters. Expand-on-download lengthens the radio/flash window
+(write full ES6F while/after transfer). Expand-on-display shortens transfer and
+lets you hard-gate WiFi sooner; paint pays LZ4 + scratch write with radio off.
+Prefer on-display until HW joules say otherwise; switch to on-download if the
+same frame is repainted often offline (amortize expand once).
 
 Defaults: base
 `https://etablone.dynamicdevices.co.uk` (Cloudflare). Legacy AWS

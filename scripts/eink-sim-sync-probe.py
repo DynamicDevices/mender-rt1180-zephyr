@@ -26,12 +26,22 @@ def main() -> int:
     ap.add_argument("--device", default="sim-local")
     ap.add_argument("--image", default="/tmp/eink-zephyr/images/white.es6f")
     ap.add_argument("--timeout", type=float, default=90.0)
+    ap.add_argument(
+        "--expect-lz4",
+        choices=("auto", "expand", "keep", "no"),
+        default="auto",
+        help="auto: expand if image ends with .lz4; expand/keep/no override",
+    )
     args = ap.parse_args()
 
     image = Path(args.image)
     if not image.is_file():
         print(f"missing image: {image}", file=sys.stderr)
         return 2
+
+    expect_lz4 = args.expect_lz4
+    if expect_lz4 == "auto":
+        expect_lz4 = "expand" if image.name.endswith(".lz4") else "no"
 
     fixture_dir = Path("/tmp/eink-fixture")
     fixture_dir.mkdir(exist_ok=True)
@@ -166,19 +176,35 @@ def main() -> int:
                 "gallery",
                 "failed",
                 "prof:",
+                "LZ4",
             )
         ):
             print(line)
 
+    white_ok = (
+        "accepted image white" in text
+        or "accepted LZ4 image white" in text
+        or "importing fixture image white" in text
+        or "display image white already cached" in text
+        or "due image white already cached" in text
+        or "will show current scheduled image white" in text
+    )
+    if expect_lz4 == "expand":
+        white_ok = white_ok and (
+            "LZ4 frame detected for white" in text
+            or "lz4_expand=" in text
+            or "LZ4 expand " in text
+        )
+        white_ok = white_ok and "accepted image white" in text
+    elif expect_lz4 == "keep":
+        white_ok = white_ok and (
+            "LZ4 frame kept compressed for white" in text
+            or "accepted LZ4 image white" in text
+        )
+
     ok_full = (
         "parsed" in text
-        and (
-            "accepted image white" in text
-            or "importing fixture image white" in text
-            or "display image white already cached" in text
-            or "due image white already cached" in text
-            or "will show current scheduled image white" in text
-        )
+        and white_ok
         and (
             "accepted image bars" in text
             or "importing fixture image bars" in text

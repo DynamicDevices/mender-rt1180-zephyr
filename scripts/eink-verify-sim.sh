@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+# Avoid inheriting duty-cycle / LZ4 A/B BUILD_DIR overrides from the shell.
+unset BUILD_DIR NATIVE_SIM_EXTRA_CONF NATIVE_SIM_EXTRA_MODULES NATIVE_SIM_EXTRA_CMAKE_ARGS
+
+
 mkdir -p /tmp/eink-zephyr/images
 ./scripts/gen-eink-frame.py --solid white -o /tmp/eink-zephyr/images/white.es6f
 ./scripts/gen-eink-frame.py --lr red blue -o /tmp/eink-zephyr/images/lr.es6f
@@ -33,5 +37,12 @@ python3 scripts/eink-check-el133-driver.py
 rm -f flash.bin
 python3 scripts/eink-sim-sync-probe.py
 echo "OK: file:// sync + scheduled show"
+
+# Same path with LZ4-framed white (expand-on-download default)
+./scripts/eink-lz4-wrap.py /tmp/eink-zephyr/images/white.es6f \
+  -o /tmp/eink-fixture/white.es6f.lz4
+rm -f flash.bin
+python3 scripts/eink-sim-sync-probe.py --image /tmp/eink-fixture/white.es6f.lz4
+echo "OK: file:// LZ4 expand-on-download + scheduled show"
 
 echo "OK: eink simulator verification gate"

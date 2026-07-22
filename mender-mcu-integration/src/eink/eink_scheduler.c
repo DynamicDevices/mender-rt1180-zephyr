@@ -76,7 +76,7 @@ static int show_job_locked_copy(const struct eink_job *job, bool advance_state)
 	char path[300];
 	int ret;
 
-	if (eink_store_image_path(job->image_id, path, sizeof(path)) != 0) {
+	if (eink_store_resolve_show_path(job->image_id, path, sizeof(path), NULL) != 0) {
 		return -ENOENT;
 	}
 	if (!eink_store_has_valid_image(job->image_id)) {

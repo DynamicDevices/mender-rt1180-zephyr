@@ -190,10 +190,36 @@ if APP_EINK
 		select APP_EINK_LZ4_LIB
 		default y
 		help
-		  After HTTP download, if the body is an LZ4 frame (lz4 CLI
-		  format), stream-decompress to a raw ES6F before validate/
-		  accept. Raw ES6F remains accepted. Shrinks radio on-time
-		  when the server/bridge serves .es6f.lz4.
+		  Accept HTTP/file bodies that are LZ4 frames (lz4 CLI format)
+		  wrapping a complete ES6F v1 file. Raw ES6F remains accepted.
+		  When to expand is selected below — pick based on wake power:
+		  WiFi-on energy vs MCU+panel energy while painting.
+
+	choice APP_EINK_LZ4_EXPAND_WHEN
+		prompt "When to expand LZ4-framed ES6F"
+		depends on APP_EINK_LZ4
+		default APP_EINK_LZ4_EXPAND_ON_DOWNLOAD
+		help
+		  Expand-on-download: radio still up / just finished — pays CPU
+		  and a full 960 KiB LittleFS write, then display is cheap.
+		  Expand-on-display: store the small .es6f.lz4, drop WiFi
+		  sooner / write less flash; pay decompress on each paint
+		  (panel path). Measure both on real hardware.
+
+	config APP_EINK_LZ4_EXPAND_ON_DOWNLOAD
+		bool "Expand on download (store raw ES6F)"
+		help
+		  Decompress before accept. Best when the same frame is
+		  repainted often offline and flash write cost is acceptable.
+
+	config APP_EINK_LZ4_EXPAND_ON_DISPLAY
+		bool "Expand on display (store .es6f.lz4)"
+		help
+		  Keep compressed object in the store; decompress into a
+		  scratch ES6F when showing. Favours short WiFi-on windows
+		  and denser gallery cache; costs MCU time on the paint path.
+
+	endchoice
 
 	config APP_EINK_LZ4_LIB
 		bool

@@ -4,13 +4,19 @@
  */
 #include "eink_store.h"
 
+#if defined(CONFIG_APP_EINK_LZ4)
+#include "eink_lz4.h"
+#endif
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <zephyr/fs/fs.h>
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/util.h>
 
 LOG_MODULE_REGISTER(eink_store, LOG_LEVEL_INF);
 
@@ -433,17 +439,93 @@ int eink_store_image_path(const char *image_id, char *out, size_t out_cap)
 	return 0;
 }
 
+int eink_store_image_lz4_path(const char *image_id, char *out, size_t out_cap)
+{
+	if (!image_id || !out) {
+		return -EINVAL;
+	}
+	snprintf(out, out_cap, "%s/images/%s.es6f.lz4", root, image_id);
+	return 0;
+}
+
+static bool path_is_file(const char *path)
+{
+	struct fs_dirent ent;
+
+	return fs_stat(path, &ent) == 0 && ent.type == FS_DIR_ENTRY_FILE && ent.size > 0;
+}
+
+int eink_store_resolve_show_path(const char *image_id, char *out, size_t out_cap, bool *is_lz4)
+{
+	char es6f[300];
+	char lz4p[300];
+
+	if (is_lz4) {
+		*is_lz4 = false;
+	}
+	if (eink_store_image_path(image_id, es6f, sizeof(es6f)) != 0) {
+		return -EINVAL;
+	}
+	if (path_is_file(es6f)) {
+		if (strlen(es6f) + 1 > out_cap) {
+			return -ENOMEM;
+		}
+		memcpy(out, es6f, strlen(es6f) + 1);
+		return 0;
+	}
+#if defined(CONFIG_APP_EINK_LZ4)
+	if (eink_store_image_lz4_path(image_id, lz4p, sizeof(lz4p)) != 0) {
+		return -EINVAL;
+	}
+	if (path_is_file(lz4p)) {
+		if (strlen(lz4p) + 1 > out_cap) {
+			return -ENOMEM;
+		}
+		memcpy(out, lz4p, strlen(lz4p) + 1);
+		if (is_lz4) {
+			*is_lz4 = true;
+		}
+		return 0;
+	}
+#else
+	ARG_UNUSED(lz4p);
+#endif
+	return -ENOENT;
+}
+
 bool eink_store_has_valid_image(const char *image_id)
 {
 	char path[300];
 
-	if (eink_store_image_path(image_id, path, sizeof(path)) != 0) {
+	if (eink_store_resolve_show_path(image_id, path, sizeof(path), NULL) != 0) {
 		return false;
 	}
 #if defined(CONFIG_APP_EINK_STORE_QUICK_CACHE_CHECK)
 	return eink_store_has_image_quick(image_id);
 #else
-	return eink_store_validate_path(path, NULL) == 0;
+	{
+		bool is_lz4 = false;
+
+		(void)eink_store_resolve_show_path(image_id, path, sizeof(path), &is_lz4);
+		if (is_lz4) {
+#if defined(CONFIG_APP_EINK_LZ4)
+			uint8_t head[8];
+			struct fs_file_t f;
+			ssize_t n;
+
+			fs_file_t_init(&f);
+			if (fs_open(&f, path, FS_O_READ) < 0) {
+				return false;
+			}
+			n = fs_read(&f, head, sizeof(head));
+			(void)fs_close(&f);
+			return n >= 4 && eink_lz4_is_frame(head, (size_t)n);
+#else
+			return false;
+#endif
+		}
+		return eink_store_validate_path(path, NULL) == 0;
+	}
 #endif
 }
 
@@ -529,6 +611,7 @@ static int fs_stream_seek(void *user, size_t offset)
 bool eink_store_has_image_quick(const char *image_id)
 {
 	char path[300];
+	bool is_lz4 = false;
 	struct fs_dirent ent;
 	struct eink_fs_stream stream;
 	uint8_t hdr_raw[EINK_FRAME_HEADER_SIZE];
@@ -536,13 +619,31 @@ bool eink_store_has_image_quick(const char *image_id)
 	int ret;
 	int n;
 
-	if (eink_store_image_path(image_id, path, sizeof(path)) != 0) {
+	if (eink_store_resolve_show_path(image_id, path, sizeof(path), &is_lz4) != 0) {
 		return false;
 	}
 	ret = fs_stat(path, &ent);
 	if (ret < 0 || ent.type != FS_DIR_ENTRY_FILE) {
 		return false;
 	}
+#if defined(CONFIG_APP_EINK_LZ4)
+	if (is_lz4) {
+		uint8_t head[8];
+		struct fs_file_t f;
+		ssize_t nr;
+
+		if (ent.size < 16 || ent.size > (768u * 1024u)) {
+			return false;
+		}
+		fs_file_t_init(&f);
+		if (fs_open(&f, path, FS_O_READ) < 0) {
+			return false;
+		}
+		nr = fs_read(&f, head, sizeof(head));
+		(void)fs_close(&f);
+		return nr >= 4 && eink_lz4_is_frame(head, (size_t)nr);
+	}
+#endif
 	if (ent.size != EINK_FRAME_FILE_SIZE) {
 		return false;
 	}
@@ -580,31 +681,128 @@ int eink_store_validate_path(const char *path, struct eink_frame_header *out_hdr
 
 int eink_store_accept_temp_image(const char *image_id, const char *temp_path)
 {
-	char path[300];
-	struct eink_frame_header hdr;
+	char path_es6f[300];
+	char path_lz4[300];
+	uint8_t head[8];
+	struct fs_file_t f;
+	ssize_t n;
 	int ret;
 
 	if (image_id == NULL || temp_path == NULL) {
 		return -EINVAL;
 	}
-	if (eink_store_image_path(image_id, path, sizeof(path)) != 0) {
+	if (eink_store_image_path(image_id, path_es6f, sizeof(path_es6f)) != 0) {
+		return -EINVAL;
+	}
+	(void)eink_store_image_lz4_path(image_id, path_lz4, sizeof(path_lz4));
+
+	fs_file_t_init(&f);
+	ret = fs_open(&f, temp_path, FS_O_READ);
+	if (ret < 0) {
+		return ret;
+	}
+	n = fs_read(&f, head, sizeof(head));
+	(void)fs_close(&f);
+	if (n < 4) {
+		return n < 0 ? (int)n : -EINVAL;
+	}
+
+#if defined(CONFIG_APP_EINK_LZ4)
+	if (eink_lz4_is_frame(head, (size_t)n)) {
+#if defined(CONFIG_APP_EINK_LZ4_EXPAND_ON_DISPLAY)
+		struct fs_dirent ent;
+
+		ret = fs_stat(temp_path, &ent);
+		if (ret < 0 || ent.size < 16 || ent.size > (768u * 1024u)) {
+			LOG_ERR("reject temp LZ4 %s: bad size", image_id);
+			return -EINVAL;
+		}
+		(void)fs_unlink(path_es6f);
+		(void)fs_unlink(path_lz4);
+		ret = fs_rename(temp_path, path_lz4);
+		if (ret < 0) {
+			LOG_ERR("accept rename %s -> %s: %d", temp_path, path_lz4, ret);
+			return ret;
+		}
+		LOG_INF("accepted LZ4 image %s (%u compressed bytes)", image_id,
+			(unsigned)ent.size);
+		return 0;
+#else
+		LOG_ERR("LZ4 temp for %s but EXPAND_ON_DOWNLOAD expected expand first",
+			image_id);
+		return -EINVAL;
+#endif
+	}
+#endif
+
+	{
+		struct eink_frame_header hdr;
+
+		ret = eink_store_validate_path(temp_path, &hdr);
+		if (ret < 0) {
+			LOG_ERR("reject temp ES6F %s: %d", image_id, ret);
+			return ret;
+		}
+
+		(void)fs_unlink(path_es6f);
+		(void)fs_unlink(path_lz4);
+		ret = fs_rename(temp_path, path_es6f);
+		if (ret < 0) {
+			LOG_ERR("accept rename %s -> %s: %d", temp_path, path_es6f, ret);
+			return ret;
+		}
+		LOG_INF("accepted image %s (%u payload bytes)", image_id,
+			(unsigned)hdr.payload_len);
+		return 0;
+	}
+}
+
+int eink_store_materialize_es6f(const char *path, char *out, size_t out_cap)
+{
+	uint8_t head[8];
+	struct fs_file_t f;
+	ssize_t n;
+	int ret;
+	char scratch[320];
+
+	if (path == NULL || out == NULL || out_cap < 16) {
 		return -EINVAL;
 	}
 
-	ret = eink_store_validate_path(temp_path, &hdr);
+	fs_file_t_init(&f);
+	ret = fs_open(&f, path, FS_O_READ);
 	if (ret < 0) {
-		LOG_ERR("reject temp ES6F %s: %d", image_id, ret);
 		return ret;
+	}
+	n = fs_read(&f, head, sizeof(head));
+	(void)fs_close(&f);
+	if (n < 4) {
+		return n < 0 ? (int)n : -EINVAL;
 	}
 
-	(void)fs_unlink(path);
-	ret = fs_rename(temp_path, path);
-	if (ret < 0) {
-		LOG_ERR("accept rename %s -> %s: %d", temp_path, path, ret);
-		return ret;
+#if defined(CONFIG_APP_EINK_LZ4)
+	if (eink_lz4_is_frame(head, (size_t)n)) {
+		int64_t t0 = k_uptime_get();
+
+		snprintf(scratch, sizeof(scratch), "%s/images/.paint.es6f", root);
+		LOG_INF("LZ4 materialize for display");
+		ret = eink_lz4_decompress_file(path, scratch);
+		LOG_INF("prof: lz4_materialize=%lld ms ret=%d",
+			(long long)(k_uptime_get() - t0), ret);
+		if (ret < 0) {
+			return ret;
+		}
+		if (strlen(scratch) + 1 > out_cap) {
+			return -ENOMEM;
+		}
+		memcpy(out, scratch, strlen(scratch) + 1);
+		return 0;
 	}
-	LOG_INF("accepted image %s (%u payload bytes)", image_id,
-		(unsigned)hdr.payload_len);
+#endif
+	if (strlen(path) + 1 > out_cap) {
+		return -ENOMEM;
+	}
+	memcpy(out, path, strlen(path) + 1);
 	return 0;
 }
 

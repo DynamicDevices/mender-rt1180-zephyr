@@ -8,7 +8,8 @@ cd "$ROOT"
 export ZEPHYR_BASE="${ZEPHYR_BASE:-$ROOT/zephyr}"
 export ZEPHYR_SDK_INSTALL_DIR="${ZEPHYR_SDK_INSTALL_DIR:-/home/ajlennon/zephyr-sdk-1.0.1}"
 
-BUILD_DIR="${BUILD_DIR:-build-el133-ztest}"
+# Do not inherit BUILD_DIR from eink / duty wrappers (wrong app dir).
+BUILD_DIR="${EL133_BUILD_DIR:-build-el133-ztest}"
 EXTRA=(-- -DZEPHYR_EXTRA_MODULES="$ROOT/mender-mcu-integration/modules/eink-el133")
 
 if [[ "${1:-}" == "--pristine" ]]; then

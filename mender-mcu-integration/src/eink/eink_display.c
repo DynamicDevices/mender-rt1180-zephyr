@@ -473,9 +473,14 @@ static void eink_work_handler(struct k_work *work)
 		eink_payload_slot_busy = false;
 #endif
 	} else {
-		ret = eink_store_validate_path(cmd.path, NULL);
+		char es6f_path[320];
+
+		ret = eink_store_materialize_es6f(cmd.path, es6f_path, sizeof(es6f_path));
 		if (ret == 0) {
-			ret = stream_open_path(&stream, cmd.path);
+			ret = eink_store_validate_path(es6f_path, NULL);
+		}
+		if (ret == 0) {
+			ret = stream_open_path(&stream, es6f_path);
 		}
 		if (ret == 0) {
 			ret = write_stream_to_display(&stream);
