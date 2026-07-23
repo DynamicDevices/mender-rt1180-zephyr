@@ -1,7 +1,8 @@
 # Zephyr RT1170 e-ink (Active ESL) + RT118x Mender overlay
 
 Public repo: https://github.com/DynamicDevices/zephyr-rt1170-eink  
-Device agent lane: **`zephyr-rt1170-eink`** (stable id in [`LANE.id`](LANE.id)) · peer **`cloud-eink`** · channel map: MemPalace `LANE_DIRECTORY` · [LANE-CHANNEL.md](mender-mcu-integration/docs/LANE-CHANNEL.md).
+Device agent lane: **`zephyr-rt1170-eink`** ([`LANE.id`](LANE.id)) · wing **`esl`** ([`PROJECT.wing`](PROJECT.wing)) · peer **`cloud-eink`** · [LANE-CHANNEL.md](mender-mcu-integration/docs/LANE-CHANNEL.md). New Zephyr i.MX RT customers: skill `zephyr-imx-rt-project`.
+
 
 ## About
 
