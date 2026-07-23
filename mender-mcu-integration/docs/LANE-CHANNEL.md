@@ -11,6 +11,7 @@
 4. File tickets in wing **`esl`** room **`handoffs`** with those lane IDs
 
 Skill: `parallel-agent-lanes` (session start + reference § Lane directory).
+Alex snapshot: Cursor command `/esl-status` (Collaboration section).
 
 ## This lane
 
