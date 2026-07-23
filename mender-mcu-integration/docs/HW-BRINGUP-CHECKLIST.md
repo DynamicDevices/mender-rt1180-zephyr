@@ -83,7 +83,7 @@ Record numbers in a dated note under this doc or lab notebook; link from CRA evi
 - [ ] Mender OTA + rollback proven once
 - [ ] Joules or time-proxy A/B recorded for v2 vs v0
 - [ ] HAB left **unfused** on primary lab EVK unless spare used
-- [ ] Update `etablone-cloud/docs/CUTOVER.md` board HW box (**cloud-eink**) + diary `wing_zephyr-rt1170-eink`
+- [ ] Update `etablone-cloud/docs/CUTOVER.md` board HW box (**cloud-eink**) + diary/handoffs with `FROM_LANE`/`TO_LANE`: **`zephyr` ↔ `cloud-eink`**
 
 ---
 
