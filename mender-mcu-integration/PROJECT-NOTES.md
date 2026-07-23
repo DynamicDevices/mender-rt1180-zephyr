@@ -1,6 +1,6 @@
 # Mender MCU OTA — i.MX RT118x family (Zephyr)
 
-Public repo: https://github.com/DynamicDevices/zephyr-rt1170-eink (agent **zephyr-rt1170-eink**; MemPalace lanes **`zephyr` ↔ `cloud-eink`**). Covers **RT1170** Active ESL e-ink host work and the **RT118x** Mender overlay (EVK + FRDM CM33).
+Public repo: https://github.com/DynamicDevices/zephyr-rt1170-eink (agent/workspace **zephyr-rt1170-eink**; MemPalace lanes **`zephyr-rt1170-eink` ↔ `cloud-eink`**). Covers **RT1170** Active ESL e-ink host work and the **RT118x** Mender overlay (EVK + FRDM CM33).
 
 Project notes for Mender over-the-air updates on NXP **i.MX RT118x** boards: **MIMXRT1180-EVK** (`mimxrt1180_evk/mimxrt1189/cm33`) and **FRDM-IMXRT1186** (`frdm_imxrt1186/mimxrt1186/cm33`, CM33 only). This workspace is a West checkout of the upstream [mender-mcu-integration](mender-mcu-integration/) reference app with a local **RT118x overlay** (EVK + FRDM board configuration).
 

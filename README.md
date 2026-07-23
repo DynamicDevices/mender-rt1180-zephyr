@@ -1,7 +1,7 @@
 # Zephyr RT1170 e-ink (Active ESL) + RT118x Mender overlay
 
 Public repo: https://github.com/DynamicDevices/zephyr-rt1170-eink  
-Device agent: **zephyr-rt1170-eink** · MemPalace handoff lanes: **`zephyr` ↔ `cloud-eink`**.
+Device agent: **zephyr-rt1170-eink** · MemPalace handoff lanes: **`zephyr-rt1170-eink` ↔ `cloud-eink`** (match workspace/agent names).
 
 ## About
 
