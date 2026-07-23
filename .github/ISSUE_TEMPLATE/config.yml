@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
   - name: CRA programme tracker (GitHub #1)
-    url: https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/1
+    url: https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/1
     about: Meta issue linking firmware CRA milestones M-003–M-015 (#2–#12). See PROJECT-NOTES for the unified milestone table.

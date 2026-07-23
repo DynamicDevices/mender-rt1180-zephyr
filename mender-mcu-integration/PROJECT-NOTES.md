@@ -1,6 +1,6 @@
 # Mender MCU OTA — i.MX RT118x family (Zephyr)
 
-Public repo: https://github.com/DynamicDevices/mender-rt1180-zephyr (GitHub name is historical EVK-first naming; this overlay covers the **RT118x** family — EVK and FRDM CM33).
+Public repo: https://github.com/DynamicDevices/zephyr-rt1170-eink (device agent **zephyr-rt1170-eink**; cloud peer **cloud-eink**). Covers **RT1170** Active ESL e-ink host work and the **RT118x** Mender overlay (EVK + FRDM CM33).
 
 Project notes for Mender over-the-air updates on NXP **i.MX RT118x** boards: **MIMXRT1180-EVK** (`mimxrt1180_evk/mimxrt1189/cm33`) and **FRDM-IMXRT1186** (`frdm_imxrt1186/mimxrt1186/cm33`, CM33 only). This workspace is a West checkout of the upstream [mender-mcu-integration](mender-mcu-integration/) reference app with a local **RT118x overlay** (EVK + FRDM board configuration).
 
@@ -845,8 +845,8 @@ For the **unified delivery plan** (workstreams, milestones, checklists), see [CR
 
 **Programme tracker:**
 
-- **Tracker:** [GitHub issue #1](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/1) (meta issue; prioritized backlog in [#1](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/1); child issues #2–#12)
-- **Open work issues:** [#2](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/2) Phase 1–2 hardware · [#3](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/3) MCUboot prod key · [#4](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/4) ELE TRNG · [#5](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/5) EdgeLock S3–S4 · [#6](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/6) SBOM · [#7](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/7) vuln triage · [#8](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/8) Art. 14 runbook · [#9](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/9) support period / risk · [#10](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/10) technical file · [#11](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/11) hardenconfig · [#12](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/12) upstream mender-mcu PR
+- **Tracker:** [GitHub issue #1](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/1) (meta issue; prioritized backlog in [#1](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/1); child issues #2–#12)
+- **Open work issues:** [#2](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/2) Phase 1–2 hardware · [#3](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/3) MCUboot prod key · [#4](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/4) ELE TRNG · [#5](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/5) EdgeLock S3–S4 · [#6](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/6) SBOM · [#7](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/7) vuln triage · [#8](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/8) Art. 14 runbook · [#9](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/9) support period / risk · [#10](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/10) technical file · [#11](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/11) hardenconfig · [#12](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/12) upstream mender-mcu PR
 - **Note:** M-001/M-002 **Done** — tracked in this programme section only (no GitHub issues)
 - **Priorities:** `priority/P0` bench + Sep 2026 compliance; `priority/P1` pre-production fleet; `priority/P2` blocked / conformity horizon
 
@@ -955,7 +955,7 @@ Four tracks run in parallel. **Owner** is **TBD** until assigned.
 
 ### Unified milestone table
 
-**Tracker:** [GitHub #1](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/1) (prioritized backlog; M-003–M-015 via #2–#11; upstream [#12](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/12); M-001/M-002 done — programme doc only)
+**Tracker:** [GitHub #1](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/1) (prioritized backlog; M-003–M-015 via #2–#11; upstream [#12](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/12); M-001/M-002 done — programme doc only)
 
 **Priority** labels on GitHub: `priority/P0` (hardware validation, vuln triage, Art. 14), `priority/P1` (signing, SBOM, support, hardenconfig, upstream PR), `priority/P2` (ELE blocked, EdgeLock S3–S4, technical file).
 
@@ -963,20 +963,20 @@ Four tracks run in parallel. **Owner** is **TBD** until assigned.
 |----|-----------|-----|--------|----------|--------|--------|-------------------|
 | M-001 | Phase 0b `native_sim` Mender smoke | WS1 | 2026 Q2 | — | **Done** | — | Phase 0b checklist; deployment success log |
 | M-002 | Phase 0 host sysbuild + `zephyr.mender` (EVK/FRDM) | WS1 | 2026 Q2 | — | **Done** | — | `mender-artifact validate`; build @ `1b2d374` |
-| M-003 | Phase 1 hardware flash + DHCP (EVK or FRDM) | WS1 | 2026 Q3 | **P0** | **Open** | [#2](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/2) | Serial + `net iface` IPv4 |
-| M-004 | Phase 2 OTA + MCUboot swap on hardware | WS1 | 2026 Q3–Q4 | **P0** | **Open** | [#2](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/2) | Mender deployment finished; reboot to `dev-2` |
-| M-005 | Production MCUboot signing key | WS1 | Pre-production | **P1** | **Open** | [#3](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/3) | Key ceremony doc; non-demo PEM/HSM |
-| M-006 | S1 ELE TRNG (drop timer RNG) | WS2 | Pre-production | **P2** | **Blocked** | [#4](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/4) | `tests/drivers/entropy/api` PASS |
-| M-007 | S3 opaque ELE devauth signing | WS2 | Pre-production | **P2** | **Open** | [#5](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/5) | No DER private key in NVS |
-| M-008 | S4 manufacturing provisioning | WS2 | Pre-fleet | **P2** | **Open** | [#5](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/5) | AN14861 / 2GO procedure |
-| M-009 | `generate-sbom.sh` + `west spdx` per board | WS3 | 2026 Q2 | **P1** | **Open** | [#6](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/6) | SPDX under `sbom/` per release |
-| M-010 | Vulnerability triage process documented | WS3 | Before Sep 2026 | **P0** | **Open** | [#7](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/7) | Process in WS3 + owner |
-| M-011 | Art. 14 incident runbook | WS4 | Before Sep 2026 | **P0** | **Open** | [#8](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/8) | Runbook + authority contacts |
-| M-012 | Support period declaration | WS4 | 2026 Q3 | **P1** | **Open** | [#9](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/9) | Signed template |
-| M-013 | Risk assessment (product-level) | WS4 | Pre-production | **P1** | **Open** | [#9](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/9) | Risk register |
-| M-014 | Technical file checklist complete | WS4 | Pre-production | **P2** | **Open** | [#10](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/10) | All boxes checked |
-| M-015 | `hardenconfig` on RT118x shipping defconfig | WS3/WS4 | Pre-production | **P1** | **Open** | [#11](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/11) | hardenconfig report |
-| — | Upstream mender-mcu Zephyr 4.4 PR | WS3 | 2026 | **P1** | **Open** | [#12](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/12) | Upstream PR merged / fork retired |
+| M-003 | Phase 1 hardware flash + DHCP (EVK or FRDM) | WS1 | 2026 Q3 | **P0** | **Open** | [#2](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/2) | Serial + `net iface` IPv4 |
+| M-004 | Phase 2 OTA + MCUboot swap on hardware | WS1 | 2026 Q3–Q4 | **P0** | **Open** | [#2](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/2) | Mender deployment finished; reboot to `dev-2` |
+| M-005 | Production MCUboot signing key | WS1 | Pre-production | **P1** | **Open** | [#3](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/3) | Key ceremony doc; non-demo PEM/HSM |
+| M-006 | S1 ELE TRNG (drop timer RNG) | WS2 | Pre-production | **P2** | **Blocked** | [#4](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/4) | `tests/drivers/entropy/api` PASS |
+| M-007 | S3 opaque ELE devauth signing | WS2 | Pre-production | **P2** | **Open** | [#5](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/5) | No DER private key in NVS |
+| M-008 | S4 manufacturing provisioning | WS2 | Pre-fleet | **P2** | **Open** | [#5](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/5) | AN14861 / 2GO procedure |
+| M-009 | `generate-sbom.sh` + `west spdx` per board | WS3 | 2026 Q2 | **P1** | **Open** | [#6](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/6) | SPDX under `sbom/` per release |
+| M-010 | Vulnerability triage process documented | WS3 | Before Sep 2026 | **P0** | **Open** | [#7](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/7) | Process in WS3 + owner |
+| M-011 | Art. 14 incident runbook | WS4 | Before Sep 2026 | **P0** | **Open** | [#8](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/8) | Runbook + authority contacts |
+| M-012 | Support period declaration | WS4 | 2026 Q3 | **P1** | **Open** | [#9](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/9) | Signed template |
+| M-013 | Risk assessment (product-level) | WS4 | Pre-production | **P1** | **Open** | [#9](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/9) | Risk register |
+| M-014 | Technical file checklist complete | WS4 | Pre-production | **P2** | **Open** | [#10](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/10) | All boxes checked |
+| M-015 | `hardenconfig` on RT118x shipping defconfig | WS3/WS4 | Pre-production | **P1** | **Open** | [#11](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/11) | hardenconfig report |
+| — | Upstream mender-mcu Zephyr 4.4 PR | WS3 | 2026 | **P1** | **Open** | [#12](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/12) | Upstream PR merged / fork retired |
 
 
 ### Pre-hardware checklist
@@ -1682,7 +1682,7 @@ Track progress with the **[Zephyr testing plan](#zephyr-testing-plan)** checkbox
 
 ## Commits
 
-Track overlay-repo history on [DynamicDevices/mender-rt1180-zephyr](https://github.com/DynamicDevices/mender-rt1180-zephyr). Module changes belong on the [mender-mcu fork](https://github.com/DynamicDevices/mender-mcu/tree/feature/zephyr-4.4-mbedtls4) branch — do not commit `modules/mender-mcu/` in this overlay (west-managed checkout).
+Track overlay-repo history on [DynamicDevices/zephyr-rt1170-eink](https://github.com/DynamicDevices/zephyr-rt1170-eink). Module changes belong on the [mender-mcu fork](https://github.com/DynamicDevices/mender-mcu/tree/feature/zephyr-4.4-mbedtls4) branch — do not commit `modules/mender-mcu/` in this overlay (west-managed checkout).
 
 
 ### E-ink verification gates

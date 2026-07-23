@@ -9,7 +9,7 @@ If you believe you have found a security vulnerability affecting firmware built 
 **Engineering triage:**
 
 - Active ESL / RT1170: [docs/CRA-COMPLIANCE.md](mender-mcu-integration/docs/CRA-COMPLIANCE.md)
-- RT118x programme: [PROJECT-NOTES](mender-mcu-integration/PROJECT-NOTES.md) (WS3) and GitHub issue [#7](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/7)
+- RT118x programme: [PROJECT-NOTES](mender-mcu-integration/PROJECT-NOTES.md) (WS3) and GitHub issue [#7](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/7)
 
 Do **not** open a public GitHub issue for undisclosed exploit details. Use the contact above or a private advisory channel once your product policy is defined.
 

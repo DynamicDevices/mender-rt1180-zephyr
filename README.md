@@ -1,11 +1,11 @@
-# Mender OTA on NXP i.MX RT118x family (Zephyr)
+# Zephyr RT1170 e-ink (Active ESL) + RT118x Mender overlay
 
-Public repo: https://github.com/DynamicDevices/mender-rt1180-zephyr  
-(GitHub name is historical EVK-first naming; this overlay covers the **RT118x** family — EVK and FRDM CM33.)
+Public repo: https://github.com/DynamicDevices/zephyr-rt1170-eink  
+Device agent: **zephyr-rt1170-eink** · cloud peer: **cloud-eink** (MemPalace handoffs).
 
 ## About
 
-Mender MCU OTA overlay for NXP i.MX RT crossover MCUs on Zephyr — primarily **RT118x** (**MIMXRT1180-EVK**, **FRDM-IMXRT1186** CM33), plus **MIMXRT1170-EVK** CM7 host-build support, `native_sim` lab validation, and EdgeLock / EU Cyber Resilience Act (CRA) programme tracking. Engineering programme and milestones: [PROJECT-NOTES](mender-mcu-integration/PROJECT-NOTES.md) · tracker [issue #1](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/1).
+Zephyr firmware for Active ESL on **MIMXRT1170-EVK** (CM7) — e-ink display, SoC UID identity, Etablone `/node/v2` sync — plus the legacy **RT118x** Mender MCU OTA overlay (**MIMXRT1180-EVK**, **FRDM-IMXRT1186** CM33), `native_sim` lab validation, and EdgeLock / EU Cyber Resilience Act (CRA) programme tracking. Engineering programme and milestones: [PROJECT-NOTES](mender-mcu-integration/PROJECT-NOTES.md) · tracker [issue #1](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/1).
 
 Public overlay for [mender-mcu-integration](https://github.com/mendersoftware/mender-mcu-integration): RT118x CM33 board configuration (EVK + FRDM-IMXRT1186), build/flash notes, and Hosted Mender bring-up documentation.
 
@@ -23,15 +23,15 @@ Toolchain details, expected CMake warnings, secrets, and full build/flash proced
 ## Quick start (fresh workspace)
 
 ```bash
-mkdir mender-rt1180 && cd mender-rt1180
+mkdir zephyr-rt1170-eink && cd zephyr-rt1170-eink
 
 # Upstream reference application + West manifest
 git clone https://github.com/mendersoftware/mender-mcu-integration.git mender-mcu-integration
 
-# RT118x port files from this repo
-git clone https://github.com/DynamicDevices/mender-rt1180-zephyr.git _rt1180
-cp -a _rt1180/mender-mcu-integration/. mender-mcu-integration/
-rm -rf _rt1180
+# Overlay from this repo
+git clone https://github.com/DynamicDevices/zephyr-rt1170-eink.git _overlay
+cp -a _overlay/mender-mcu-integration/. mender-mcu-integration/
+rm -rf _overlay
 
 west init -l mender-mcu-integration
 west update
@@ -270,7 +270,7 @@ When lab hardware is available, use **`scripts/create-rt1180-deployment.sh`** (E
 
 **Production security:** on-die **EdgeLock (ELE)** key storage is a project requirement for RT118x — lab uses NVS today; phased roadmap (S0–S4) in [PROJECT-NOTES — Security / EdgeLock](mender-mcu-integration/PROJECT-NOTES.md#security--edgelock).
 
-**EU Cyber Resilience Act (CRA):** technical gap analysis — [CRA technical mapping](mender-mcu-integration/PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping); unified delivery plan — **[CRA compliance programme](mender-mcu-integration/PROJECT-NOTES.md#cra-compliance-programme-firmware-technical-baseline)** (engineering plan, not legal sign-off). Open milestones: [GitHub issue tracker #1](https://github.com/DynamicDevices/mender-rt1180-zephyr/issues/1).
+**EU Cyber Resilience Act (CRA):** technical gap analysis — [CRA technical mapping](mender-mcu-integration/PROJECT-NOTES.md#cyber-resilience-act-cra--technical-mapping); unified delivery plan — **[CRA compliance programme](mender-mcu-integration/PROJECT-NOTES.md#cra-compliance-programme-firmware-technical-baseline)** (engineering plan, not legal sign-off). Open milestones: [GitHub issue tracker #1](https://github.com/DynamicDevices/zephyr-rt1170-eink/issues/1).
 
 ## What this repo contains
 
