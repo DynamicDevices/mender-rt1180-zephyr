@@ -14,6 +14,17 @@ jobs:
       - name: Workspace safety (CI mode)
         run: python3 scripts/check-workspace-safety.py --ci
 
+  mender-mcu-pin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: mender-mcu pin drift gate
+        run: |
+          chmod +x scripts/check-mender-mcu-pin.sh
+          ./scripts/check-mender-mcu-pin.sh
+
   # No Zephyr tree in Actions checkout — keep these static / host-python only.
   eink-contracts:
     runs-on: [self-hosted, Linux]
