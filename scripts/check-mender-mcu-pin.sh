@@ -5,5 +5,5 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 WEST=${1:-"$ROOT/mender-mcu-integration/west.yml"}
 [[ "$WEST" != /* ]] && WEST="$ROOT/$WEST"
-URL=${MENDER_MCU_CHECK_SCRIPT_URL:-https://raw.githubusercontent.com/DynamicDevices/mender-mcu/feature/zephyr-4.4-mbedtls4/scripts/check-consumer-pin.sh}
+URL=${MENDER_MCU_CHECK_SCRIPT_URL:-https://raw.githubusercontent.com/DynamicDevices/mender-mcu/feature/zephyr-ram-stage-on-main/scripts/check-consumer-pin.sh}
 curl -fsSL "$URL" | bash -s -- "$WEST"

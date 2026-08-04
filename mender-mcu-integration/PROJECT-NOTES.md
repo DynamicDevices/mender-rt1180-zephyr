@@ -247,11 +247,11 @@ Hosted Mender **HTTPS** (socket TLS) is largely unaffected; **device authenticat
 
 **Upstream status (2026-06):** No merged Mbed TLS 4.x port on `mendersoftware/mender-mcu` `main`; open PR [#245](https://github.com/mendersoftware/mender-mcu/pull/245) bumps **posix** mbedTLS to 3.6.6 only. `mender-mcu-integration` upstream `west.yml` still pins Zephyr **v4.2.0**.
 
-**Fork pin (this workspace):** [`DynamicDevices/mender-mcu`](https://github.com/DynamicDevices/mender-mcu) branch [`feature/zephyr-4.4-mbedtls4`](https://github.com/DynamicDevices/mender-mcu/tree/feature/zephyr-4.4-mbedtls4) — west manifest pins full SHA **`1dbc35b572e0e2837a95c12a0bff92fc8cc39e49`** (abbrev `1dbc35b` is **not** valid for shallow CI `west update`). Shared policy with F1 + room-display: [`PIN-POLICY.md`](https://github.com/DynamicDevices/mender-mcu/blob/feature/zephyr-4.4-mbedtls4/PIN-POLICY.md). Patches under `modules/mender-mcu/` — `tls.c` uses `#if MBEDTLS_VERSION_NUMBER >= 0x04000000` for PSA `psa_generate_key` + `mbedtls_pk_copy_from_psa`, 4.x `mbedtls_pk_parse_key` / `mbedtls_pk_sign` signatures, and an entropy-source fix for Mbed TLS 4.x device-auth keygen. `storage.c` and `update-module.c` use `ZEPHYR_VERSION_CODE` guards for 4.2 vs 4.4 headers (`fs/nvs.h` vs `kvss/nvs.h`, `FIXED_PARTITION_*` vs `PARTITION_*`) — non-breaking for upstream Zephyr v4.2.0.
+**Fork pin (this workspace):** [`DynamicDevices/mender-mcu`](https://github.com/DynamicDevices/mender-mcu) branch [`feature/zephyr-ram-stage-on-main`](https://github.com/DynamicDevices/mender-mcu/tree/feature/zephyr-ram-stage-on-main) — west manifest pins full SHA **`64c10faad9d9150fd85202914c79c7d4c067dcd2`** (abbrev `64c10fa` is **not** valid for shallow CI `west update`). Shared policy with F1 + room-display: [`PIN-POLICY.md`](https://github.com/DynamicDevices/mender-mcu/blob/feature/zephyr-ram-stage-on-main/PIN-POLICY.md). Patches under `modules/mender-mcu/` — `tls.c` uses `#if MBEDTLS_VERSION_NUMBER >= 0x04000000` for PSA `psa_generate_key` + `mbedtls_pk_copy_from_psa`, 4.x `mbedtls_pk_parse_key` / `mbedtls_pk_sign` signatures, and an entropy-source fix for Mbed TLS 4.x device-auth keygen. `storage.c` and `update-module.c` use `ZEPHYR_VERSION_CODE` guards for 4.2 vs 4.4 headers (`fs/nvs.h` vs `kvss/nvs.h`, `FIXED_PARTITION_*` vs `PARTITION_*`) — non-breaking for upstream Zephyr v4.2.0.
 
-**SDRAM staging (Josef Holzmayr, 2026-06):** Cherry-picked [`a6bda14`](https://github.com/TheYoctoJester/mender-mcu/commit/a6bda14) from [`TheYoctoJester/mender-mcu` `sdram-stage-download`](https://github.com/TheYoctoJester/mender-mcu/tree/sdram-stage-download) onto our fork as **`1dbc35b`**. The `zephyr-image` update module accumulates the full OTA artifact in RAM during TLS download, then writes to the MCUboot secondary slot in one pass — avoids FlexSPI XIP stalls when flash-resident code/network RX shares the same NOR as the secondary slot (i.MX RT1064/118x class). Falls back to direct-to-flash if the staging buffer cannot be allocated. Did **not** merge Josef's mbedtls 3.6.6 bump (PR #245); our TLS 4.x guards remain.
+**SDRAM staging (Josef Holzmayr, 2026-06):** Cherry-picked [`a6bda14`](https://github.com/TheYoctoJester/mender-mcu/commit/a6bda14) from [`TheYoctoJester/mender-mcu` `sdram-stage-download`](https://github.com/TheYoctoJester/mender-mcu/tree/sdram-stage-download) onto our fork as **`64c10fa`**. The `zephyr-image` update module accumulates the full OTA artifact in RAM during TLS download, then writes to the MCUboot secondary slot in one pass — avoids FlexSPI XIP stalls when flash-resident code/network RX shares the same NOR as the secondary slot (i.MX RT1064/118x class). Falls back to direct-to-flash if the staging buffer cannot be allocated. Did **not** merge Josef's mbedtls 3.6.6 bump (PR #245); our TLS 4.x guards remain.
 
-**Verified host builds (@ `1dbc35b`, 2026-06-26):**
+**Verified host builds (@ `64c10fa`, 2026-06-26):**
 
 | Target | Command | Result |
 |--------|---------|--------|
@@ -279,7 +279,7 @@ These appear during a successful sysbuild or `native_sim` build on Zephyr v4.4.0
 | **`drivers__entropy` empty / no entropy device** | RT118x CM33 DTS has no `zephyr,entropy` node; board conf uses timer/test RNG (`CONFIG_TEST_RANDOM_GENERATOR` + `CONFIG_TIMER_RANDOM_GENERATOR`) | Expected for lab S0; not production-grade entropy — see [S1 — ELE TRNG](#s1--ele-trng-remediation-plan-rt118x-cm33) |
 | **`__ASSERT` / assertion-related notes** | Zephyr/Mbed TLS debug or PSA driver paths with `CONFIG_ASSERT=y` | Normal in development builds; review only if linked to a runtime fault |
 
-If the build **fails** (not warns) on `tls.c`, `storage.c`, or `update-module.c`, confirm `west update` pulled mender-mcu @ **`1dbc35b`** (`git -C modules/mender-mcu rev-parse HEAD`).
+If the build **fails** (not warns) on `tls.c`, `storage.c`, or `update-module.c`, confirm `west update` pulled mender-mcu @ **`64c10fa`** (`git -C modules/mender-mcu rev-parse HEAD`).
 
 
 ### Build (FRDM CM33)
@@ -1643,7 +1643,7 @@ Use the **user-zephyr-docs** MCP server in Cursor for Zephyr Kconfig, devicetree
 
 ## Upstream contribution
 
-This overlay workspace pins **Zephyr v4.4.0**, **Zephyr SDK 1.0.1**, and the [`DynamicDevices/mender-mcu`](https://github.com/DynamicDevices/mender-mcu) fork (branch `feature/zephyr-4.4-mbedtls4`, commit **`1dbc35b`**) in [`west.yml`](west.yml) for FRDM-IMXRT1186 and Mbed TLS 4.x bring-up.
+This overlay workspace pins **Zephyr v4.4.0**, **Zephyr SDK 1.0.1**, and the [`DynamicDevices/mender-mcu`](https://github.com/DynamicDevices/mender-mcu) fork (branch `feature/zephyr-ram-stage-on-main`, commit **`64c10fa`**) in [`west.yml`](west.yml) for FRDM-IMXRT1186 and Mbed TLS 4.x bring-up.
 
 The **module changes** intended for `mendersoftware/mender-mcu` are developed on that fork branch with **no breaking changes for Zephyr v4.2.0**: `storage.c` and `update-module.c` use `ZEPHYR_VERSION_CODE` guards (`fs/nvs.h` vs `kvss/nvs.h`, `FIXED_PARTITION_*` vs `PARTITION_*`); `tls.c` keeps `MBEDTLS_VERSION_NUMBER` guards for Mbed TLS 3.x and 4.x. Integration-app-only Kconfig (`PSA_WANT_*`, etc.) stays in this repo’s `prj.conf`, not in the module.
 
@@ -1682,7 +1682,7 @@ Track progress with the **[Zephyr testing plan](#zephyr-testing-plan)** checkbox
 
 ## Commits
 
-Track overlay-repo history on [DynamicDevices/zephyr-rt1170-eink](https://github.com/DynamicDevices/zephyr-rt1170-eink). Module changes belong on the [mender-mcu fork](https://github.com/DynamicDevices/mender-mcu/tree/feature/zephyr-4.4-mbedtls4) branch — do not commit `modules/mender-mcu/` in this overlay (west-managed checkout).
+Track overlay-repo history on [DynamicDevices/zephyr-rt1170-eink](https://github.com/DynamicDevices/zephyr-rt1170-eink). Module changes belong on the [mender-mcu fork](https://github.com/DynamicDevices/mender-mcu/tree/feature/zephyr-ram-stage-on-main) branch — do not commit `modules/mender-mcu/` in this overlay (west-managed checkout).
 
 
 ### E-ink verification gates
