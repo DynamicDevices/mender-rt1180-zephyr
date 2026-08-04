@@ -88,6 +88,7 @@ Use **separate** `west build -d …` directories so EVK, FRDM, and `native_sim` 
 | MIMXRT1180-EVK CM33 | `build-rt1180-evk/` | `./scripts/build-rt1180-evk.sh` |
 | FRDM-IMXRT1186 CM33 | `build-frdm-rt1186/` | `./scripts/build-rt1186-frdm.sh` |
 | FRDM-IMXRT1186 EL133 lab | `build-frdm-rt1186-eink/` | `./scripts/build-rt1186-frdm-eink.sh` (SPI; pin contract) |
+| FRDM CM33 OCRAM enroll | `build-frdm-rt1186-ocram/` | `FRDM_ENROLL_OCRAM=1 ./scripts/build-rt1186-frdm.sh` |
 | `native_sim` (Phase 0b) | `build-native_sim/` | `./scripts/build-native-sim.sh` |
 | MIMXRT1170-EVK CM7 | `build-rt1170-evk/` | `./scripts/build-rt1170-evk.sh` |
 | MIMXRT1170-EVK LCD lab | `build-rt1170-evk-lcd/` | `./scripts/build-rt1170-evk-lcd.sh` (`rk055hdmipi4ma0`) |
@@ -130,7 +131,7 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 | `scripts/test-mender-native-sim.sh` | Build (optional) + run `zephyr.exe` Mender smoke test; expects TAP from `run-native-sim-network.sh` |
 | `scripts/create-native-sim-deployment.sh` | Build noop-update artifact (`device_type` `native_sim`) and create **one** Hosted Mender deployment (`MENDER_DEPLOY_TARGET=device` \| `device_type` \| `group`; default group **`simulator`**) |
 | `scripts/build-rt1180-evk.sh` | Sysbuild Mender for EVK CM33 (default `build-rt1180-evk/`) |
-| `scripts/build-rt1186-frdm.sh` | Sysbuild Mender for FRDM-IMXRT1186 CM33 (default `build-frdm-rt1186/`) |
+| `scripts/build-rt1186-frdm.sh` | Sysbuild Mender for FRDM-IMXRT1186 CM33 (default `build-frdm-rt1186/`; `FRDM_ENROLL_OCRAM=1` → OCRAM enroll) |
 | `scripts/build-rt1186-frdm-eink.sh` | FRDM SPI EL133 lab (no framebuffer; default `build-frdm-rt1186-eink/`) |
 | `scripts/build-rt1170-evk.sh` | Sysbuild Mender for MIMXRT1170-EVK CM7 (default `build-rt1170-evk/`) |
 | `scripts/build-rt1170-evk-lcd.sh` | EVK + Rocktech RK055 MIPI LCD preview lab (`rk055hdmipi4ma0`; default `build-rt1170-evk-lcd/`) |
@@ -192,6 +193,27 @@ west build -p --sysbuild \
 - **Board fragment** `mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.conf` is applied automatically for this board target.
 - **`mender-local.conf`** supplies Hosted Mender tenant token and server selection at build time.
 - **`EXTRA_CONF_FILE`** is relative to the application directory (`mender-mcu-integration/`); the file on disk is `mender-mcu-integration/mender-local.conf` from the workspace root. Prefer `./scripts/build-rt1180-evk.sh`.
+
+## FRDM CM33 OCRAM enroll (opt-in)
+
+After MCUboot chainload, using HyperRAM as `zephyr,sram` has UsageFaulted on FRDM
+when FlexSPI NOR / `__ramfunc` paths land in HyperRAM under MPU XN. The OCRAM
+enroll profile mirrors the F1 `MENDER_FRDM_PROFILE=ocram` idea:
+
+```bash
+FRDM_ENROLL_OCRAM=1 ./scripts/build-rt1186-frdm.sh
+west flash -d build-frdm-rt1186-ocram
+```
+
+| Piece | Path |
+|-------|------|
+| App conf | `mender-frdm-ocram.conf` (smaller net/TLS bufs; no code relocate into SRAM) |
+| App overlay | `boards/frdm_imxrt1186_mimxrt1186_cm33_ocram.overlay` (OCRAM1 @ `0x30484000`, 496 KiB) |
+| MCUboot conf | `sysbuild/mcuboot-frdm-dtcm.conf` |
+| Direct-boot fragment | `mender-frdm-direct-boot.conf` (advanced; not wired into the script) |
+
+Default `./scripts/build-rt1186-frdm.sh` is unchanged. Lab-only DSA knobs stay in
+gitignored `frdm-dsa-local.conf`. Bench sign-off for OCRAM enroll is still TBD.
 
 ## FRDM-IMXRT1186 vs MIMXRT1180-EVK
 

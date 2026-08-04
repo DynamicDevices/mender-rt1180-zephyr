@@ -1,0 +1,20 @@
+/*
+ * FRDM CM33 OCRAM enroll (opt-in via FRDM_ENROLL_OCRAM=1): on-chip OCRAM as zephyr,sram.
+ *
+ * HyperRAM works without MCUboot (F1 B2), but chainload UsageFaults when
+ * MSP/__ramfunc are in HyperRAM. Use OCRAM1 after the TRDC-blocked 16 KiB.
+ *
+ * CM33 view: memory@30480000 ranges → OCRAM1 at 0x30480000; skip +0x4000.
+ */
+/ {
+	chosen {
+		zephyr,sram = &ocram_enroll;
+	};
+
+	soc {
+		ocram_enroll: memory@30484000 {
+			compatible = "mmio-sram";
+			reg = <0x30484000 DT_SIZE_K(496)>;
+		};
+	};
+};
