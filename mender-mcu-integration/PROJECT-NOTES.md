@@ -6,6 +6,10 @@ Project notes for Mender over-the-air updates on NXP **i.MX RT118x** boards: **M
 
 Upstream getting-started and native_sim instructions remain in [mender-mcu-integration/README.md](mender-mcu-integration/README.md). Mender MCU module docs: [modules/mender-mcu/README.md](modules/mender-mcu/README.md).
 
+**Shared multi-product helpers:** `dd-zephyr-matrix` / `dd-zephyr-lab` · pin SoT
+[`PIN-POLICY.md`](https://github.com/DynamicDevices/mender-mcu/blob/feature/zephyr-ram-stage-on-main/PIN-POLICY.md)
+· skill `zephyr-imx-rt-project`. FRDM console on hwlab: `nc 192.168.2.10 2325`.
+
 ## Purpose
 
 Evaluate **Mender MCU OTA** on RT118x **CM33**: MCUboot + swap, Ethernet bring-up, Hosted Mender client, and automatic `zephyr-image` artifact generation at build time.
