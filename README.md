@@ -277,6 +277,7 @@ When lab hardware is available, use **`scripts/create-rt1180-deployment.sh`** (E
 
 | Path | Purpose |
 |------|---------|
+| `docs/INTEGRATION-CONTRACT.md` | Worktree layout + shared `mender-mcu` / lab helpers |
 | `mender-mcu-integration/PROJECT-NOTES.md` | RT118x workspace, build, flash, and OTA notes |
 | `mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.conf` | EVK board Kconfig fragment |
 | `mender-mcu-integration/boards/mimxrt1180_evk_mimxrt1189_cm33.overlay` | EVK stable lab MAC (NETC) |
