@@ -17,7 +17,7 @@ West dependencies (`zephyr/`, `modules/`, `bootloader/`) are **not** in this rep
 | Requirement | Notes |
 |-------------|-------|
 | **Zephyr SDK 1.0.1** | Required for Zephyr **v4.4.0** — download [`zephyr-sdk-1.0.1_*_gnu.tar.xz`](https://github.com/zephyrproject-rtos/sdk-ng/releases/tag/v1.0.1), run `setup.sh -c -t arm-zephyr-eabi`, set `ZEPHYR_SDK_INSTALL_DIR`. |
-| **mender-mcu fork** | [`west.yml`](mender-mcu-integration/west.yml) pins [`DynamicDevices/mender-mcu`](https://github.com/DynamicDevices/mender-mcu) branch `feature/zephyr-4.4-mbedtls4` @ **`1b2d374`** (Mbed TLS 4.x `tls.c` + Zephyr 4.2/4.4 version guards in storage/update-module). Run `west update` after pulling manifest changes. |
+| **mender-mcu fork** | [`west.yml`](mender-mcu-integration/west.yml) pins [`DynamicDevices/mender-mcu`](https://github.com/DynamicDevices/mender-mcu) @ full SHA **`1dbc35b572e0e2837a95c12a0bff92fc8cc39e49`** (`feature/zephyr-4.4-mbedtls4`). Shared bump rules: [`PIN-POLICY.md`](https://github.com/DynamicDevices/mender-mcu/blob/feature/zephyr-4.4-mbedtls4/PIN-POLICY.md) (same pin as F1 + room-display). Run `west update` after pulling manifest changes. |
 
 Toolchain details, expected CMake warnings, secrets, and full build/flash procedure: **[mender-mcu-integration/PROJECT-NOTES.md](mender-mcu-integration/PROJECT-NOTES.md)**.
 
@@ -82,7 +82,7 @@ Troubleshooting (401 pending accept, 409 overlapping deploys, network hang): **[
 
 NXP board page: [FRDM-IMXRT1186](https://www.nxp.com/design/design-center/development-boards-and-designs/FRDM-IMXRT1186). Same RT118x family as the **MIMXRT1180-EVK** (dual CM33/CM7, NETC Ethernet, MCUboot external flash), but Freedom form factor with on-board **MCU-Link** (no separate debug probe). Zephyr board: `frdm_imxrt1186/mimxrt1186/cm33`. Mender **device type**: `frdm_imxrt1186`.
 
-**Requires Zephyr v4.4.0+** and **Zephyr SDK 1.0.1** (`frdm_imxrt1186` is not in v4.2). After pulling this repo, run `west update` from the West workspace root (manifest pins mender-mcu fork @ `1b2d374`).
+**Requires Zephyr v4.4.0+** and **Zephyr SDK 1.0.1** (`frdm_imxrt1186` is not in v4.2). After pulling this repo, run `west update` from the West workspace root (manifest pins mender-mcu fork @ `1dbc35b572e0e2837a95c12a0bff92fc8cc39e49`; see [`PIN-POLICY.md`](https://github.com/DynamicDevices/mender-mcu/blob/feature/zephyr-4.4-mbedtls4/PIN-POLICY.md)).
 
 **Host build verified (2026-06-17 @ `1b2d374`):** sysbuild links `zephyr.elf` and produces `zephyr.mender`; hardware flash/Ethernet/Mender OTA **TBD**.
 
@@ -289,7 +289,7 @@ When lab hardware is available, use **`scripts/create-rt1180-deployment.sh`** (E
 | `mender-mcu-integration/improv-native-sim-ble.conf` | `native_sim` Improv (BLE) + simulated Wi-Fi Kconfig fragment (host HCI User Channel) |
 | `mender-mcu-integration/patches/improv-zephyr-active-esl-claim.patch` | Local `improv-zephyr` patch: `{token}` claim URL, larger RPC buffer, RPC write-without-response |
 | `mender-mcu-integration/src/net/wifi_sim.c` | Management-only simulated Wi-Fi driver for `native_sim` (`CONFIG_APP_WIFI_SIM`) |
-| `mender-mcu-integration/west.yml` | West manifest (Zephyr v4.4.0 + mender-mcu fork @ `1b2d374`; FRDM board) |
+| `mender-mcu-integration/west.yml` | West manifest (Zephyr v4.4.0 + mender-mcu fork @ `1dbc35b572e0e2837a95c12a0bff92fc8cc39e49`; FRDM board) |
 | `mender-mcu-integration/README.md` | Pointer to PROJECT-NOTES for RT118x |
 | `mender-mcu-integration/.gitignore` | Local secrets and build paths |
 | `scripts/` | Host helpers — Phase 0b: `build-native-sim.sh`, `run-native-sim-network.sh`, `test-mender-native-sim.sh`, `create-native-sim-deployment.sh`; RT118x CM33: `build-rt1180-evk.sh`, `build-rt1186-frdm.sh`, `create-rt1180-deployment.sh`, `create-rt1186-frdm-deployment.sh`; RT1170: `build-rt1170-evk.sh`, `build-rt1170-improv-iw612.sh`, `create-rt1170-deployment.sh`; Improv emulator: `build-native-sim-improv.sh`, `improv-serial-provision.py`, `build-native-sim-improv-ble.sh`, `run-native-sim-improv-ble.sh`, `setup-native-sim-tap.sh`, `native-sim-tap/`; CRA WS3: `generate-sbom.sh`; vemu: `test-vemu.sh` — see [PROJECT-NOTES — Scripts inventory](mender-mcu-integration/PROJECT-NOTES.md#scripts-inventory) |

@@ -24,7 +24,9 @@ manifest:
           - littlefs
     - name: mender-mcu
       remote: dynamicdevices
-      revision: 1dbc35b
+      # Full SHA required: CI/shallow west update cannot resolve abbreviated refs.
+      # Shared pin policy: https://github.com/DynamicDevices/mender-mcu/blob/feature/zephyr-4.4-mbedtls4/PIN-POLICY.md
+      revision: 1dbc35b572e0e2837a95c12a0bff92fc8cc39e49
       path: modules/mender-mcu
       import: true
     - name: improv-zephyr
