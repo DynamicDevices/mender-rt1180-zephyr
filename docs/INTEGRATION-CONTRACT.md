@@ -1,6 +1,7 @@
 # Integration contract — e-ink (`zephyr-rt1170-eink`)
 
-**Lane:** `zephyr-rt1170-eink` · **Wing:** `esl` · **Primary:** `/data_drive/dd/zephyr-rt1170-eink`
+**Lane:** `zephyr-rt1170-eink` · **Wing:** `esl` · **Primary:** `/data_drive/dd/zephyr-rt1170-eink`  
+**GitHub:** [DynamicDevices/zephyr-rt1186-eink](https://github.com/DynamicDevices/zephyr-rt1186-eink) (renamed from `zephyr-rt1170-eink`; local directory names unchanged)
 
 Parallel agents must not share this checkout. Rule: workspace
 `multi-agent-worktrees` · helper: `ESL_ROOT=/data_drive/dd esl-worktree`.

@@ -28,7 +28,7 @@ Alex snapshot: `/esl-status` (wing `esl`). New customers: copy `/project-status`
 | `LANE_ID` | `zephyr-rt1170-eink` |
 | `PROJECT.wing` | `esl` |
 | Path (mutable) | current checkout |
-| Repo | [DynamicDevices/zephyr-rt1170-eink](https://github.com/DynamicDevices/zephyr-rt1170-eink) |
+| Repo | [DynamicDevices/zephyr-rt1186-eink](https://github.com/DynamicDevices/zephyr-rt1186-eink) |
 | Channels | `cloud-eink` |
 | Owns | RT1170 Zephyr e-ink firmware, native_sim, device contract |
 | Never | cloud-eink / etablone-cloud tree |
