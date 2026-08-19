@@ -17,7 +17,7 @@ ${SP}                         0x3802a828
 ${PC}                         0x1402d8b4
 
 *** Test Cases ***
-Should Print Booting Zephyr OS On LPUART1
+Should Print Hello World On LPUART1
     Execute Command           mach create
     Execute Command           machine LoadPlatformDescription ${REPL}
     Execute Command           sysbus LoadELF ${ELF}
@@ -26,4 +26,4 @@ Should Print Booting Zephyr OS On LPUART1
     Execute Command           cpu0 PC ${PC}
     Create Terminal Tester    ${UART}
     Start Emulation
-    Wait For Line On Uart     Booting Zephyr OS    timeout=30
+    Wait For Line On Uart     Hello World! frdm_imxrt1186    timeout=30

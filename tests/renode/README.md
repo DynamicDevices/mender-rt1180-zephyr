@@ -39,8 +39,9 @@ VTOR is derived per ELF (`scripts/find-vtor.py`); MCUboot slot0 is not
 ## Status (2026-08-19)
 
 - Hello_world on this `.repl` + Python CCM/ANATOP: **PASS** (F1 gemba).
-- This e-ink/Mender ELF: Robot **PASS** — `Booting Zephyr OS` on LPUART1
-  (~7 s). Extra models vs hello: BLK_CTRL_WAKEUPMIX + NETC PRIV/IERB RAM,
+- This e-ink/Mender ELF: Robot **PASS** — `Hello World! frdm_imxrt1186` on
+  LPUART1 (~6 s; immediate-log image, shell prompt follows). Extra models vs
+  hello: BLK_CTRL_WAKEUPMIX + NETC PRIV/IERB RAM,
   TRDC HWCFG0/DACFG (SDK `assert` on NMSTR/NCM), FlexSPI STS0 idle +
   self-clearing `MCR0.SWRESET` (firmware spins until that bit reads 0).
 - Still **not** modelled: NETC/PHY, Spectra 6, real FlexSPI flash contents.
