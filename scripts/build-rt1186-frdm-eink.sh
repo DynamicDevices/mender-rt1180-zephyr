@@ -23,7 +23,10 @@ else
   EXTRA_CONF="${SHELL_CONF};${EL133_CONF}"
 fi
 
+MCUBOOT_DTCM_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_mcuboot_dtcm.overlay"
+
 exec "${ROOT}/scripts/build-rt1186-frdm.sh" "$@" \
   -DZEPHYR_EXTRA_MODULES="${EL133_MODULE}" \
   -DEXTRA_CONF_FILE="${EXTRA_CONF}" \
-  -DEXTRA_DTC_OVERLAY_FILE="${EL133_OVERLAY}"
+  -DEXTRA_DTC_OVERLAY_FILE="${EL133_OVERLAY}" \
+  -Dmcuboot_EXTRA_DTC_OVERLAY_FILE="${MCUBOOT_DTCM_OVERLAY}"

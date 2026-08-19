@@ -143,12 +143,16 @@ main(void) {
     }
 #endif
     if (0 != eink_display_init()) {
-        LOG_ERR("eink display init failed");
-        goto END;
+        /* No panel on the FRDM Ethernet/Mender lab bench — do not block enroll. */
+        LOG_ERR("eink display init failed (continuing without panel)");
     }
+#if defined(CONFIG_APP_EINK_HTTP)
     if (0 != eink_scheduler_init()) {
         LOG_ERR("eink scheduler init failed");
     }
+#else
+    LOG_INF("eink scheduler skipped (HTTP off)");
+#endif
 #if defined(CONFIG_APP_EINK_GNSS)
     if (0 != eink_gnss_init()) {
         LOG_WRN("eink gnss init failed (shell location still works)");

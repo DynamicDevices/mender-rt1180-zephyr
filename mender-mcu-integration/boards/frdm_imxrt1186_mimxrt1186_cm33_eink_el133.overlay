@@ -18,6 +18,14 @@
 	pinctrl-names = "default", "sleep";
 };
 
+/*
+ * ROM XMCD already owns HyperRAM. Do not let MEMC FLEXSPI_Init FlexSPI1
+ * while .data / stack / relocated FlexSPI2 NOR HAL live in that AHB window.
+ */
+&flexspi {
+	status = "disabled";
+};
+
 / {
 	chosen {
 		zephyr,display = &el133uf1;

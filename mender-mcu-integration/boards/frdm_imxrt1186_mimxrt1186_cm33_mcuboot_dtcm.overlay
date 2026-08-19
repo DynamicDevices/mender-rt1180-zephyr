@@ -1,0 +1,24 @@
+/*
+ * FRDM CM33 MCUboot: on-chip DTCM as zephyr,sram.
+ * Disable FlexSPI1 (HyperRAM) so MEMC does not FLEXSPI_Init it while
+ * relocated FlexSPI2 NOR HAL would otherwise live in that AHB window.
+ * Same class of fault as F1 (zephyr-rt1186-f1 mcuboot_dtcm overlay).
+ */
+/delete-node/ &dtcm;
+
+/ {
+	chosen {
+		zephyr,sram = &dtcm;
+	};
+
+	soc {
+		dtcm: memory@30000000 {
+			compatible = "mmio-sram";
+			reg = <0x30000000 DT_SIZE_K(128)>;
+		};
+	};
+};
+
+&flexspi {
+	status = "disabled";
+};
