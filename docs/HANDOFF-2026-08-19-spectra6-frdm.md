@@ -2,7 +2,7 @@
 
 **Lane:** `spectra6-frdm` (`LANE.id` = `zephyr-rt1170-eink`)  
 **Worktree:** `/data_drive/dd/zephyr-rt1170-eink-spectra6-frdm`  
-**Branch:** `feat/frdm-imxrt1186-el133` @ `09d3cde` (ahead of `origin/main` by 3, **not pushed**)  
+**Branch:** `feat/frdm-imxrt1186-el133` @ `ca11614` (pushed)  
 **Primary `main`:** do not use — sibling `frdm-ocram-enroll` exists  
 
 ## Progress
@@ -23,6 +23,6 @@
 
 1. Restore F1/Ocre on `WGUPS4RWFPGOT` if that lane needs the board back.
 2. Loom + BUSY/RESET when spare glass exists.
-3. Product full loop on **RT1170** when that board is the bench — no MCXC.
+3. Product full loop on **FRDM-IMXRT1186** (this board) — **no RT1170**.
 
-**Proof:** `native_sim` = portal/Mender noop. `renode` ≠ FRDM. Enroll + **slot swap = FRDM**. Spectra6 paint / RT1170 = not yet.
+**Proof:** `native_sim` = portal/Mender noop. `renode` ≠ FRDM. Enroll + **slot swap = FRDM**. Spectra6 paint = not yet. RT1170 is out of this product path.

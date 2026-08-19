@@ -1,7 +1,7 @@
 # FRDM-IMXRT1186 ↔ EL133UF1 pin contract (lab)
 
 **Status:** proposed loom — **not** FRDM silicon proof.  
-**Proof class after flash:** `FRDM` only for GPIO/SPI/BUSY; product SoC remains RT1170.  
+**Proof class after flash:** `FRDM` only for GPIO/SPI/BUSY. Product SoC is **RT1186** (this FRDM); **not RT1170**.  
 **Lane:** `spectra6-frdm` · `/data_drive/dd/zephyr-rt1170-eink-spectra6-frdm`
 
 Do **not** unplug the live Jaguar demo. Use a spare 13.3″ Spectra 6 + 60-pin FFC
@@ -77,7 +77,7 @@ images → `POST …/telemetry` → run cron → paint Spectra 6 → sleep.
 | Sleep / rails | **MCXC PMU** UART (`DISP_EN`, Wi‑Fi rails, `deep_sleep_all_off`) | **No PMU MCU.** Product: RT SoC GPIOs + SNVS/SRTC (`eink_power.*`). FRDM lab: external panel HV; no MCXC |
 
 **No PMU controller chip (Alex 2026-08-19):** Jaguar’s MCXC is **not** on the
-Zephyr i.MX RT path (FRDM-1186 lab or RT1170 product). Do not speak UART
+Zephyr i.MX RT path (FRDM-1186 lab and product). Do not speak UART
 `power disp` / `power wifi` or assume a companion MCU. Panel/Wi‑Fi/NOR gates
 are RT GPIOs when the overlay provides them; without those DT properties the
 software contract still logs/status-only (`eink_power.h`). Lab HV stays on the
@@ -87,8 +87,9 @@ E Ink kit / parked Jaguar PMIC — FRDM does not generate ±16 V.
 for Spectra 6 SPI **and** Hosted **Mender MCU** over **NETC Ethernet** (not
 Foundries; not MIMXRT1180-EVK unless we add an EVK loom). Portal + schedule
 stay on **native_sim** until e-tabelone HTTP is turned back on. Renode does
-**not** prove Mender (NETC/PHY unmodelled). Dual-slot swap on silicon is still
-**FRDM** proof, not `renode`.
+**not** prove Mender (NETC/PHY unmodelled). Dual-slot swap on silicon is
+**FRDM** proof (`dev-2` on `WGUPS4RWFPGOT`), not `renode`. **RT1170 is not**
+on this product path (Alex 2026-08-19).
 
 **Renode (same day):** UART smoke of this FRDM e-ink ELF is in-tree
 (`./scripts/renode-frdm-eink-uart.sh`). Proof class **`renode`**. It does
@@ -99,5 +100,5 @@ stay on **native_sim** until e-tabelone HTTP is turned back on. Renode does
 
 - Yocto / Foundries on FRDM (no MMU)
 - FlexSPI / quad SPI
-- Product RT1170 pinmux (this map does **not** transfer)
+- Other SoC pinmux (this FRDM-1186 map does **not** transfer); RT1170 is not in this product path
 - Live Jaguar as a jumper donor
