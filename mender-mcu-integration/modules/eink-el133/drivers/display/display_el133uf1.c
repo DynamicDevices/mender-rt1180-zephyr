@@ -538,7 +538,14 @@ static int el133_init(const struct device *dev)
 	gpio_pin_set_dt(&cfg->reset, 0); /* release */
 	k_msleep(20);
 	k_msleep(100);
-	(void)wait_ready(cfg, 10000); /* reference proceeds even if BUSY is slow */
+	ret = wait_ready(cfg, 10000);
+	if (ret < 0) {
+		/* No glass / floating BUSY: skip register programming (up to ~3 min of waits). */
+		LOG_WRN("no panel (BUSY timeout) — skip EPD register init");
+		data->blanking_on = false;
+		data->dirty = false;
+		return 0;
+	}
 
 	ret = epd_init_registers(cfg);
 	if (ret < 0) {

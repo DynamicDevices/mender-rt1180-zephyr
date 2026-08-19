@@ -55,7 +55,11 @@ LOG_MODULE_REGISTER(eink_http, LOG_LEVEL_INF);
 #define EINK_HTTP_STACK_SIZE 49152
 #define EINK_HTTP_PRIORITY 6
 /* Dedicated arena so config parse does not depend on libc heap fragmentation. */
+#ifdef CONFIG_APP_EINK_HTTP_JSON_ARENA_SIZE
+#define EINK_CJSON_ARENA_SIZE CONFIG_APP_EINK_HTTP_JSON_ARENA_SIZE
+#else
 #define EINK_CJSON_ARENA_SIZE (256 * 1024)
+#endif
 
 /* Redirect Location headers are short; image URL path+query uses EINK_HTTP_URL_MAX. */
 #define EINK_HTTP_LOCATION_MAX 512

@@ -35,25 +35,20 @@ static void unix_to_ymd_hms(int64_t t, int *Y, int *M, int *D, int *h, int *m, i
 	*Y = y + (*M <= 2);
 }
 
-static bool is_leap(int y)
-{
-	return (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
-}
-
 static int64_t ymd_hms_to_unix(int Y, int M, int D, int h, int m, int s)
 {
-	static const int mdays[] = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 };
-	int64_t days = 0;
-	int y;
+	/* Howard Hinnant days_from_civil — O(1). A year-loop hangs if RTC is junk. */
+	int64_t y = Y;
+	int64_t era;
+	uint32_t yoe, doy, doe;
+	int64_t days;
 
-	for (y = 1970; y < Y; y++) {
-		days += is_leap(y) ? 366 : 365;
-	}
-	days += mdays[M - 1];
-	if (M > 2 && is_leap(Y)) {
-		days += 1;
-	}
-	days += D - 1;
+	y -= (M <= 2);
+	era = (y >= 0 ? y : y - 399) / 400;
+	yoe = (uint32_t)(y - era * 400);
+	doy = (153U * (uint32_t)(M + (M > 2 ? -3 : 9)) + 2U) / 5U + (uint32_t)D - 1U;
+	doe = yoe * 365U + yoe / 4U - yoe / 100U + doy;
+	days = era * 146097 + (int64_t)doe - 719468;
 	return days * 86400 + h * 3600 + m * 60 + s;
 }
 
