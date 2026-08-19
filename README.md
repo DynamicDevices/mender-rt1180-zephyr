@@ -95,6 +95,7 @@ From the **West workspace root** (this repo when used as the top-level checkout)
 |------|---------|
 | Update Zephyr | `west update` |
 | Sysbuild (MCUboot + Mender app) | `./scripts/build-rt1186-frdm.sh` |
+| OCRAM enroll (opt-in) | `FRDM_ENROLL_OCRAM=1 ./scripts/build-rt1186-frdm.sh` |
 | Incremental rebuild | `./scripts/build-rt1186-frdm.sh --incremental` |
 | Flash CM33 | `west flash -d build-frdm-rt1186` |
 | Serial console | MCU-Link USB, **115200 8N1** (LPUART1) |
