@@ -21,6 +21,13 @@ build-frdm-rt1186/
 build-native_sim/
 build-*/
 
+# Renode / Robot (renode-test cwd = repo root)
+robot_output.xml
+log.html
+report.html
+snapshots/
+logs/
+
 # Generated SBOM output (scripts/generate-sbom.sh)
 sbom/
 

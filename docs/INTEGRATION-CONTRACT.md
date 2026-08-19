@@ -10,7 +10,8 @@ Parallel agents must not share this checkout. Rule: workspace
 | Repo | Lane | Directory | Branch | Notes |
 |------|------|-----------|--------|-------|
 | `zephyr-rt1170-eink` | *(primary)* | `/data_drive/dd/zephyr-rt1170-eink` | `main` | Clean primary; west topdir |
-| — | — | — | — | Add rows when a lane worktree is live |
+| `zephyr-rt1170-eink` | `frdm-ocram-enroll` | `/data_drive/dd/zephyr-rt1170-eink-frdm-ocram-enroll` | `feat/frdm-cm33-ocram-enroll` | Sibling; do not share |
+| `zephyr-rt1170-eink` | `spectra6-frdm` | `/data_drive/dd/zephyr-rt1170-eink-spectra6-frdm` | `feat/frdm-imxrt1186-el133` | FRDM-IMXRT1186 EL133UF1 SPI lab |
 
 When adding a lane:
 

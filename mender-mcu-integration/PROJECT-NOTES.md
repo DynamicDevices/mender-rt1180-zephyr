@@ -87,6 +87,7 @@ Use **separate** `west build -d …` directories so EVK, FRDM, and `native_sim` 
 |--------|-------------------|---------------|
 | MIMXRT1180-EVK CM33 | `build-rt1180-evk/` | `./scripts/build-rt1180-evk.sh` |
 | FRDM-IMXRT1186 CM33 | `build-frdm-rt1186/` | `./scripts/build-rt1186-frdm.sh` |
+| FRDM-IMXRT1186 EL133 lab | `build-frdm-rt1186-eink/` | `./scripts/build-rt1186-frdm-eink.sh` (SPI; pin contract) |
 | `native_sim` (Phase 0b) | `build-native_sim/` | `./scripts/build-native-sim.sh` |
 | MIMXRT1170-EVK CM7 | `build-rt1170-evk/` | `./scripts/build-rt1170-evk.sh` |
 | MIMXRT1170-EVK LCD lab | `build-rt1170-evk-lcd/` | `./scripts/build-rt1170-evk-lcd.sh` (`rk055hdmipi4ma0`) |
@@ -130,6 +131,7 @@ Host helpers at the West workspace root (`scripts/`). All paths below are from t
 | `scripts/create-native-sim-deployment.sh` | Build noop-update artifact (`device_type` `native_sim`) and create **one** Hosted Mender deployment (`MENDER_DEPLOY_TARGET=device` \| `device_type` \| `group`; default group **`simulator`**) |
 | `scripts/build-rt1180-evk.sh` | Sysbuild Mender for EVK CM33 (default `build-rt1180-evk/`) |
 | `scripts/build-rt1186-frdm.sh` | Sysbuild Mender for FRDM-IMXRT1186 CM33 (default `build-frdm-rt1186/`) |
+| `scripts/build-rt1186-frdm-eink.sh` | FRDM SPI EL133 lab (no framebuffer; default `build-frdm-rt1186-eink/`) |
 | `scripts/build-rt1170-evk.sh` | Sysbuild Mender for MIMXRT1170-EVK CM7 (default `build-rt1170-evk/`) |
 | `scripts/build-rt1170-evk-lcd.sh` | EVK + Rocktech RK055 MIPI LCD preview lab (`rk055hdmipi4ma0`; default `build-rt1170-evk-lcd/`) |
 | `scripts/build-rt1170-evk-eink.sh` | EVK SPI EL133 lab (no MIPI shield; default `build-rt1170-evk-eink/`) |

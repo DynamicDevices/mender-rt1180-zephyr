@@ -880,7 +880,6 @@ int eink_store_materialize_es6f(const char *path, char *out, size_t out_cap)
 	struct fs_file_t f;
 	ssize_t n;
 	int ret;
-	char scratch[320];
 
 	if (path == NULL || out == NULL || out_cap < 16) {
 		return -EINVAL;
@@ -899,6 +898,7 @@ int eink_store_materialize_es6f(const char *path, char *out, size_t out_cap)
 
 #if defined(CONFIG_APP_EINK_LZ4)
 	if (eink_lz4_is_frame(head, (size_t)n)) {
+		char scratch[320];
 		int64_t t0 = k_uptime_get();
 
 		snprintf(scratch, sizeof(scratch), "%s/images/.paint.es6f", root);

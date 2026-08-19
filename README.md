@@ -49,6 +49,7 @@ Use a **separate** build directory per target (do not point EVK and FRDM at the 
 |--------|---------------------|-------|-------|--------|
 | MIMXRT1180-EVK CM33 | `build-rt1180-evk` | `./scripts/build-rt1180-evk.sh` | `west flash -d build-rt1180-evk` | `./scripts/create-rt1180-deployment.sh` |
 | FRDM-IMXRT1186 CM33 | `build-frdm-rt1186` | `./scripts/build-rt1186-frdm.sh` | `west flash -d build-frdm-rt1186` | `./scripts/create-rt1186-frdm-deployment.sh` |
+| FRDM-IMXRT1186 EL133 SPI lab | `build-frdm-rt1186-eink` | `./scripts/build-rt1186-frdm-eink.sh` | `west flash -d build-frdm-rt1186-eink` | GPIO/BUSY first — [pin contract](docs/FRDM-IMXRT1186-EL133-PIN-CONTRACT.md) |
 | `native_sim` (Phase 0b) | `build-native_sim` | `./scripts/build-native-sim.sh` | N/A (run `zephyr.exe`) | `./scripts/create-native-sim-deployment.sh` |
 | MIMXRT1170-EVK CM7 | `build-rt1170-evk` | `./scripts/build-rt1170-evk.sh` | `west flash -d build-rt1170-evk` | `./scripts/create-rt1170-deployment.sh` |
 | MIMXRT1170-EVKB CM7 + IW612 Improv | `build-rt1170-improv-iw612` | `./scripts/build-rt1170-improv-iw612.sh` | `west flash -d build-rt1170-improv-iw612` | Hardware validation TBD |
