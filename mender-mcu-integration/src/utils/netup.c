@@ -33,11 +33,15 @@ LOG_MODULE_DECLARE(mender_app, LOG_LEVEL_DBG);
 #include <zephyr/kernel.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/net_mgmt.h>
+#include <zephyr/net/ethernet.h>
 #if defined(CONFIG_NET_DHCPV4)
 #include <zephyr/net/dhcpv4.h>
 #endif
 #if defined(CONFIG_WIFI)
 #include <zephyr/net/wifi_mgmt.h>
+#endif
+#if defined(CONFIG_NET_DSA)
+#include <zephyr/net/dsa_core.h>
 #endif
 
 static K_SEM_DEFINE(network_ready_sem, 0, 1);
@@ -113,6 +117,47 @@ event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event, struct ne
     k_sem_give(&network_ready_sem);
 }
 
+#if defined(CONFIG_NET_DSA)
+static bool iface_is_dsa_user_port(struct net_if *iface)
+{
+	enum ethernet_hw_caps caps = net_eth_get_hw_capabilities(iface);
+
+	if (caps & ETHERNET_DSA_CONDUIT_PORT) {
+		return false;
+	}
+	return (caps & ETHERNET_DSA_USER_PORT) != 0;
+}
+
+#if defined(CONFIG_NET_DHCPV4)
+static struct net_mgmt_event_callback dsa_if_up_cb;
+
+static void dsa_dhcp_on_up(struct net_mgmt_event_callback *cb, uint64_t event,
+			   struct net_if *iface)
+{
+	ARG_UNUSED(cb);
+
+	if (event != NET_EVENT_IF_UP) {
+		return;
+	}
+	if (!iface_is_dsa_user_port(iface)) {
+		return;
+	}
+
+	LOG_INF("DSA user port %d up — starting DHCPv4", net_if_get_by_iface(iface));
+	net_dhcpv4_start(iface);
+}
+
+static void dsa_dhcp_boot_scan(struct net_if *iface, void *user_data)
+{
+	ARG_UNUSED(user_data);
+
+	if (net_if_is_up(iface)) {
+		dsa_dhcp_on_up(NULL, NET_EVENT_IF_UP, iface);
+	}
+}
+#endif /* CONFIG_NET_DHCPV4 */
+#endif /* CONFIG_NET_DSA */
+
 int
 netup_wait_for_network(void) {
     net_mgmt_init_event_callback(&mgmt_cb, event_handler, NET_EVENT_IPV4_ADDR_ADD);
@@ -133,6 +178,11 @@ netup_wait_for_network(void) {
 #if !defined(CONFIG_IMPROV_WIFI)
     wifi_connect(iface);
 #endif
+#elif defined(CONFIG_NET_DSA) && defined(CONFIG_NET_DHCPV4)
+    /* FRDM NETC: default iface is often the conduit. DHCP every DSA user port. */
+    net_mgmt_init_event_callback(&dsa_if_up_cb, dsa_dhcp_on_up, NET_EVENT_IF_UP);
+    net_mgmt_add_event_callback(&dsa_if_up_cb);
+    net_if_foreach(dsa_dhcp_boot_scan, NULL);
 #elif defined(CONFIG_NET_DHCPV4)
     /* For WIFI, it is expected that the dhcp client is started somehow by the network management.
     This is the case for example for ESP32-S3 with configuration option WIFI_STA_AUTO_DHCPV4 */

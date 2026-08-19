@@ -1,7 +1,11 @@
 # RT1170 battery board — power / CM4 hardware contract
 
 Firmware implements the software side of this contract. Schematic ownership is
-Michael/Ollie. Controlled questions live in
+Michael/Ollie.
+
+**No companion PMU MCU** on this path (Alex 2026-08-19). Jaguar’s MCXC does
+not exist on FRDM-IMXRT1186 or the RT1170 product board. Rails and SNVS are
+the i.MX RT SoC’s problem (GPIOs + SRTC), not a second firmware image. Controlled questions live in
 [`AESL-HW-RT1170-EINK-SPEC`](https://github.com/active-esl/specifications/tree/main/hw/AESL-HW-RT1170-EINK-SPEC)
 (Rev ≥ 0.2, questions 12–16).
 

@@ -1,0 +1,48 @@
+/*
+ * FRDM-IMXRT1186 lab loom for EL133UF1 Spectra 6 (1-bit LPSPI2 + GPIO CS).
+ *
+ * Pin table: docs/FRDM-IMXRT1186-EL133-PIN-CONTRACT.md
+ * Build:     ./scripts/build-rt1186-frdm-eink.sh
+ *
+ * Dual CS is driver-owned. Do not wire panel CS to LPSPI2 PCS0 (J3-12).
+ */
+
+#include <zephyr/dt-bindings/gpio/gpio.h>
+
+/* GPIO2 pinmux already lists EMC_B1_12..17 as gpio2 ioXX (nxp_rt1186.dtsi). */
+
+&lpspi2 {
+	status = "okay";
+	pinctrl-0 = <&pinmux_lpspi2>;
+	pinctrl-1 = <&pinmux_lpspi2_sleep>;
+	pinctrl-names = "default", "sleep";
+};
+
+/*
+ * ROM XMCD already owns HyperRAM. Do not let MEMC FLEXSPI_Init FlexSPI1
+ * while .data / stack / relocated FlexSPI2 NOR HAL live in that AHB window.
+ */
+&flexspi {
+	status = "disabled";
+};
+
+/ {
+	chosen {
+		zephyr,display = &el133uf1;
+	};
+
+	el133uf1: el133uf1 {
+		compatible = "eink,el133uf1";
+		status = "okay";
+		spi-dev = <&lpspi2>;
+		spi-max-frequency = <5000000>;
+		/* Arduino D2–D5 + D8 — see pin contract */
+		cs0-gpios = <&gpio2 12 GPIO_ACTIVE_LOW>;
+		cs1-gpios = <&gpio2 13 GPIO_ACTIVE_LOW>;
+		dc-gpios = <&gpio2 14 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&gpio2 15 GPIO_ACTIVE_LOW>;
+		busy-gpios = <&gpio2 17 GPIO_ACTIVE_HIGH>;
+		width = <1200>;
+		height = <1600>;
+	};
+};

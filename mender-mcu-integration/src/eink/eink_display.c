@@ -185,7 +185,7 @@ static int stream_fill_cb(void *user, uint8_t *dst, size_t max_len)
 }
 #endif
 
-#if !defined(CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW)
+#if defined(CONFIG_ARCH_POSIX) && !defined(CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW)
 static int write_sdl_from_halves(int (*read_row)(void *user, uint16_t y, bool right, uint8_t *row300),
 				 void *user)
 {
@@ -287,7 +287,7 @@ static int write_sdl_from_halves(int (*read_row)(void *user, uint16_t y, bool ri
 	desc.pitch = sdl_w;
 	return display_write(dev, 0, 0, &desc, frame);
 }
-#endif /* !CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW */
+#endif /* CONFIG_ARCH_POSIX && !LCD_PREVIEW */
 
 #if defined(CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW)
 /* Rocktech RK055: 720x1280 RGB565 (~1.8 MiB) — EVK SDRAM lab profile only. */
@@ -363,6 +363,7 @@ static int write_lcd_preview_from_halves(
 }
 #endif /* CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW */
 
+#if defined(CONFIG_ARCH_POSIX) || defined(CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW)
 static int stream_read_row(void *user, uint16_t y, bool right, uint8_t *row300)
 {
 	struct stream_file *s = user;
@@ -393,6 +394,7 @@ static int stream_read_row(void *user, uint16_t y, bool right, uint8_t *row300)
 	n = (int)fs_read(&s->f, row300, 300);
 	return (n == 300) ? 0 : (n < 0 ? n : -EINVAL);
 }
+#endif /* POSIX || LCD_PREVIEW */
 
 #if defined(CONFIG_APP_EINK_FULL_FRAMEBUFFER)
 static int fb_read_row(void *user, uint16_t y, bool right, uint8_t *row300)
@@ -453,8 +455,11 @@ static int write_stream_to_display(struct stream_file *s)
 	} else {
 #if defined(CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW)
 		ret = write_lcd_preview_from_halves(stream_read_row, s);
-#else
+#elif defined(CONFIG_ARCH_POSIX)
 		ret = write_sdl_from_halves(stream_read_row, s);
+#else
+		LOG_ERR("non-EPD display needs LCD preview or native_sim SDL");
+		ret = -ENOTSUP;
 #endif
 	}
 
@@ -499,8 +504,11 @@ static int write_payload_to_display(const uint8_t *payload)
 	} else {
 #if defined(CONFIG_APP_EINK_DISPLAY_LCD_PREVIEW)
 		ret = write_lcd_preview_from_halves(fb_read_row, (void *)payload);
-#else
+#elif defined(CONFIG_ARCH_POSIX)
 		ret = write_sdl_from_halves(fb_read_row, (void *)payload);
+#else
+		LOG_ERR("non-EPD display needs LCD preview or native_sim SDL");
+		ret = -ENOTSUP;
 #endif
 	}
 

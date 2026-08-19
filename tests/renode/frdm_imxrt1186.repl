@@ -1,0 +1,256 @@
+sysbus:
+    init:
+        Tag <0x0 0x720000> "boot_partition / ocram1_available / slot0_partition"
+        Tag <0x720000 0x700000> "slot1_partition"
+        Tag <0x54000000 0x210000> "edma3"
+        Tag <0xe20000 0x1e0000> "storage_partition"
+        Tag <0x60a00000 0x10000> "switch"
+        Tag <0x60b00000 0x10000> "enetc_psi0"
+        Tag <0x60b40000 0x10000> "enetc_psi1"
+        Tag <0x60b80000 0x10000> "netc_ptp_clock0"
+        Tag <0x52000000 0x4000> "edma4"
+        // blkctrl_wakeup modelled below — Tag here BusFaults NETC clock_init
+        Tag <0x52430000 0x4000> "mbox2_a"
+        Tag <0x52540000 0x4000> "lpi2c4"
+        Tag <0x52550000 0x4000> "lpspi3"
+        Tag <0x52560000 0x4000> "lpspi4"
+        Tag <0x52570000 0x4000> "lpuart3"
+        Tag <0x52580000 0x4000> "lpuart4"
+        Tag <0x52590000 0x4000> "lpuart5"
+        Tag <0x525a0000 0x4000> "lpuart6"
+        Tag <0x525c0000 0x4000> "flexio1"
+        Tag <0x525d0000 0x4000> "flexio2"
+        Tag <0x52690000 0x4000> "qtmr1"
+        Tag <0x526a0000 0x4000> "qtmr2"
+        Tag <0x526b0000 0x4000> "qtmr3"
+        Tag <0x526c0000 0x4000> "qtmr4"
+        Tag <0x526d0000 0x4000> "qtmr5"
+        Tag <0x526e0000 0x4000> "qtmr6"
+        Tag <0x526f0000 0x4000> "qtmr7"
+        Tag <0x52700000 0x4000> "qtmr8"
+        Tag <0x52850000 0x4000> "usdhc1"
+        Tag <0x52860000 0x4000> "usdhc2"
+        Tag <0x52a10000 0x4000> "iomuxc"
+        Tag <0x52bb0000 0x4000> "sai2"
+        Tag <0x52bc0000 0x4000> "sai3"
+        Tag <0x52bd0000 0x4000> "sai4"
+        Tag <0x52d30000 0x4000> "lpi2c5"
+        Tag <0x52d40000 0x4000> "lpi2c6"
+        Tag <0x52d50000 0x4000> "lpspi5"
+        Tag <0x52d60000 0x4000> "lpspi6"
+        Tag <0x52d70000 0x4000> "lpuart9"
+        Tag <0x52d80000 0x4000> "lpuart10"
+        Tag <0x52d90000 0x4000> "lpuart11"
+        Tag <0x52da0000 0x4000> "lpuart8"
+        Tag <0x52dc0000 0x4000> "acmp1"
+        Tag <0x52dd0000 0x4000> "acmp2"
+        Tag <0x52de0000 0x4000> "acmp3"
+        Tag <0x52df0000 0x4000> "acmp4"
+        Tag <0x52ec0000 0x4000> "gpt2"
+        Tag <0x53810000 0x4000> "gpio2"
+        Tag <0x53820000 0x4000> "gpio3"
+        Tag <0x53830000 0x4000> "gpio4"
+        Tag <0x53840000 0x4000> "gpio5"
+        Tag <0x53850000 0x4000> "gpio6"
+        Tag <0x54210000 0x4000> "blkctrl_ns_aon"
+        Tag <0x54220000 0x4000> "mbox1_a"
+        Tag <0x54340000 0x4000> "lpi2c1"
+        Tag <0x54350000 0x4000> "lpi2c2"
+        Tag <0x54360000 0x4000> "lpspi1"
+        Tag <0x54370000 0x4000> "lpspi2"
+        Tag <0x54390000 0x4000> "lpuart2"
+        Tag <0x543b0000 0x4000> "sai1"
+        Tag <0x543c0000 0x4000> "iomuxc_aon"
+        Tag <0x54570000 0x4000> "lpuart7"
+        Tag <0x54580000 0x4000> "lpuart12"
+        Tag <0x546c0000 0x4000> "gpt1"
+        Tag <0x57400000 0x4000> "gpio1"
+        Tag <0x60ba0000 0x1c44> "emdio"
+        Tag <0x424c0000 0x1000> "lpit2"
+        Tag <0x42cc0000 0x1000> "lpit3"
+        Tag <0x42e20000 0x1000> "dac"
+        Tag <0x442f0000 0x1000> "lpit1"
+        Tag <0x52450000 0x1000> "sema2"
+        Tag <0x524d0000 0x1000> "lptmr2"
+        Tag <0x52520000 0x1000> "i3c2"
+        Tag <0x525b0000 0x1000> "flexcan2"
+        Tag <0x52a00000 0x1000> "kpp"
+        Tag <0x52c80000 0x1000> "usb1"
+        Tag <0x52c90000 0x1000> "usb2"
+        Tag <0x52ca0000 0x1000> "usbphy1"
+        Tag <0x52cb0000 0x1000> "usbphy2"
+        Tag <0x52cd0000 0x1000> "lptmr3"
+        Tag <0x54260000 0x1000> "sema1"
+        Tag <0x54300000 0x1000> "lptmr1"
+        Tag <0x54330000 0x1000> "i3c1"
+        // flexcan1 modelled below — do not Tag over the Python peripheral
+        Tag <0x545b0000 0x1000> "flexcan3"
+        Tag <0x60001000 0x1000> "emdio"
+        Tag <0x60002000 0x1000> "switch"
+        Tag <0x60003000 0x1000> "enetc_psi0"
+        Tag <0x60004000 0x1000> "enetc_psi1"
+        Tag <0x52600000 0x304> "lpadc1"
+        Tag <0x52e00000 0x304> "lpadc2"
+        Tag <0x44460000 0xa4> "src"
+        Tag <0x42510000 0x88> "tpm6"
+        Tag <0x524e0000 0x88> "tpm3"
+        Tag <0x524f0000 0x88> "tpm4"
+        Tag <0x52500000 0x88> "tpm5"
+        Tag <0x54310000 0x88> "tpm1"
+        Tag <0x54320000 0x88> "tpm2"
+        // MPU lives in the PPB — tagging it steals the core MPU
+        Tag <0x54484580 0x24> "tmpsns"
+        Tag <0x52490000 0x10> "rtwdog2"
+        Tag <0x524a0000 0x10> "rtwdog3"
+        Tag <0x524b0000 0x10> "rtwdog4"
+        Tag <0x542d0000 0x10> "rtwdog0"
+        Tag <0x542e0000 0x10> "rtwdog1"
+        // SysTick lives in the NVIC — do not Tag it
+        Tag <0x527b0000 0x6> "ewm0"
+
+w25q128jv: Memory.MappedMemory @ sysbus 0x4000000
+    size: 0x1000000
+
+qspiflash_extflashctrl: Memory.MappedMemory @ sysbus 0x14000000
+    size: 0x4000000
+
+itcm: Memory.MappedMemory @ sysbus 0x1ffe0000
+    size: 0x20000
+
+dtcm: Memory.MappedMemory @ sysbus 0x30000000
+    size: 0x20000
+
+m7itcm: Memory.MappedMemory @ sysbus 0x303c0000
+    size: 0x40000
+
+ocram1: Memory.MappedMemory @ sysbus 0x30480000
+    size: 0x80000
+
+ocram2: Memory.MappedMemory @ sysbus 0x30500000
+    size: 0x40000
+
+hyperram0: Memory.MappedMemory @ sysbus 0x38000000
+    size: 0x800000
+
+// autogenerated
+
+nvic0: IRQControllers.NVIC @ {
+    sysbus new Bus.BusPointRegistration { address: 0xe000e000; cpu: cpu0 }
+}
+    -> cpu0@0
+
+cpu0: CPU.CortexM @ sysbus
+    cpuType: "cortex-m33"
+    nvic: nvic0
+    enableTrustZone: false
+    numberOfMPURegions: 16
+
+lpi2c3: I2C.S32K3XX_LowPowerInterIntegratedCircuit @ sysbus 0x52530000
+    ->nvic0@62
+
+flexpwm1: Timers.IMXRT_PWM @ sysbus 0x52650000
+    0->nvic0@23
+
+flexpwm2: Timers.IMXRT_PWM @ sysbus 0x52660000
+    0->nvic0@170
+
+flexpwm3: Timers.IMXRT_PWM @ sysbus 0x52670000
+    0->nvic0@175
+
+flexpwm4: Timers.IMXRT_PWM @ sysbus 0x52680000
+    0->nvic0@180
+
+lpuart1: UART.NXP_LPUART @ sysbus 0x54380000
+    IRQ->nvic0@19
+
+flexcan1: Python.PythonPeripheral @ sysbus 0x543A0000
+    size: 0x1000
+    initable: true
+    filename: "scripts/pydev/rt118x_flexcan.py"
+
+flexspi: Python.PythonPeripheral @ sysbus 0x525e0000
+    size: 0x1000
+    initable: true
+    filename: "scripts/pydev/rt118x_flexspi.py"
+
+flexspi2: Python.PythonPeripheral @ sysbus 0x545e0000
+    size: 0x1000
+    initable: true
+    filename: "scripts/pydev/rt118x_flexspi.py"
+
+// cortex-m overlay
+
+dwt: Miscellaneous.DWT @ sysbus 0xE0001000
+    frequency: 72000000
+
+xcache_pc: Python.PythonPeripheral @ sysbus 0x54400000
+    size: 0x40
+    initable: true
+    filename: "scripts/pydev/rt118x_xcache.py"
+
+// TRM/CMSIS ANADIG + CCM (Marco method: models, not Tags)
+anatop: Python.PythonPeripheral @ sysbus 0x54480000
+    size: 0x5000
+    initable: true
+    filename: "scripts/pydev/rt118x_anatop.py"
+
+ccm: Python.PythonPeripheral @ sysbus 0x54450000
+    size: 0x5000
+    initable: true
+    filename: "scripts/pydev/rt118x_ccm.py"
+
+s3mu_apps: Python.PythonPeripheral @ sysbus 0x57520000
+    size: 0x1000
+    initable: true
+    filename: "scripts/pydev/rt118x_s3mu.py"
+
+s3mu_apps_ns: Python.PythonPeripheral @ sysbus 0x47520000
+    size: 0x1000
+    initable: true
+    filename: "scripts/pydev/rt118x_s3mu.py"
+
+s3mu_rt: Python.PythonPeripheral @ sysbus 0x57540000
+    size: 0x1000
+    initable: true
+    filename: "scripts/pydev/rt118x_s3mu.py"
+
+gpc: Python.PythonPeripheral @ sysbus 0x54470000
+    size: 0x2000
+    initable: true
+    filename: "scripts/pydev/rt118x_gpc.py"
+
+blk_ctrl: Python.PythonPeripheral @ sysbus 0x544F0000
+    size: 0x1000
+    initable: true
+    filename: "scripts/pydev/rt118x_gpc.py"
+
+src_gprs: Python.PythonPeripheral @ sysbus 0x54458000
+    size: 0x1000
+    initable: true
+    filename: "scripts/pydev/rt118x_gpc.py"
+
+trdc1: Python.PythonPeripheral @ sysbus 0x54270000
+    size: 0x10000
+    initable: true
+    filename: "scripts/pydev/rt118x_trdc1.py"
+
+trdc2: Python.PythonPeripheral @ sysbus 0x52460000
+    size: 0x10000
+    initable: true
+    filename: "scripts/pydev/rt118x_trdc2.py"
+
+trdc3: Python.PythonPeripheral @ sysbus 0x52810000
+    size: 0x10000
+    initable: true
+    filename: "scripts/pydev/rt118x_trdc3.py"
+
+// Mender ELF: clock_init + board_early_init_hook (NETC). Tags BusFault; RW RAM is enough
+// for NETC_PORT_MISC_CFG / NETC_LINK_CFG and NETCRR LOCK / NETCSR STATE polls.
+blkctrl_wakeup: Memory.MappedMemory @ sysbus 0x52420000
+    size: 0x4000
+
+netc_ierb: Memory.MappedMemory @ sysbus 0x70800000
+    size: 0x1000
+
+netc_priv: Memory.MappedMemory @ sysbus 0x70900000
+    size: 0x1000
