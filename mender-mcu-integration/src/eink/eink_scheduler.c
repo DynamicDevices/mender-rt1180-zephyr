@@ -37,6 +37,7 @@ int eink_scheduler_init(void)
 	k_mutex_init(&mu);
 	memset(&sched, 0, sizeof(sched));
 	last_job[0] = '\0';
+	LOG_INF("scheduler init: load store now=%lld", (long long)now);
 	(void)eink_store_load_state(last_job, sizeof(last_job));
 	if (eink_store_load_schedule(&sched) == 0 && sched.count > 0) {
 		for (size_t i = 0; i < sched.count; i++) {

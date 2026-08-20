@@ -76,6 +76,16 @@ if APP_EINK
 		  Fetch schedule/config, download packed ES6F frames, and post
 		  telemetry to the e-tabelone API (or file:// fixtures).
 
+	config APP_EINK_HTTP_JSON_ARENA_SIZE
+		int "cJSON parse arena (bytes)"
+		depends on APP_EINK_HTTP
+		default 262144
+		range 16384 262144
+		help
+		  Static parse buffer for config JSON. 256 KiB matches EVK +
+		  HyperRAM. FRDM with FlexSPI1/HyperRAM off must use 32–48 KiB
+		  or the BSS will not fit in on-chip SRAM.
+
 	config APP_EINK_HTTP_ENABLE
 		bool "Enable e-tabelone HTTP sync at boot"
 		default n

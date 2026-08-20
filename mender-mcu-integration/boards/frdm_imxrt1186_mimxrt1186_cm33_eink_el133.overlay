@@ -45,4 +45,44 @@
 		width = <1200>;
 		height = <1600>;
 	};
+
+	fstab {
+		compatible = "zephyr,fstab";
+
+		eink_lfs: eink_lfs {
+			compatible = "zephyr,fstab,littlefs";
+			mount-point = "/lfs1";
+			partition = <&eink_storage_partition>;
+			automount;
+			read-size = <16>;
+			prog-size = <16>;
+			cache-size = <256>;
+			lookahead-size = <128>;
+			block-cycles = <512>;
+		};
+	};
+};
+
+/*
+ * Upstream storage_partition consumes the whole NOR tail (~1.9 MiB).
+ * Shrink Mender NVS to 128 KiB and give the rest to the e-ink store.
+ */
+/delete-node/ &storage_partition;
+
+&w25q128jv {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		storage_partition: partition@e20000 {
+			label = "storage";
+			reg = <0x00e20000 DT_SIZE_K(128)>;
+		};
+
+		eink_storage_partition: partition@e40000 {
+			label = "eink-storage";
+			reg = <0x00e40000 0x001c0000>;
+		};
+	};
 };
