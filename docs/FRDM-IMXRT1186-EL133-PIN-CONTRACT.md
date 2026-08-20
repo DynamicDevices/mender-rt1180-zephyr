@@ -85,11 +85,13 @@ E Ink kit / parked Jaguar PMIC — FRDM does not generate ±16 V.
 
 **Alex 2026-08-19 (amended same day):** FRDM-IMXRT1186 is the **one lab board**
 for Spectra 6 SPI **and** Hosted **Mender MCU** over **NETC Ethernet** (not
-Foundries; not MIMXRT1180-EVK unless we add an EVK loom). Portal + schedule
-stay on **native_sim** until e-tabelone HTTP is turned back on. Renode does
-**not** prove Mender (NETC/PHY unmodelled). Dual-slot swap on silicon is
-**FRDM** proof (`dev-2` on `WGUPS4RWFPGOT`), not `renode`. **RT1170 is not**
-on this product path (Alex 2026-08-19).
+Foundries; not MIMXRT1180-EVK unless we add an EVK loom). **2026-08-20:**
+e-tabelone HTTP is **on** the FRDM e-ink image (`CONFIG_APP_EINK_HTTP=y`,
+32 KiB JSON arena, Cloudflare base + v2 sync); use `eink creds` / `eink sync`
+(HTTP_ENABLE stays n until credentials). Paint still waits on Spectra 6 SPI
+wiring. Renode does **not** prove Mender (NETC/PHY unmodelled). Dual-slot swap
+on silicon is **FRDM** proof (`dev-2` on `WGUPS4RWFPGOT`), not `renode`.
+**RT1170 is not** on this product path (Alex 2026-08-19).
 
 **Renode (same day):** UART smoke of this FRDM e-ink ELF is in-tree
 (`./scripts/renode-frdm-eink-uart.sh`). Proof class **`renode`**. It does
