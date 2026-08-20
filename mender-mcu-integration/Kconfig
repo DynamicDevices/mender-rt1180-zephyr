@@ -134,6 +134,18 @@ if APP_EINK
 		  to /node/v0 for file:// fixtures. Keep /node/v0 path when
 		  this is disabled (AWS dual-run).
 
+	config APP_EINK_RESOURCE_TELEMETRY
+		bool "Report LittleFS + system-heap usage in telemetry"
+		depends on APP_EINK_HTTP
+		default y
+		select SYS_HEAP_RUNTIME_STATS
+		help
+		  Adds optional telemetry fields storage_total_bytes,
+		  storage_free_bytes, ram_heap_free_bytes,
+		  ram_heap_used_bytes, ram_heap_max_used_bytes (omit a
+		  group when the probe fails). Cloud must accept unknown
+		  optional keys (v0 freeze: additive only).
+
 	config APP_EINK_HTTP_GALLERY_DEFER
 		bool "Defer gallery ES6F downloads until after paint"
 		depends on APP_EINK_HTTP

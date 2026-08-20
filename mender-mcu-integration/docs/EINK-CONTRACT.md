@@ -74,6 +74,16 @@ Telemetry JSON (`telemetry` object) includes at least:
 | `current_displayed_job_id` | Optional string when known |
 | `latitude` / `longitude` | Optional WGS84 degrees; **omit** when no fix |
 | `location_accuracy_m` | Optional metres; omit when unknown |
+| `storage_total_bytes` | Optional; LittleFS size for `APP_EINK_STORE_ROOT` (`fs_statvfs`) |
+| `storage_free_bytes` | Optional; free bytes on that FS |
+| `ram_heap_pool_bytes` | Optional; `CONFIG_HEAP_MEM_POOL_SIZE` |
+| `ram_heap_free_bytes` | Optional; system-heap free (`SYS_HEAP_RUNTIME_STATS`) |
+| `ram_heap_used_bytes` | Optional; system-heap allocated |
+| `ram_heap_max_used_bytes` | Optional; high-water allocated since boot |
+
+`CONFIG_APP_EINK_RESOURCE_TELEMETRY` (default y when HTTP is on) controls the
+storage/RAM group. **Omit** a group when the probe fails — never send zeros as
+placeholders. Cloud must treat these as additive optional keys (v0 freeze).
 
 Top-level `schedule` is an array of `{ "job_id": "…" }` acks. Never send
 null/zero placeholders for missing location — omit the keys entirely.

@@ -35,6 +35,8 @@
 #include <zephyr/net/http/client.h>
 #include <zephyr/net/http/parser.h>
 #include <zephyr/sys/crc.h>
+#include <zephyr/sys/mem_stats.h>
+#include <zephyr/sys/sys_heap.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/net/tls_credentials.h>
 #include <zephyr/sys/timeutil.h>
@@ -1493,6 +1495,54 @@ static void iso8601_utc(int64_t unix_s, char *out, size_t out_cap)
 	snprintf(out, out_cap, "%04d-%02d-%02dT%02d:%02d:%02dZ", Y, M, D, h, m, s);
 }
 
+/*
+ * Optional constrained-board pressure metrics. Omit keys when a probe fails
+ * (same pattern as GNSS). Wire contract: EINK-CONTRACT.md + cloud handoff.
+ */
+static void telemetry_add_resource_metrics(cJSON *telemetry)
+{
+#if defined(CONFIG_APP_EINK_RESOURCE_TELEMETRY)
+	struct fs_statvfs vfs;
+	int ret;
+
+	if (!telemetry) {
+		return;
+	}
+
+	ret = fs_statvfs(CONFIG_APP_EINK_STORE_ROOT, &vfs);
+	if (ret == 0 && vfs.f_frsize > 0U) {
+		uint64_t total = (uint64_t)vfs.f_blocks * (uint64_t)vfs.f_frsize;
+		uint64_t free_b = (uint64_t)vfs.f_bfree * (uint64_t)vfs.f_frsize;
+
+		cJSON_AddNumberToObject(telemetry, "storage_total_bytes", (double)total);
+		cJSON_AddNumberToObject(telemetry, "storage_free_bytes", (double)free_b);
+	} else if (ret != 0) {
+		LOG_DBG("fs_statvfs(%s): %d", CONFIG_APP_EINK_STORE_ROOT, ret);
+	}
+
+#if defined(CONFIG_SYS_HEAP_RUNTIME_STATS) && defined(CONFIG_HEAP_MEM_POOL_SIZE)
+	{
+		extern struct k_heap _system_heap;
+		struct sys_memory_stats st;
+
+		ret = sys_heap_runtime_stats_get(&_system_heap.heap, &st);
+		if (ret == 0) {
+			cJSON_AddNumberToObject(telemetry, "ram_heap_free_bytes",
+						(double)st.free_bytes);
+			cJSON_AddNumberToObject(telemetry, "ram_heap_used_bytes",
+						(double)st.allocated_bytes);
+			cJSON_AddNumberToObject(telemetry, "ram_heap_max_used_bytes",
+						(double)st.max_allocated_bytes);
+			cJSON_AddNumberToObject(telemetry, "ram_heap_pool_bytes",
+						(double)CONFIG_HEAP_MEM_POOL_SIZE);
+		}
+	}
+#endif
+#else
+	ARG_UNUSED(telemetry);
+#endif
+}
+
 int eink_http_post_telemetry(const struct eink_schedule *sched,
 			     const char *current_displayed_job_id, int64_t next_wakeup_unix,
 			     int battery_capacity)
@@ -1536,6 +1586,7 @@ int eink_http_post_telemetry(const struct eink_schedule *sched,
 		}
 	}
 #endif
+	telemetry_add_resource_metrics(telemetry);
 	if (sched) {
 		for (size_t i = 0; i < sched->count; i++) {
 			cJSON *ack = cJSON_CreateObject();
@@ -1842,6 +1893,7 @@ static void telemetry_fill_object(cJSON *telemetry, const char *current_displaye
 		}
 	}
 #endif
+	telemetry_add_resource_metrics(telemetry);
 }
 
 static int sync_v2_once_inner(void)
