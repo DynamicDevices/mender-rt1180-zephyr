@@ -270,6 +270,75 @@ class Bridge:
         url = f"{self.upstream}/node/v0/device/{self.device_id}/telemetry"
         return self.request(url, method="POST", body=body)
 
+    def _rewrite_plan_urls(self, plan: dict) -> dict[str, str]:
+        """Point images/download URLs at this bridge; return upstream URL map."""
+        next_urls: dict[str, str] = {}
+
+        images = plan.get("images")
+        if isinstance(images, list):
+            for image in images:
+                if not isinstance(image, dict):
+                    continue
+                image_id = image.get("image_id")
+                image_url = image.get("url")
+                if not isinstance(image_id, str) or not isinstance(image_url, str):
+                    continue
+                next_urls[image_id] = image_url
+                image["url"] = f"{self.public_base}/images/{image_id}{self.image_suffix}"
+
+        downloads = plan.get("download")
+        if isinstance(downloads, list):
+            for item in downloads:
+                if not isinstance(item, dict):
+                    continue
+                asset_id = item.get("asset_id")
+                asset_url = item.get("url")
+                if not isinstance(asset_id, str) or not isinstance(asset_url, str):
+                    continue
+                next_urls[asset_id] = asset_url
+                item["url"] = f"{self.public_base}/images/{asset_id}{self.image_suffix}"
+
+        return next_urls
+
+    def sync_v2(self, body: bytes) -> tuple[int, str, bytes]:
+        """Proxy POST /node/v2/.../sync and rewrite asset URLs like config()."""
+        t0 = time.perf_counter()
+        url = f"{self.upstream}/node/v2/device/{self.device_id}/sync"
+        status, content_type, resp = self.request(url, method="POST", body=body)
+        if status != 200:
+            print(
+                f"bridge: sync_v2 upstream HTTP {status} "
+                f"in {(time.perf_counter() - t0) * 1000:.0f} ms",
+                flush=True,
+            )
+            return status, content_type, resp
+
+        plan = json.loads(resp)
+        if not isinstance(plan, dict):
+            raise RuntimeError("upstream sync_v2 returned non-object JSON")
+
+        next_urls = self._rewrite_plan_urls(plan)
+        if next_urls:
+            with self.lock:
+                self.image_urls.update(next_urls)
+            if self.prefetch_enabled:
+                threading.Thread(
+                    target=self._prefetch_all,
+                    args=(list(next_urls.keys()),),
+                    name="es6f-prefetch-v2",
+                    daemon=True,
+                ).start()
+
+        out = json.dumps(plan, separators=(",", ":")).encode()
+        noop = plan.get("noop")
+        print(
+            f"bridge: sync_v2 noop={noop!r} images={len(plan.get('images') or [])} "
+            f"download={len(plan.get('download') or [])} bytes={len(out)} "
+            f"in {(time.perf_counter() - t0) * 1000:.0f} ms",
+            flush=True,
+        )
+        return 200, "application/json", out
+
 
 class Handler(BaseHTTPRequestHandler):
     bridge: Bridge
@@ -338,19 +407,24 @@ class Handler(BaseHTTPRequestHandler):
             self.send_body(502, "text/plain", b"upstream/conversion failed\n")
 
     def do_POST(self) -> None:  # noqa: N802
+        path = urllib.parse.urlsplit(self.path).path
         telemetry_path = f"/node/v0/device/{self.bridge.device_id}/telemetry"
-        if urllib.parse.urlsplit(self.path).path != telemetry_path:
-            self.send_body(404, "text/plain", b"not found\n")
-            return
+        sync_v2_path = f"/node/v2/device/{self.bridge.device_id}/sync"
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            status, content_type, body = self.bridge.telemetry(
-                self.rfile.read(length)
-            )
-            self.send_body(status, content_type, body)
+            payload = self.rfile.read(length)
+            if path == sync_v2_path:
+                status, content_type, body = self.bridge.sync_v2(payload)
+                self.send_body(status, content_type, body)
+                return
+            if path == telemetry_path:
+                status, content_type, body = self.bridge.telemetry(payload)
+                self.send_body(status, content_type, body)
+                return
+            self.send_body(404, "text/plain", b"not found\n")
         except Exception as error:
             print(f"bridge: POST failed: {error}", file=sys.stderr, flush=True)
-            self.send_body(502, "text/plain", b"upstream telemetry failed\n")
+            self.send_body(502, "text/plain", b"upstream post failed\n")
 
 
 def main() -> None:
