@@ -313,6 +313,24 @@ static void irq_park_for_rtc(uint32_t *iser_save, uint32_t *systick_ctrl)
 	irq_enable(BBNSM_IRQn);
 }
 
+/*
+ * Same register poke as NXP GPC_CM_EnableIrqWakeup(). Zephyr RT118x does not
+ * ship fsl_gpc.c (CONFIG_MCUX_COMPONENT_driver.gpc_3 unset), so the symbol is
+ * undefined unless we pull the object ourselves.
+ */
+static void gpc_bbnsm_wakeup(bool enable)
+{
+	const uint32_t irq_id = (uint32_t)BBNSM_IRQn;
+	const uint32_t group = irq_id / 32U;
+	const uint32_t bit = irq_id % 32U;
+
+	if (enable) {
+		GPC_CPU_CTRL->AUTHEN[kGPC_CPU0].CM_IRQ_WAKEUP_MASK[group] &= ~(1UL << bit);
+	} else {
+		GPC_CPU_CTRL->AUTHEN[kGPC_CPU0].CM_IRQ_WAKEUP_MASK[group] |= (1UL << bit);
+	}
+}
+
 static void irq_unpark(const uint32_t *iser_save, uint32_t systick_ctrl)
 {
 	for (int i = 0; i < RT118X_NVIC_WORDS; i++) {
@@ -366,23 +384,30 @@ static int rt118x_enter_snvs(uint32_t delay_sec, bool pmic_off)
 		n_en, (unsigned)SysTick->CTRL, BBNSM->BBNSM_CTRL, BBNSM->BBNSM_INT_EN,
 		BBNSM->BBNSM_TA);
 	/*
-	 * TA hardware is proven (SysTick-on poll, 5 s → ta=2). Flush UART,
-	 * park IRQs, shallow WFI. Do not k_busy_wait after SysTick is off.
+	 * TA hardware is proven. Flush UART, park IRQs, then GPC WAIT +
+	 * SLEEPDEEP WFI with BBNSM as the only GPC wakeup (shallow WFI
+	 * already holds; this step is for lower platform clocks / mA).
+	 * Do not k_busy_wait after SysTick is off.
 	 */
-	printk("power: WFI (shallow, irq parked) t0=%u alarm=%u ta_fired=%u\n", t0,
+	printk("power: WFI (GPC WAIT+DEEP, irq parked) t0=%u alarm=%u ta_fired=%u\n", t0,
 	       t0 + delay_sec, (unsigned)bbnsm_ta_fired());
 	k_busy_wait(10000);
 
 	irq_park_for_rtc(iser_save, &systick_ctrl);
-	SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk;
+	/* Unmask BBNSM in GPC wakeup (enable clears the mask bit). */
+	gpc_bbnsm_wakeup(true);
+	GPC_CM_SetNextCpuMode(kGPC_CPU0, kGPC_WaitMode);
+	SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
 	barrier_dsync_fence_full();
 	barrier_isync_fence_full();
 	__WFI();
+	SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk;
+	GPC_CM_SetNextCpuMode(kGPC_CPU0, kGPC_RunMode);
 
 	t1 = bbnsm_rtc_seconds();
 	irq_unpark(iser_save, systick_ctrl);
-	LOG_WRN("power: woke from WFI after %u s BBNSM events=0x%x (rails stayed up)",
-		t1 - t0, BBNSM->BBNSM_EVENTS);
+	LOG_WRN("power: woke from WFI after %u s BBNSM events=0x%x prev_mode=%u (rails stayed up)",
+		t1 - t0, BBNSM->BBNSM_EVENTS, (unsigned)GPC_CM_GetPreviousCpuMode(kGPC_CPU0));
 	return -EAGAIN;
 }
 
