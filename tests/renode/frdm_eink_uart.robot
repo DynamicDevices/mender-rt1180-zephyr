@@ -1,7 +1,8 @@
 *** Settings ***
 Documentation                 UART smoke of the FRDM-IMXRT1186 e-ink ELF in Renode.
 ...                           Same ARM ELF as flash. Proof class: renode — not FRDM, not portal, not Spectra 6.
-...                           Pause as soon as the expected banner arrives so BOM WFI cannot starve the suite.
+...                           BOM_POWER_LOOP images enter WFI after settle; wrap this suite with `timeout`
+...                           or use scripts/renode-frdm-eink-bom-pc-smoke.sh for PC-path proof.
 Suite Setup                   Setup
 Suite Teardown                Teardown
 Test Setup                    Reset Emulation
@@ -26,7 +27,6 @@ Should Boot Eink Elf On LPUART1
     Execute Command           cpu0 VectorTableOffset ${VTOR}
     Execute Command           cpu0 SP ${SP}
     Execute Command           cpu0 PC ${PC}
-    # Pause on match so BOM settle/WFI cannot burn the Renode server thread.
     Create Terminal Tester    ${UART}    defaultPauseEmulation=true
     Start Emulation
     Wait For Line On Uart     Booting Zephyr OS    timeout=30    pauseEmulation=true

@@ -23,6 +23,7 @@
 
 #include <cJSON.h>
 #include <errno.h>
+#include <mender/alloc.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -154,6 +155,59 @@ static struct k_sem telem_done;
 
 static uint8_t cjson_arena[EINK_CJSON_ARENA_SIZE] __aligned(8);
 static size_t cjson_arena_used;
+static K_MUTEX_DEFINE(cjson_hooks_mutex);
+static struct k_thread *mender_wq_thread;
+static bool mender_wq_suspended;
+
+/*
+ * cJSON uses process-global malloc/free hooks. Mender installs
+ * mender_malloc/mender_free at client init. The e-ink HTTP path temporarily
+ * swaps in a bump arena. Leaving with cJSON_InitHooks(NULL) restored libc
+ * free — so the next Mender cJSON_Delete freed mender-heap blocks via the
+ * system heap and panicked (os_heap double-free / corruption on
+ * mender_work_queue after eink sync).
+ */
+
+static void cjson_restore_mender_hooks(void)
+{
+	cJSON_Hooks hooks = {
+		.malloc_fn = mender_malloc,
+		.free_fn = mender_free,
+	};
+
+	cJSON_InitHooks(&hooks);
+}
+
+static void mender_wq_find_cb(const struct k_thread *thread, void *user_data)
+{
+	struct k_thread **out = user_data;
+
+	if (*out != NULL) {
+		return;
+	}
+	if (strcmp(thread->name, "mender_work_queue") == 0) {
+		*out = (struct k_thread *)thread;
+	}
+}
+
+static void mender_wq_suspend_for_cjson(void)
+{
+	if (mender_wq_thread == NULL) {
+		k_thread_foreach(mender_wq_find_cb, &mender_wq_thread);
+	}
+	if (mender_wq_thread != NULL && !mender_wq_suspended) {
+		k_thread_suspend(mender_wq_thread);
+		mender_wq_suspended = true;
+	}
+}
+
+static void mender_wq_resume_after_cjson(void)
+{
+	if (mender_wq_thread != NULL && mender_wq_suspended) {
+		k_thread_resume(mender_wq_thread);
+		mender_wq_suspended = false;
+	}
+}
 
 static void *cjson_arena_alloc(size_t size)
 {
@@ -186,14 +240,18 @@ static void cjson_arena_enter(void)
 		.free_fn = cjson_arena_free,
 	};
 
+	(void)k_mutex_lock(&cjson_hooks_mutex, K_FOREVER);
+	mender_wq_suspend_for_cjson();
 	cjson_arena_reset();
 	cJSON_InitHooks(&hooks);
 }
 
 static void cjson_arena_leave(void)
 {
-	cJSON_InitHooks(NULL);
+	cjson_restore_mender_hooks();
 	cjson_arena_reset();
+	mender_wq_resume_after_cjson();
+	k_mutex_unlock(&cjson_hooks_mutex);
 }
 
 static int eink_http_sync_once_inner(void);
