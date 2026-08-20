@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Translate live e-tabelone JPEG/PNG assets to ES6F (optionally LZ4) for native_sim.
+"""Translate live e-tabelone assets to ES6F (optionally LZ4) for native_sim.
 
 Production firmware accepts raw ES6F or an LZ4 *frame* whose payload is a full
 ES6F v1 file (magic 04 22 4D 18). This development bridge fetches the real
 config/schedule, rewrites image URLs to a local endpoint, and lazily converts
-each source asset into that packed frame (default: LZ4-framed for smaller
-radio transfers).
+JPEG/PNG sources into that packed frame (default: LZ4-framed for smaller
+radio transfers). Upstream ES6F / ES6F.LZ4 is passed through unchanged.
 
 After each config fetch, remaining images are prefetched in parallel so gallery
 downloads usually hit the host cache.
@@ -219,7 +219,54 @@ class Bridge:
             fetch_ms = (time.perf_counter() - t_fetch) * 1000
             if status != 200:
                 raise RuntimeError(f"upstream image returned HTTP {status}")
-            suffix = ".png" if "png" in content_type.lower() else ".jpg"
+
+            ctype = (content_type or "").lower()
+            # Portal may already serve packed ES6F / ES6F.LZ4 (SDL fixture, etc.).
+            # Pass those through — gen-eink-frame only accepts JPEG/PNG.
+            already_lz4 = (
+                "es6f+lz4" in ctype
+                or source_url.split("?", 1)[0].endswith(".es6f.lz4")
+                or (len(source) >= 11 and source[0:4] == b"\x04\"M\x18" and b"ES6" in source[:64])
+            )
+            already_es6f = (
+                ("es6f" in ctype and "lz4" not in ctype)
+                or source_url.split("?", 1)[0].endswith(".es6f")
+                or source.startswith(b"ES6F")
+            )
+            if already_lz4 or already_es6f:
+                if self.lz4 and already_lz4:
+                    output.write_bytes(source)
+                elif self.lz4 and already_es6f:
+                    raw_output.write_bytes(source)
+                    subprocess.run(
+                        [
+                            sys.executable,
+                            str(self.lz4_wrap),
+                            str(raw_output),
+                            "-o",
+                            str(output),
+                        ],
+                        check=True,
+                    )
+                elif (not self.lz4) and already_es6f:
+                    output.write_bytes(source)
+                else:
+                    # Bridge wants raw ES6F but upstream sent LZ4 — unwrap not supported;
+                    # keep LZ4 bytes only when lz4 mode is on (handled above).
+                    raise RuntimeError(
+                        "upstream ES6F.LZ4 but bridge started with --no-lz4"
+                    )
+                data = output.read_bytes()
+                print(
+                    f"bridge: passthrough {image_id} src={len(source)} B "
+                    f"out={len(data)} B already={'lz4' if already_lz4 else 'es6f'} "
+                    f"fetch={fetch_ms:.0f} ms "
+                    f"total={(time.perf_counter() - t0) * 1000:.0f} ms",
+                    flush=True,
+                )
+                return data
+
+            suffix = ".png" if "png" in ctype else ".jpg"
             with tempfile.TemporaryDirectory(prefix="etabelone-image-") as tmp:
                 source_path = Path(tmp) / f"source{suffix}"
                 temp_output = Path(tmp) / "converted.es6f"
