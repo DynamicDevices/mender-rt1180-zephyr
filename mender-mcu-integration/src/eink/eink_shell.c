@@ -252,7 +252,7 @@ static int cmd_snvs(const struct shell *sh, size_t argc, char **argv)
 	}
 	shell_print(sh,
 		    "SNVS: BBNSM alarm in %u s%s (FRDM will not hit uA; cut may hang until POR)",
-		    sec, cut ? ", PMIC_ON_REQ TOSP" : ", WAIT+WFI only");
+		    sec, cut ? ", PMIC_ON_REQ TOSP" : ", GPC STOP+WFI");
 	ret = eink_power_enter_snvs_in(sec, cut);
 	if (ret == -EAGAIN) {
 		shell_print(sh, "returned from WFI — RTC woke; rails stayed up");

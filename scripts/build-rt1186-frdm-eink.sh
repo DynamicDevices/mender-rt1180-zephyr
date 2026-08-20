@@ -23,6 +23,11 @@ else
   EXTRA_CONF="${SHELL_CONF};${EL133_CONF}"
 fi
 
+if [[ "${BOM_POWER_LOOP:-}" == "1" ]]; then
+  EXTRA_CONF="${EXTRA_CONF};boards/frdm_imxrt1186_mimxrt1186_cm33_bom_loop.conf"
+  echo "BOM_POWER_LOOP=1: appending bom_loop.conf" >&2
+fi
+
 MCUBOOT_DTCM_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_mcuboot_dtcm.overlay"
 
 exec "${ROOT}/scripts/build-rt1186-frdm.sh" "$@" \

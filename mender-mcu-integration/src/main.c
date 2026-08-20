@@ -134,6 +134,10 @@ main(void) {
         LOG_ERR("eink power policy failed (CM4 must stay held in reset)");
         goto END;
     }
+#if defined(CONFIG_APP_EINK_BOM_POWER_LOOP)
+    /* Lab DMM: settle → TOSP/BOM + RTC → POR (or soft retry). Never returns. */
+    eink_power_bom_power_loop();
+#endif
     if (0 != eink_store_init(CONFIG_APP_EINK_STORE_ROOT)) {
         LOG_ERR("eink store init failed");
     }

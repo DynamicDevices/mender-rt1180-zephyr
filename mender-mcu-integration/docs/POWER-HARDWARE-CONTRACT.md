@@ -13,11 +13,13 @@ the i.MX RT SoC’s problem (GPIOs + SRTC), not a second firmware image. Control
 
 | Item | Requirement |
 |------|-------------|
-| Mode | **True SNVS** — only `VDD_SNVS_IN` + 32.768 kHz RTC alive |
-| Gated | `DCDC_IN`, `VDD_LPSR_IN`, panel, data NOR, IW612 (battery mode) |
+| Mode | **True SNVS / BOM** — only `VDD_SNVS_IN` (or RT118x `VDD_BBSM_IN`) + 32.768 kHz RTC alive |
+| Board kill | **Main 3.3 V regulator off** (BOM). `DCDC_IN` / `VDD_LPSR_IN` (RT118x: `VDD_AON_IN`) are driven from that 3V3 — they collapse with it; **no separate FET on those nets required** |
+| BBSM stay-alive | `VDD_BBSM_IN` / `VDD_SNVS_IN` remains powered (FRDM: **always-on LDO**; product: coin cell or dedicated always-on) |
+| Also off | Panel, data NOR, IW612 (battery mode) |
 | Board sleep | ≤50 µA @ 25 °C (stretch ≤20 µA) at battery input |
-| Wake | SRTC alarm, service button, optional IW612 host-wake (WoWLAN) |
-| Boot | Every wake is a **CM7 cold boot** |
+| Wake (BOM) | **BBSM** (RTC and/or ONOFF / `WAKEUP`) re-enables main 3V3 → **full power-on reset**, not a WFI resume. FRDM: **SW1** ONOFF; SoC `WAKEUP` pad high. Optional IW612 host-wake (WoWLAN) when that path is rated |
+| Boot | Every BOM wake is a **full POR** / cold boot (RT1170 CM7 / RT118x CM33) |
 
 Not acceptable as field sleep: Zephyr SP10 (~mA), SP15 with CM4 suspend
 (~0.23 mA LPSR alone).
@@ -47,13 +49,20 @@ Not acceptable as field sleep: Zephyr SP10 (~mA), SP15 with CM4 suspend
 
 ## RT1186 (FRDM / product) — option D
 
-i.MX RT1186 has **BBNSM** (not classic SNVS LPCR_TOP). Field sleep:
+i.MX RT1186 has **BBNSM** (not classic SNVS LPCR_TOP). Field sleep = **BOM
+(battery-only mode)**:
 
 1. Program BBNSM RTC time-alarm (`eink snvs <sec>`).
-2. Optional **TOSP** + dumb-PMIC (`eink snvs <sec> cut`) to drop `PMIC_ON_REQ`.
-3. GPC WAIT + WFI. If rails drop, the next event is a **CM33 cold boot**.
-   If FRDM USB keeps 3.3 V up, WFI returns on the RTC IRQ (`-EAGAIN`).
-   Park NVIC/SysTick first; never `k_busy_wait` after SysTick is off.
+2. Optional **TOSP** + dumb-PMIC (`eink snvs <sec> cut`) to drop `PMIC_ON_REQ`
+   so the **main 3.3 V regulator turns off**. `DCDC_IN` and `VDD_AON_IN` are
+   fed from that 3V3 — they do not need their own power gates. **BBSM stays
+   up** on FRDM via the **always-on BBSM LDO** (no coin cell required for RTC).
+3. GPC WAIT/STOP + WFI alone **does not** kill 3V3 on FRDM. Once truly in
+   **BOM** (3V3 regulator off), wake is via the **BBSM block** (RTC and/or
+   **ONOFF (SW1)** / **WAKEUP** pad — AN13847 §4.7): main 3V3 returns →
+   **full POR**, not a WFI resume. If FRDM USB/jack keeps 3.3 V up, WFI
+   returns on the RTC IRQ (`-EAGAIN`) instead. Park NVIC/SysTick first; never
+   `k_busy_wait` after SysTick is off.
 
 CM7 stays in reset. No MCXC PMU. Shell does not enable battery duty-cycle
 on the Hosted-Mender lab image.

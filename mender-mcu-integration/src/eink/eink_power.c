@@ -384,30 +384,37 @@ static int rt118x_enter_snvs(uint32_t delay_sec, bool pmic_off)
 		n_en, (unsigned)SysTick->CTRL, BBNSM->BBNSM_CTRL, BBNSM->BBNSM_INT_EN,
 		BBNSM->BBNSM_TA);
 	/*
-	 * TA hardware is proven. Flush UART, park IRQs, then GPC WAIT +
-	 * SLEEPDEEP WFI with BBNSM as the only GPC wakeup (shallow WFI
-	 * already holds; this step is for lower platform clocks / mA).
-	 * Do not k_busy_wait after SysTick is off.
+	 * Flush UART, park IRQs, GPC STOP + SLEEPDEEP + BBNSM wakeup.
+	 * Zephyr imxrt11xx: WAIT clears SLEEPDEEP; STOP sets it. We want the
+	 * deepest recoverable CPU mode for FRDM DMM checks (not BBSM µA —
+	 * rails stay up). Do not k_busy_wait/printk after park.
 	 */
-	printk("power: WFI (GPC WAIT+DEEP, irq parked) t0=%u alarm=%u ta_fired=%u\n", t0,
-	       t0 + delay_sec, (unsigned)bbnsm_ta_fired());
+	printk("power: WFI (GPC STOP+SLEEPDEEP, irq parked) t0=%u alarm=%u ta_fired=%u "
+	       "non_irq_stat=0x%x dhcsr=0x%x\n",
+	       t0, t0 + delay_sec, (unsigned)bbnsm_ta_fired(),
+	       (unsigned)GPC_CPU_CTRL->AUTHEN[kGPC_CPU0].CM_NON_IRQ_WAKEUP_STAT,
+	       (unsigned)CoreDebug->DHCSR);
 	k_busy_wait(10000);
 
 	irq_park_for_rtc(iser_save, &systick_ctrl);
-	/* Unmask BBNSM in GPC wakeup (enable clears the mask bit). */
 	gpc_bbnsm_wakeup(true);
-	GPC_CM_SetNextCpuMode(kGPC_CPU0, kGPC_WaitMode);
+	GPC_CM_SetNextCpuMode(kGPC_CPU0, kGPC_StopMode);
 	SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
 	barrier_dsync_fence_full();
 	barrier_isync_fence_full();
 	__WFI();
-	SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk;
-	GPC_CM_SetNextCpuMode(kGPC_CPU0, kGPC_RunMode);
+	{
+		unsigned prev = (unsigned)GPC_CM_GetPreviousCpuMode(kGPC_CPU0);
+		unsigned cur = (unsigned)GPC_CM_GetCurrentCpuMode(kGPC_CPU0);
 
-	t1 = bbnsm_rtc_seconds();
-	irq_unpark(iser_save, systick_ctrl);
-	LOG_WRN("power: woke from WFI after %u s BBNSM events=0x%x prev_mode=%u (rails stayed up)",
-		t1 - t0, BBNSM->BBNSM_EVENTS, (unsigned)GPC_CM_GetPreviousCpuMode(kGPC_CPU0));
+		SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk;
+		GPC_CM_SetNextCpuMode(kGPC_CPU0, kGPC_RunMode);
+
+		t1 = bbnsm_rtc_seconds();
+		irq_unpark(iser_save, systick_ctrl);
+		LOG_WRN("power: woke from WFI after %u s BBNSM events=0x%x prev_mode=%u cur=%u (rails stayed up)",
+			t1 - t0, BBNSM->BBNSM_EVENTS, prev, cur);
+	}
 	return -EAGAIN;
 }
 
@@ -443,6 +450,35 @@ int eink_power_enter_snvs_in(uint32_t delay_sec, bool pmic_off)
 	return -ENOTSUP;
 #endif
 }
+
+#if defined(CONFIG_APP_EINK_BOM_POWER_LOOP)
+void eink_power_bom_power_loop(void)
+{
+	uint32_t cycle = 0;
+	const uint32_t pre = CONFIG_APP_EINK_BOM_POWER_LOOP_PRE_SEC;
+	const uint32_t hold = CONFIG_APP_EINK_BOM_POWER_LOOP_HOLD_SEC;
+
+	printk("BOM power-loop: PRE=%us HOLD=%us (TOSP+RTC; wake=full POR)\n",
+	       pre, hold);
+	printk("BOM power-loop: unplug J23/J63 for jack-only DMM; flash window=%us\n",
+	       pre);
+
+	for (;;) {
+		cycle++;
+		printk("BOM power-loop: cycle %u — settle %u s then TOSP+%u s RTC\n",
+		       cycle, pre, hold);
+		k_sleep(K_SECONDS(pre));
+		printk("BOM power-loop: ENTER now (expect rail drop or WFI hold)\n");
+		k_busy_wait(5000);
+		(void)eink_power_enter_snvs_in(hold, true);
+		/*
+		 * Returned ⇒ main 3V3 stayed up (not true BOM). Soft-retry so
+		 * Agilent still sees periodic holds. True BOM never returns.
+		 */
+		printk("BOM power-loop: WFI returned (rails stayed up) — retry\n");
+	}
+}
+#endif
 
 int eink_power_enter_snvs(void)
 {

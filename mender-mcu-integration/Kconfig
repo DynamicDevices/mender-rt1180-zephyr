@@ -329,6 +329,30 @@ if APP_EINK
 		  Lab default for "eink snvs" and enter_snvs() when wall
 		  clock / next_wake is not a future unix time.
 
+	config APP_EINK_BOM_POWER_LOOP
+		bool "RT118x lab: loop BOM (TOSP) + BBNSM RTC wake for DMM"
+		depends on APP_EINK && SOC_SERIES_IMXRT118X
+		default n
+		help
+		  After boot, wait PRE_SEC then enter BOM via BBNSM TOSP with
+		  a HOLD_SEC RTC alarm. True BOM wake is a full POR (loop via
+		  reboot). If main 3V3 stays up (FRDM USB), WFI returns and
+		  the loop retries in software. Unplug MCU-Link/OTG and measure
+		  on the DC jack. Rebuild without this option to restore a
+		  normal shell image.
+
+	config APP_EINK_BOM_POWER_LOOP_PRE_SEC
+		int "Seconds to wait before each BOM entry (Agilent settle)"
+		depends on APP_EINK_BOM_POWER_LOOP
+		default 5
+		range 1 120
+
+	config APP_EINK_BOM_POWER_LOOP_HOLD_SEC
+		int "BBNSM RTC alarm seconds while in BOM"
+		depends on APP_EINK_BOM_POWER_LOOP
+		default 10
+		range 2 600
+
 	config APP_EINK_IW612_GPIO
 		bool "Drive IW612 enable from zephyr,user iw612-enable-gpios"
 		depends on APP_EINK && GPIO
