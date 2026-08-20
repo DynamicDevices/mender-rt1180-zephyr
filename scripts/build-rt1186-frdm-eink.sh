@@ -28,8 +28,15 @@ if [[ "${BOM_POWER_LOOP:-}" == "1" ]]; then
   echo "BOM_POWER_LOOP=1: appending bom_loop.conf" >&2
 fi
 if [[ "${FRDM_EINK_HTTP:-}" == "1" ]]; then
-  EXTRA_CONF="${EXTRA_CONF};boards/frdm_imxrt1186_mimxrt1186_cm33_eink_http.conf"
-  echo "FRDM_EINK_HTTP=1: appending eink_http.conf" >&2
+  case "${FRDM_ENROLL_OCRAM:-}" in
+    1|true|TRUE|yes|YES|on|ON)
+      echo "error: FRDM_EINK_HTTP=1 needs HyperRAM; OCRAM enroll overflows (~534 KiB)." >&2
+      echo "  Unset FRDM_ENROLL_OCRAM and rebuild (MCUboot DTCM + HyperRAM BSS)." >&2
+      exit 1
+      ;;
+  esac
+  EXTRA_CONF="${EXTRA_CONF};boards/frdm_imxrt1186_mimxrt1186_cm33_eink_hyperram.conf;boards/frdm_imxrt1186_mimxrt1186_cm33_eink_http.conf"
+  echo "FRDM_EINK_HTTP=1: HyperRAM profile + eink_http.conf" >&2
 fi
 
 MCUBOOT_DTCM_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_mcuboot_dtcm.overlay"

@@ -86,7 +86,21 @@ if APP_EINK
 		  HyperRAM. FRDM with FlexSPI1/HyperRAM off must use 32–48 KiB
 		  or the BSS will not fit in on-chip SRAM.
 
-	config APP_EINK_HTTP_ENABLE
+	config APP_EINK_HTTP_BOOT_INIT
+		bool "Run eink_scheduler_init() from main()"
+		default y
+		depends on APP_EINK_HTTP
+		help
+		  When disabled, skip scheduler load at boot (HTTP objects still linked).
+
+config APP_EINK_HTTP_CLIENT_BOOT_INIT
+		bool "Run eink_http_init() from main()"
+		default y
+		depends on APP_EINK_HTTP
+		help
+		  When disabled, skip HTTP client/workqueue init at boot.
+
+config APP_EINK_HTTP_ENABLE
 		bool "Enable e-tabelone HTTP sync at boot"
 		default n
 		depends on APP_EINK_HTTP

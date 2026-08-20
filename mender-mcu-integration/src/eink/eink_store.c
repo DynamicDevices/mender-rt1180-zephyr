@@ -316,7 +316,8 @@ int eink_store_load_schedule(struct eink_schedule *sched)
 {
 	char path[300];
 	struct fs_file_t f;
-	char buf[8192];
+	/* Static: 8 KiB on main stack overflows CONFIG_MAIN_STACK_SIZE=8192 (FRDM hang). */
+	static char buf[8192];
 	ssize_t n;
 	const char *p;
 	size_t count = 0;

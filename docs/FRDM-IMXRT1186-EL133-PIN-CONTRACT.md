@@ -85,11 +85,11 @@ E Ink kit / parked Jaguar PMIC — FRDM does not generate ±16 V.
 
 **Alex 2026-08-19 (amended same day):** FRDM-IMXRT1186 is the **one lab board**
 for Spectra 6 SPI **and** Hosted **Mender MCU** over **NETC Ethernet** (not
-Foundries; not MIMXRT1180-EVK unless we add an EVK loom). **2026-08-20:** HTTP
-on the default HyperRAM map **hung at boot** (garbled UART, no ping) — default
-image keeps `CONFIG_APP_EINK_HTTP=n`. Opt-in:
-`FRDM_EINK_HTTP=1` (+ prefer `FRDM_ENROLL_OCRAM=1`) appends
-`boards/frdm_imxrt1186_mimxrt1186_cm33_eink_http.conf`. Paint still waits on
+Foundries; not MIMXRT1180-EVK unless we add an EVK loom). **2026-08-20:** first HTTP=y flash hung (garbled UART);
+default image keeps `CONFIG_APP_EINK_HTTP=n`. Opt-in HyperRAM+MCUboot (F1
+class — DTCM bootloader, FlexSPI1 off, `CODE_DATA_RELOCATION_SRAM`):
+`FRDM_EINK_HTTP=1` appends `eink_hyperram.conf` + `eink_http.conf`. Do **not**
+combine with `FRDM_ENROLL_OCRAM=1` (link overflow). Paint still waits on
 Spectra 6 SPI wiring. Renode does **not** prove Mender (NETC/PHY unmodelled).
 Dual-slot swap on silicon is **FRDM** proof (`dev-2` on `WGUPS4RWFPGOT`), not
 `renode`. **RT1170 is not** on this product path (Alex 2026-08-19).

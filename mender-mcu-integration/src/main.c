@@ -151,9 +151,13 @@ main(void) {
         LOG_ERR("eink display init failed (continuing without panel)");
     }
 #if defined(CONFIG_APP_EINK_HTTP)
+#if defined(CONFIG_APP_EINK_HTTP_BOOT_INIT) && CONFIG_APP_EINK_HTTP_BOOT_INIT
     if (0 != eink_scheduler_init()) {
         LOG_ERR("eink scheduler init failed");
     }
+#else
+    LOG_INF("eink scheduler deferred (HTTP boot init off)");
+#endif
 #else
     LOG_INF("eink scheduler skipped (HTTP off)");
 #endif
@@ -162,7 +166,8 @@ main(void) {
         LOG_WRN("eink gnss init failed (shell location still works)");
     }
 #endif
-#if defined(CONFIG_APP_EINK_HTTP)
+#if defined(CONFIG_APP_EINK_HTTP) && defined(CONFIG_APP_EINK_HTTP_CLIENT_BOOT_INIT) && \
+	CONFIG_APP_EINK_HTTP_CLIENT_BOOT_INIT
     {
         struct eink_http_config hcfg = { 0 };
 
