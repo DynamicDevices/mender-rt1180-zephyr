@@ -67,6 +67,35 @@ i.MX RT1186 has **BBNSM** (not classic SNVS LPCR_TOP). Field sleep = **BOM
 CM7 stays in reset. No MCXC PMU. Shell does not enable battery duty-cycle
 on the Hosted-Mender lab image.
 
+Lab DMM loop (opt-in): `BOM_POWER_LOOP=1 ./scripts/build-rt1186-frdm-eink.sh`
+then flash. Settle → TOSP + RTC → POR forever. Rebuild **without** that env
+to restore a normal shell. FRDM Gemba 2026-08-20 (LED removed): BOM hold
+floor ~**0.26 mA** on the DC-jack Agilent; awake ~210 mA. Not a product µA
+claim (FRDM tree + measurement point).
+
+## Product BOM path (map from FRDM → schematic)
+
+SoC nets that must be **down** in field sleep (`DCDC_IN`, RT1170 `VDD_LPSR_IN`
+/ RT118x `VDD_AON_IN`) are **fed from the board main 3.3 V regulator**. Product
+does **not** need discrete FETs on those SoC pins if the regulator enable is
+tied to `PMIC_ON_REQ` (or equivalent). BBSM/SNVS stay-alive is a **separate
+always-on** supply (coin cell or always-on LDO on `VDD_BBSM_IN` /
+`VDD_SNVS_IN`) — same split as FRDM’s always-on BBSM LDO.
+
+| Step | Firmware | Board |
+|------|----------|--------|
+| 1 | Program RTC alarm (BBNSM / SNVS) | Always-on domain keeps ticking |
+| 2 | Assert **TOSP** / drop `PMIC_ON_REQ` | Main **3V3 regulator off** → SoC main feeds collapse |
+| 3 | (optional) GPC WFI while rails fall | CPU dies with the rail; no resume |
+| 4 | Wake | RTC and/or service **ONOFF**/`WAKEUP` (and rated IW612 host-wake) re-enables 3V3 |
+| 5 | Boot | **Full POR** / cold boot CM7 (RT1170) or CM33 (RT118x) |
+
+Open for Michael (spec Q12–16): confirm product regulator enable polarity /
+`POR_B` threshold so TOSP cold-boots cleanly without back-powering gated
+domains; pick SNVS-capable net for IW612 host-wake; status LEDs **DNP** on
+production (FRDM LED was ~mA in the sleep budget). Target remains ≤50 µA @
+25 °C at battery input once the product tree is instrumented.
+
 ## EVK lab only
 
 - `APP_EINK_FULL_FRAMEBUFFER` + SDRAM for panel electrical bring-up
