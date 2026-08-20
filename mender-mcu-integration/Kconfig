@@ -298,6 +298,27 @@ if APP_EINK
 		  automated duty-cycle smokes can finish. Zero means log the
 		  programmed wake and return immediately (no forever hang).
 
+	config APP_EINK_SNVS_PMIC_OFF
+		bool "RT118x: deassert PMIC_ON_REQ (BBNSM TOSP) on SNVS entry"
+		depends on APP_EINK && SOC_SERIES_IMXRT118X
+		default n
+		help
+		  True field sleep: dumb-PMIC + Turn Off System Power so
+		  DCDC_IN / VDD_LPSR_IN drop and only BBNSM/SNVS stays up.
+		  Wake is a CM33 cold boot from BBNSM RTC alarm (or ON/OFF).
+		  FRDM-IMXRT1186 USB/onboard regs often ignore PMIC_ON_REQ —
+		  enabling this may hang until a physical POR. Default off;
+		  use shell "eink snvs <sec> cut" for a one-shot try.
+
+	config APP_EINK_SNVS_DEFAULT_ALARM_SEC
+		int "RT118x: default BBNSM RTC alarm if next_wake unset"
+		depends on APP_EINK && SOC_SERIES_IMXRT118X
+		default 20
+		range 2 86400
+		help
+		  Lab default for "eink snvs" and enter_snvs() when wall
+		  clock / next_wake is not a future unix time.
+
 	config APP_EINK_IW612_GPIO
 		bool "Drive IW612 enable from zephyr,user iw612-enable-gpios"
 		depends on APP_EINK && GPIO
