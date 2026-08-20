@@ -34,8 +34,18 @@ fi
 
 MCUBOOT_DTCM_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_mcuboot_dtcm.overlay"
 
+# Do not overwrite OCRAM enroll overlay from build-rt1186-frdm.sh — merge.
+DTC_OVERLAYS="${EL133_OVERLAY}"
+case "${FRDM_ENROLL_OCRAM:-}" in
+  1|true|TRUE|yes|YES|on|ON)
+    OCRAM_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_ocram.overlay"
+    DTC_OVERLAYS="${OCRAM_OVERLAY};${EL133_OVERLAY}"
+    echo "FRDM_ENROLL_OCRAM=1: merging ocram.overlay + el133.overlay" >&2
+    ;;
+esac
+
 exec "${ROOT}/scripts/build-rt1186-frdm.sh" "$@" \
   -DZEPHYR_EXTRA_MODULES="${EL133_MODULE}" \
   -DEXTRA_CONF_FILE="${EXTRA_CONF}" \
-  -DEXTRA_DTC_OVERLAY_FILE="${EL133_OVERLAY}" \
+  -DEXTRA_DTC_OVERLAY_FILE="${DTC_OVERLAYS}" \
   -Dmcuboot_EXTRA_DTC_OVERLAY_FILE="${MCUBOOT_DTCM_OVERLAY}"
