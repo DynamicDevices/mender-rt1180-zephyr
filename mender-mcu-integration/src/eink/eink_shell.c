@@ -3,6 +3,7 @@
  */
 #include "eink_display.h"
 #include "eink_frame.h"
+#include "eink_power.h"
 #include "eink_scheduler.h"
 #if defined(CONFIG_APP_EINK_HTTP)
 #include "eink_http.h"
@@ -234,12 +235,42 @@ static int cmd_sched_tick(const struct shell *sh, size_t argc, char **argv)
 	return 0;
 }
 
+static int cmd_snvs(const struct shell *sh, size_t argc, char **argv)
+{
+	uint32_t sec = 20;
+	bool cut = false;
+	int ret;
+
+	if (argc >= 2) {
+		sec = (uint32_t)strtoul(argv[1], NULL, 10);
+	}
+	if (argc >= 3 && strcmp(argv[2], "cut") == 0) {
+		cut = true;
+	}
+	if (sec < 2U) {
+		sec = 2U;
+	}
+	shell_print(sh,
+		    "SNVS: BBNSM alarm in %u s%s (FRDM will not hit uA; cut may hang until POR)",
+		    sec, cut ? ", PMIC_ON_REQ TOSP" : ", WAIT+WFI only");
+	ret = eink_power_enter_snvs_in(sec, cut);
+	if (ret == -EAGAIN) {
+		shell_print(sh, "returned from WFI — RTC woke; rails stayed up");
+		return 0;
+	}
+	if (ret) {
+		shell_error(sh, "snvs failed: %d", ret);
+	}
+	return ret;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(eink_cmds,
 	SHELL_CMD_ARG(show, NULL, "Show ES6F frame file", cmd_show, 2, 1),
 	SHELL_CMD(clear, NULL, "Clear panel (white)", cmd_clear),
 	SHELL_CMD(status, NULL, "Display status", cmd_status),
 	SHELL_CMD(uid, NULL, "Print SoC UID hex (device identity SoT)", cmd_uid),
 	SHELL_CMD(tick, NULL, "Run one scheduler tick (local/fixture)", cmd_sched_tick),
+	SHELL_CMD_ARG(snvs, NULL, "SNVS try: eink snvs [seconds] [cut]", cmd_snvs, 1, 2),
 #if defined(CONFIG_APP_EINK_LOCATION)
 	SHELL_CMD_ARG(location, NULL,
 		      "Show/set/clear WGS84 fix for telemetry", cmd_location, 1, 4),

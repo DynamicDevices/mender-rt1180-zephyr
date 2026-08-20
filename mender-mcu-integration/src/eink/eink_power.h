@@ -63,6 +63,15 @@ int eink_power_set_next_wake(int64_t unix_sec);
 int eink_power_enter_snvs(void);
 
 /**
+ * Lab/product SNVS entry with an explicit delay.
+ * @param delay_sec  BBNSM RTC alarm in seconds from now (clamped).
+ * @param pmic_off   true: BBNSM DP_EN+TOSP (PMIC_ON_REQ drop). FRDM may hang.
+ * Returns -ENOTSUP on SoCs without BBNSM; -EAGAIN if rails did not drop
+ * (alarm WFI returned — RTC path worked, PMIC did not).
+ */
+int eink_power_enter_snvs_in(uint32_t delay_sec, bool pmic_off);
+
+/**
  * Hard-gate or power IW612 WiFi (battery mode).
  * Call true only around network work; false immediately after
  * eink_http_flush_deferred() — never leave the radio up into SNVS.

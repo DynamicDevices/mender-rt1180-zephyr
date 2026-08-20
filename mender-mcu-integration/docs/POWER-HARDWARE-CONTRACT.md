@@ -45,6 +45,19 @@ Not acceptable as field sleep: Zephyr SP10 (~mA), SP15 with CM4 suspend
 - Data NOR (deep-power-down then gate)
 - Optional SDRAM (DNP preferred; if populated must hard-gate, never self-refresh sleep)
 
+## RT1186 (FRDM / product) — option D
+
+i.MX RT1186 has **BBNSM** (not classic SNVS LPCR_TOP). Field sleep:
+
+1. Program BBNSM RTC time-alarm (`eink snvs <sec>`).
+2. Optional **TOSP** + dumb-PMIC (`eink snvs <sec> cut`) to drop `PMIC_ON_REQ`.
+3. GPC WAIT + WFI. If rails drop, the next event is a **CM33 cold boot**.
+   If FRDM USB keeps 3.3 V up, WFI returns on the RTC IRQ (`-EAGAIN`).
+   Park NVIC/SysTick first; never `k_busy_wait` after SysTick is off.
+
+CM7 stays in reset. No MCXC PMU. Shell does not enable battery duty-cycle
+on the Hosted-Mender lab image.
+
 ## EVK lab only
 
 - `APP_EINK_FULL_FRAMEBUFFER` + SDRAM for panel electrical bring-up
