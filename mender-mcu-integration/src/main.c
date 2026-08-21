@@ -65,6 +65,9 @@ LOG_MODULE_REGISTER(mender_app, LOG_LEVEL_DBG);
 #if defined(CONFIG_APP_EINK_GNSS)
 #include "eink_gnss.h"
 #endif
+#if defined(CONFIG_APP_EINK_T2000)
+#include "eink_t2000.h"
+#endif
 #endif
 
 #ifdef CONFIG_MENDER_CLIENT_INVENTORY_DISABLE
@@ -150,6 +153,11 @@ main(void) {
         /* No panel on the FRDM Ethernet/Mender lab bench — do not block enroll. */
         LOG_ERR("eink display init failed (continuing without panel)");
     }
+#if defined(CONFIG_APP_EINK_T2000)
+    if (0 != eink_t2000_init()) {
+        LOG_WRN("T2000 USB host init failed (plug TCON on Type-C OTG later)");
+    }
+#endif
 #if defined(CONFIG_APP_EINK_HTTP)
 #if defined(CONFIG_APP_EINK_HTTP_BOOT_INIT) && CONFIG_APP_EINK_HTTP_BOOT_INIT
     if (0 != eink_scheduler_init()) {

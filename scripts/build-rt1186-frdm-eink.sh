@@ -39,6 +39,22 @@ if [[ "${FRDM_EINK_HTTP:-}" == "1" ]]; then
   echo "FRDM_EINK_HTTP=1: HyperRAM profile + eink_http.conf" >&2
 fi
 
+T2000_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_eink_t2000.overlay"
+if [[ "${FRDM_T2000:-}" == "1" ]]; then
+  case "${FRDM_ENROLL_OCRAM:-}" in
+    1|true|TRUE|yes|YES|on|ON)
+      echo "error: FRDM_T2000=1 needs HyperRAM; unset FRDM_ENROLL_OCRAM." >&2
+      exit 1
+      ;;
+  esac
+  # HyperRAM once even if HTTP not selected.
+  if [[ "${EXTRA_CONF}" != *"eink_hyperram.conf"* ]]; then
+    EXTRA_CONF="${EXTRA_CONF};boards/frdm_imxrt1186_mimxrt1186_cm33_eink_hyperram.conf"
+  fi
+  EXTRA_CONF="${EXTRA_CONF};boards/frdm_imxrt1186_mimxrt1186_cm33_eink_t2000.conf"
+  echo "FRDM_T2000=1: HyperRAM + USB host T2000 client" >&2
+fi
+
 MCUBOOT_DTCM_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_mcuboot_dtcm.overlay"
 
 # Do not overwrite OCRAM enroll overlay from build-rt1186-frdm.sh — merge.
@@ -50,6 +66,10 @@ case "${FRDM_ENROLL_OCRAM:-}" in
     echo "FRDM_ENROLL_OCRAM=1: merging ocram.overlay + el133.overlay" >&2
     ;;
 esac
+if [[ "${FRDM_T2000:-}" == "1" ]]; then
+  DTC_OVERLAYS="${DTC_OVERLAYS};${T2000_OVERLAY}"
+  echo "FRDM_T2000=1: merging eink_t2000.overlay" >&2
+fi
 
 exec "${ROOT}/scripts/build-rt1186-frdm.sh" "$@" \
   -DZEPHYR_EXTRA_MODULES="${EL133_MODULE}" \

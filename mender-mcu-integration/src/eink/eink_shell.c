@@ -5,6 +5,9 @@
 #include "eink_frame.h"
 #include "eink_power.h"
 #include "eink_scheduler.h"
+#if defined(CONFIG_APP_EINK_T2000)
+#include "eink_t2000.h"
+#endif
 #if defined(CONFIG_APP_EINK_HTTP)
 #include "eink_http.h"
 #endif
@@ -264,6 +267,87 @@ static int cmd_snvs(const struct shell *sh, size_t argc, char **argv)
 	return ret;
 }
 
+#if defined(CONFIG_APP_EINK_T2000)
+static int cmd_t2000_info(const struct shell *sh, size_t argc, char **argv)
+{
+	struct eink_t2000_info info;
+	int ret;
+
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	if (!eink_t2000_ready()) {
+		ret = eink_t2000_wait_ready(5000);
+		if (ret) {
+			shell_error(sh, "t2000: not connected (%d)", ret);
+			return ret;
+		}
+	}
+	ret = eink_t2000_get_info(&info);
+	if (ret) {
+		shell_error(sh, "t2000 info failed: %d", ret);
+		return ret;
+	}
+	shell_print(sh, "t2000: %ux%u panel_id=%u tcon=0x%x vcom=%d", info.panel_width,
+		    info.panel_height, info.panel_id, info.tcon_ver, info.vcom);
+	shell_print(sh, "t2000: lut=%s", info.wf_lut_version);
+	return 0;
+}
+
+static int cmd_t2000_clear(const struct shell *sh, size_t argc, char **argv)
+{
+	int ret;
+
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+	if (!eink_t2000_ready() && eink_t2000_wait_ready(5000)) {
+		shell_error(sh, "t2000: not connected");
+		return -ENODEV;
+	}
+	ret = eink_t2000_clear();
+	if (ret) {
+		shell_error(sh, "t2000 clear failed: %d", ret);
+		return ret;
+	}
+	ret = eink_t2000_wait_idle(30000);
+	shell_print(sh, "t2000 clear done (%d)", ret);
+	return ret;
+}
+
+static int cmd_t2000_fill(const struct shell *sh, size_t argc, char **argv)
+{
+	uint8_t idx = 0;
+	uint8_t wf = 0;
+	int ret;
+
+	if (argc >= 2) {
+		idx = (uint8_t)strtoul(argv[1], NULL, 0);
+	}
+	if (argc >= 3) {
+		wf = (uint8_t)strtoul(argv[2], NULL, 0);
+	}
+	if (!eink_t2000_ready() && eink_t2000_wait_ready(5000)) {
+		shell_error(sh, "t2000: not connected");
+		return -ENODEV;
+	}
+	shell_print(sh, "t2000 fill idx=%u wf=%u ...", idx, wf);
+	ret = eink_t2000_fill(idx, wf);
+	if (ret) {
+		shell_error(sh, "t2000 fill failed: %d", ret);
+		return ret;
+	}
+	shell_print(sh, "t2000 fill done");
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(eink_t2000_cmds,
+	SHELL_CMD(info, NULL, "T2000 get_dev_info", cmd_t2000_info),
+	SHELL_CMD(clear, NULL, "T2000 clear + wait idle", cmd_t2000_clear),
+	SHELL_CMD_ARG(fill, NULL, "T2000 solid fill: fill [y8_idx] [wf_mode]", cmd_t2000_fill, 1,
+		      2),
+	SHELL_SUBCMD_SET_END);
+#endif
+
 SHELL_STATIC_SUBCMD_SET_CREATE(eink_cmds,
 	SHELL_CMD_ARG(show, NULL, "Show ES6F frame file", cmd_show, 2, 1),
 	SHELL_CMD(clear, NULL, "Clear panel (white)", cmd_clear),
@@ -271,6 +355,9 @@ SHELL_STATIC_SUBCMD_SET_CREATE(eink_cmds,
 	SHELL_CMD(uid, NULL, "Print SoC UID hex (device identity SoT)", cmd_uid),
 	SHELL_CMD(tick, NULL, "Run one scheduler tick (local/fixture)", cmd_sched_tick),
 	SHELL_CMD_ARG(snvs, NULL, "SNVS try: eink snvs [seconds] [cut]", cmd_snvs, 1, 2),
+#if defined(CONFIG_APP_EINK_T2000)
+	SHELL_CMD(t2000, &eink_t2000_cmds, "T2000 USB host (info|clear|fill)", NULL),
+#endif
 #if defined(CONFIG_APP_EINK_LOCATION)
 	SHELL_CMD_ARG(location, NULL,
 		      "Show/set/clear WGS84 fix for telemetry", cmd_location, 1, 4),

@@ -69,6 +69,16 @@ if(CONFIG_APP_EINK)
     if(CONFIG_APP_EINK_SHELL)
         target_sources(app PRIVATE src/eink/eink_shell.c)
     endif()
+    if(CONFIG_APP_EINK_T2000)
+        target_sources(app PRIVATE
+            src/eink/eink_t2000_usb.c
+            src/eink/eink_t2000_proto.c
+        )
+        # usbh_device.h / usbh_class.h live under the host stack (not public API).
+        target_include_directories(app PRIVATE
+            ${ZEPHYR_BASE}/subsys/usb/host
+        )
+    endif()
     if(CONFIG_APP_EINK_HTTP)
         target_sources(app PRIVATE src/eink/eink_http.c)
     endif()

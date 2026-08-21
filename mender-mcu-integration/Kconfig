@@ -66,6 +66,16 @@ if APP_EINK
 		default y
 		depends on SHELL
 
+	config APP_EINK_T2000
+		bool "T2000 USB host client (25\" Spectra 6 TCON)"
+		default n
+		depends on USB_HOST_STACK && UHC_DRIVER
+		help
+		  Thin vendor-bulk client for E Ink T2000 (VID 0x3558). Requires
+		  FRDM Type-C OTG in host role with VBUS, and zephyr_uhc0 in DT
+		  (boards/..._eink_t2000.overlay). Protocol SoT:
+		  DynamicDevices/eink-t2000-usb.
+
 	config APP_EINK_HTTP
 		bool "e-tabelone HTTP client"
 		default y
