@@ -181,6 +181,17 @@ config APP_EINK_HTTP_ENABLE
 		  On CONFIG_APP_EINK_BATTERY_DUTY_CYCLE, gallery is skipped so
 		  the radio can drop immediately after telemetry flush.
 
+	config APP_EINK_HTTP_SKIP_GALLERY
+		bool "Skip gallery prefetch (due/primary image only)"
+		depends on APP_EINK_HTTP
+		default n
+		help
+		  Do not download schedule images beyond the due/primary frame.
+		  Required on boards with a small e-ink LittleFS (e.g. FRDM
+		  ~1.75 MiB) where a multi-slot Demo campaign cannot cache
+		  several ~0.5–1 MiB LZ4/ES6F objects. Still downloads and
+		  paints the currently due image.
+
 	config APP_EINK_HTTP_TELEMETRY_DEFER
 		bool "Fire-and-forget telemetry after paint"
 		depends on APP_EINK_HTTP

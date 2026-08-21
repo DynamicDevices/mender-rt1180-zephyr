@@ -130,7 +130,8 @@ static int cached_orientation;
 #endif
 
 #if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER) && \
-	!defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE)
+	!defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE) && \
+	!defined(CONFIG_APP_EINK_HTTP_SKIP_GALLERY)
 static struct k_work gallery_work;
 static struct {
 	struct eink_http_image images[EINK_HTTP_MAX_IMAGES];
@@ -262,7 +263,8 @@ static int queue_deferred_telem(const struct eink_schedule *sched, const char *l
 				int64_t next_wake, int64_t now);
 #endif
 #if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER) && \
-	!defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE)
+	!defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE) && \
+	!defined(CONFIG_APP_EINK_HTTP_SKIP_GALLERY)
 static void gallery_work_handler(struct k_work *work);
 #endif
 
@@ -1784,7 +1786,8 @@ int eink_http_flush_deferred(k_timeout_t timeout)
 #endif
 
 #if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER) && \
-	!defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE)
+	!defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE) && \
+	!defined(CONFIG_APP_EINK_HTTP_SKIP_GALLERY)
 static void gallery_work_handler(struct k_work *work)
 {
 	int64_t t0 = k_uptime_get();
@@ -2241,8 +2244,12 @@ static int sync_v2_once_inner(void)
 
 	t_mark = k_uptime_get();
 	gallery_downloads = 0;
-#if defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE)
+#if defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE) || defined(CONFIG_APP_EINK_HTTP_SKIP_GALLERY)
+#if defined(CONFIG_APP_EINK_HTTP_SKIP_GALLERY)
+	LOG_INF("gallery skipped (SKIP_GALLERY — due image only)");
+#else
 	LOG_INF("gallery skipped (battery duty-cycle)");
+#endif
 #else
 	for (size_t i = 0; i < download_count; i++) {
 		if (due_image[0] && strcmp(downloads[i].asset_id, due_image) == 0) {
@@ -2435,9 +2442,13 @@ static int eink_http_sync_once_inner(void)
 #if defined(CONFIG_APP_EINK_HTTP_GALLERY_DEFER)
 		ms_gallery = 0;
 		gallery_downloads = 0;
-#if defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE)
-		/* Keep radio budget for paint+telem only on field duty-cycle wakes. */
+#if defined(CONFIG_APP_EINK_BATTERY_DUTY_CYCLE) || defined(CONFIG_APP_EINK_HTTP_SKIP_GALLERY)
+		/* Keep radio/flash budget for due image only. */
+#if defined(CONFIG_APP_EINK_HTTP_SKIP_GALLERY)
+		LOG_INF("gallery skipped (SKIP_GALLERY — due image only)");
+#else
 		LOG_INF("gallery skipped (battery duty-cycle)");
+#endif
 #else
 		if (k_work_busy_get(&gallery_work) != 0) {
 			LOG_INF("gallery defer busy — leave prior job running");
