@@ -568,6 +568,8 @@ static void eink_work_handler(struct k_work *work)
 	} else {
 		char es6f_path[320];
 
+		/* Unopened stream must be zeroed — stream_close checks s->open. */
+		memset(&stream, 0, sizeof(stream));
 		ret = eink_store_materialize_es6f(cmd.path, es6f_path, sizeof(es6f_path));
 		if (ret == 0) {
 			ret = eink_store_validate_path(es6f_path, NULL);
@@ -577,10 +579,8 @@ static void eink_work_handler(struct k_work *work)
 		}
 		if (ret == 0) {
 			ret = write_stream_to_display(&stream);
-			stream_close(&stream);
-		} else {
-			stream_close(&stream);
 		}
+		stream_close(&stream);
 	}
 
 	if (ret == 0 && cmd.job_id[0] != '\0') {
