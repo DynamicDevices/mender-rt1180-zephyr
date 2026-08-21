@@ -167,6 +167,14 @@ int eink_t2000_wait_idle(int timeout_ms)
 	}
 }
 
+/* Linux main enables multi-trigger once before Display (opcode 0x4C). */
+static int multi_trigger_enable(uint8_t enable)
+{
+	uint8_t payload[2] = { enable, 0x00 };
+
+	return cmd_f1(0x4C, payload, 2);
+}
+
 static int multi_trigger(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 {
 	uint8_t cmd[T2000_CMD_LEN];
@@ -232,6 +240,11 @@ int eink_t2000_fill(uint8_t y8_index, uint8_t wf_mode)
 
 	totalsize = (uint32_t)info.panel_width * (uint32_t)info.panel_height;
 	memset(stripe, y8_index, sizeof(stripe));
+
+	ret = multi_trigger_enable(1);
+	if (ret) {
+		return ret;
+	}
 
 	ret = eink_t2000_set_mode(wf_mode);
 	if (ret) {
