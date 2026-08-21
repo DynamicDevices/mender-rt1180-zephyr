@@ -89,6 +89,79 @@ static void path_sync_meta(char *out, size_t n)
 	snprintf(out, n, "%s/sync_meta.json", root);
 }
 
+static void path_http_creds(char *out, size_t n)
+{
+	snprintf(out, n, "%s/creds.json", root);
+}
+
+/** Append JSON string (quoted + escaped) into @a out; returns bytes used or -ENOMEM. */
+static int json_quote_append(char *out, size_t out_cap, size_t *pos, const char *s)
+{
+	size_t i = *pos;
+
+	if (i >= out_cap) {
+		return -ENOMEM;
+	}
+	out[i++] = '"';
+	for (; s && *s; s++) {
+		if (*s == '"' || *s == '\\') {
+			if (i + 2 >= out_cap) {
+				return -ENOMEM;
+			}
+			out[i++] = '\\';
+			out[i++] = *s;
+		} else if ((unsigned char)*s < 0x20) {
+			/* Control chars not expected in URLs/tokens — drop. */
+			continue;
+		} else {
+			if (i + 1 >= out_cap) {
+				return -ENOMEM;
+			}
+			out[i++] = *s;
+		}
+	}
+	if (i >= out_cap) {
+		return -ENOMEM;
+	}
+	out[i++] = '"';
+	*pos = i;
+	return 0;
+}
+
+static int json_extract_string(const char *buf, const char *key, char *out, size_t out_cap)
+{
+	const char *p;
+	size_t o = 0;
+
+	if (!buf || !key || !out || out_cap == 0) {
+		return -EINVAL;
+	}
+	out[0] = '\0';
+	p = strstr(buf, key);
+	if (!p) {
+		return -ENOENT;
+	}
+	p += strlen(key);
+	while (*p == ' ' || *p == '\t') {
+		p++;
+	}
+	if (*p != '"') {
+		return -EINVAL;
+	}
+	p++;
+	while (*p && *p != '"') {
+		if (*p == '\\' && p[1]) {
+			p++;
+		}
+		if (o + 1 >= out_cap) {
+			return -ENOMEM;
+		}
+		out[o++] = *p++;
+	}
+	out[o] = '\0';
+	return (*p == '"') ? 0 : -EINVAL;
+}
+
 int eink_store_save_last_sync(int64_t unix_sec)
 {
 	char path[300];
@@ -167,6 +240,130 @@ int eink_store_load_last_sync(int64_t *unix_sec)
 	}
 	p += strlen(key);
 	*unix_sec = (int64_t)strtoll(p, NULL, 10);
+	return 0;
+}
+
+int eink_store_save_http_creds(const char *api_base, const char *device_id,
+			       const char *auth_token)
+{
+	char path[300];
+	char tmp[320];
+	char json[768];
+	struct fs_file_t f;
+	size_t pos = 0;
+	int ret;
+
+	path_http_creds(path, sizeof(path));
+	snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+
+	if (pos + 13 >= sizeof(json)) {
+		return -ENOMEM;
+	}
+	memcpy(json + pos, "{\"api_base\":", 12);
+	pos += 12;
+	ret = json_quote_append(json, sizeof(json), &pos, api_base ? api_base : "");
+	if (ret) {
+		return ret;
+	}
+	if (pos + 14 >= sizeof(json)) {
+		return -ENOMEM;
+	}
+	memcpy(json + pos, ",\"device_id\":", 13);
+	pos += 13;
+	ret = json_quote_append(json, sizeof(json), &pos, device_id ? device_id : "");
+	if (ret) {
+		return ret;
+	}
+	if (pos + 15 >= sizeof(json)) {
+		return -ENOMEM;
+	}
+	memcpy(json + pos, ",\"auth_token\":", 14);
+	pos += 14;
+	ret = json_quote_append(json, sizeof(json), &pos, auth_token ? auth_token : "");
+	if (ret) {
+		return ret;
+	}
+	if (pos + 3 >= sizeof(json)) {
+		return -ENOMEM;
+	}
+	json[pos++] = '}';
+	json[pos++] = '\n';
+	json[pos] = '\0';
+
+	fs_file_t_init(&f);
+	ret = fs_open(&f, tmp, FS_O_CREATE | FS_O_WRITE | FS_O_TRUNC);
+	if (ret < 0) {
+		return ret;
+	}
+	ret = fs_write(&f, json, pos);
+	if (ret != (int)pos) {
+		(void)fs_close(&f);
+		(void)fs_unlink(tmp);
+		return ret < 0 ? ret : -EIO;
+	}
+	ret = fs_sync(&f);
+	(void)fs_close(&f);
+	if (ret < 0) {
+		(void)fs_unlink(tmp);
+		return ret;
+	}
+	ret = fs_rename(tmp, path);
+	if (ret < 0) {
+		(void)fs_unlink(tmp);
+		return ret;
+	}
+	LOG_INF("http creds saved (token not logged)");
+	return 0;
+}
+
+int eink_store_load_http_creds(char *api_base, size_t api_cap, char *device_id,
+			       size_t id_cap, char *auth_token, size_t tok_cap)
+{
+	char path[300];
+	char buf[768];
+	struct fs_file_t f;
+	struct fs_dirent entry;
+	ssize_t n;
+	int ret;
+
+	if (!api_base || api_cap == 0 || !device_id || id_cap == 0 || !auth_token ||
+	    tok_cap == 0) {
+		return -EINVAL;
+	}
+	api_base[0] = '\0';
+	device_id[0] = '\0';
+	auth_token[0] = '\0';
+	path_http_creds(path, sizeof(path));
+	ret = fs_stat(path, &entry);
+	if (ret == -ENOENT) {
+		return -ENOENT;
+	}
+	if (ret < 0) {
+		return ret;
+	}
+	fs_file_t_init(&f);
+	ret = fs_open(&f, path, FS_O_READ);
+	if (ret < 0) {
+		return ret;
+	}
+	n = fs_read(&f, buf, sizeof(buf) - 1);
+	(void)fs_close(&f);
+	if (n <= 0) {
+		return n < 0 ? (int)n : -ENOENT;
+	}
+	buf[n] = '\0';
+	ret = json_extract_string(buf, "\"api_base\":", api_base, api_cap);
+	if (ret) {
+		return ret;
+	}
+	ret = json_extract_string(buf, "\"device_id\":", device_id, id_cap);
+	if (ret) {
+		return ret;
+	}
+	ret = json_extract_string(buf, "\"auth_token\":", auth_token, tok_cap);
+	if (ret) {
+		return ret;
+	}
 	return 0;
 }
 

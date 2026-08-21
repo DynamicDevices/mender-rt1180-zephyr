@@ -207,7 +207,7 @@ static int cmd_creds(const struct shell *sh, size_t argc, char **argv)
 		shell_error(sh, "creds failed: %d", ret);
 		return ret;
 	}
-	shell_print(sh, "credentials updated (token not echoed)");
+	shell_print(sh, "credentials updated and persisted (token not echoed)");
 	return 0;
 }
 #endif

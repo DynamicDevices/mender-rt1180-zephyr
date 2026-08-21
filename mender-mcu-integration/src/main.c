@@ -203,6 +203,7 @@ main(void) {
             }
         }
         (void)eink_http_init(&hcfg);
+        (void)eink_http_load_persisted_credentials();
     }
 #endif
 #if defined(CONFIG_APP_EINK_SELFTEST)

@@ -139,7 +139,10 @@ Defaults: base
 `eink creds`. Sync **off** until credentials + `CONFIG_APP_EINK_HTTP_ENABLE`
 or shell `eink creds` / `eink sync`. **Device id SoT:** uppercase SoC UID hex
 (`hwinfo` / `soc_uid_get_hex`); leave `CONFIG_APP_EINK_HTTP_DEVICE_ID` empty
-in product builds. Auth remains Bearer `device_token`. Cutover notes:
+in product builds. Auth remains Bearer `device_token`. With
+`CONFIG_APP_EINK_HTTP_CREDS_PERSIST` (default), `eink creds` writes
+`APP_EINK_STORE_ROOT/creds.json` (LittleFS; plaintext) and reloads at boot —
+clear with token `none`/`-`. Cutover notes:
 `/data_drive/esl/etablone-cloud/docs/CUTOVER.md`.
 
 S3 pre-signed downloads (AWS gallery): omit default `:443` from the HTTP

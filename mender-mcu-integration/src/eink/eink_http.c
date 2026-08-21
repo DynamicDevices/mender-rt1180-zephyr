@@ -1112,20 +1112,72 @@ int eink_http_set_credentials(const char *api_base, const char *device_id, const
 	k_mutex_lock(&mu, K_FOREVER);
 	if (api_base) {
 		strncpy(cfg.api_base, api_base, sizeof(cfg.api_base) - 1);
+		cfg.api_base[sizeof(cfg.api_base) - 1] = '\0';
 	}
 	if (device_id) {
 		strncpy(cfg.device_id, device_id, sizeof(cfg.device_id) - 1);
+		cfg.device_id[sizeof(cfg.device_id) - 1] = '\0';
 	}
 	if (auth_token) {
 		if (strcmp(auth_token, "none") == 0 || strcmp(auth_token, "-") == 0) {
 			cfg.auth_token[0] = '\0';
 		} else {
 			strncpy(cfg.auth_token, auth_token, sizeof(cfg.auth_token) - 1);
+			cfg.auth_token[sizeof(cfg.auth_token) - 1] = '\0';
 		}
 	}
 	cfg.enabled = (cfg.api_base[0] != '\0' && cfg.device_id[0] != '\0');
 	k_mutex_unlock(&mu);
+#if defined(CONFIG_APP_EINK_HTTP_CREDS_PERSIST)
+	{
+		int pret = eink_store_save_http_creds(cfg.api_base, cfg.device_id,
+						      cfg.auth_token);
+
+		if (pret != 0) {
+			LOG_WRN("http creds persist failed: %d", pret);
+			return pret;
+		}
+	}
+#endif
 	return 0;
+}
+
+int eink_http_load_persisted_credentials(void)
+{
+#if defined(CONFIG_APP_EINK_HTTP_CREDS_PERSIST)
+	char api_base[192];
+	char device_id[64];
+	char auth_token[256];
+	int ret;
+
+	if (!inited) {
+		return -EINVAL;
+	}
+	ret = eink_store_load_http_creds(api_base, sizeof(api_base), device_id,
+					 sizeof(device_id), auth_token, sizeof(auth_token));
+	if (ret == -ENOENT) {
+		return 0;
+	}
+	if (ret != 0) {
+		LOG_WRN("http creds load failed: %d", ret);
+		return ret;
+	}
+	/* Apply without re-writing the same file (set_credentials persists). */
+	k_mutex_lock(&mu, K_FOREVER);
+	strncpy(cfg.api_base, api_base, sizeof(cfg.api_base) - 1);
+	cfg.api_base[sizeof(cfg.api_base) - 1] = '\0';
+	strncpy(cfg.device_id, device_id, sizeof(cfg.device_id) - 1);
+	cfg.device_id[sizeof(cfg.device_id) - 1] = '\0';
+	strncpy(cfg.auth_token, auth_token, sizeof(cfg.auth_token) - 1);
+	cfg.auth_token[sizeof(cfg.auth_token) - 1] = '\0';
+	cfg.enabled = (cfg.api_base[0] != '\0' && cfg.device_id[0] != '\0');
+	k_mutex_unlock(&mu);
+	LOG_INF("http creds restored from store (token present=%d)",
+		cfg.auth_token[0] != '\0');
+	return 0;
+#else
+	return 0;
+#endif
 }
 
 int eink_http_fetch_config(struct eink_schedule *out_sched, struct eink_http_image *images,

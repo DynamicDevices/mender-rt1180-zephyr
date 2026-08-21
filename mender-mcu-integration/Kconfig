@@ -141,6 +141,16 @@ config APP_EINK_HTTP_ENABLE
 		  Do not commit real tokens. Prefer Bitwarden-backed runtime
 		  provisioning via eink_http_set_credentials().
 
+	config APP_EINK_HTTP_CREDS_PERSIST
+		bool "Persist e-tabelone credentials on LittleFS"
+		depends on APP_EINK_HTTP
+		default y
+		help
+		  Save api_base/device_id/auth_token to
+		  APP_EINK_STORE_ROOT/creds.json when set via shell or API.
+		  Reload at boot after eink_http_init. Plaintext on the e-ink
+		  flash partition (not Mender NVS). Clear with token none/-.
+
 	config APP_EINK_HTTP_POLL_INTERVAL
 		int "e-tabelone poll interval (seconds)"
 		depends on APP_EINK_HTTP

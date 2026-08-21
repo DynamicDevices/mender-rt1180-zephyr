@@ -43,6 +43,15 @@ int eink_store_save_last_sync(int64_t unix_sec);
 int eink_store_load_last_sync(int64_t *unix_sec);
 
 /**
+ * Persist / reload e-tabelone HTTP credentials under store root (creds.json).
+ * Plaintext on LittleFS (not Mender NVS). Missing file → -ENOENT.
+ */
+int eink_store_save_http_creds(const char *api_base, const char *device_id,
+			       const char *auth_token);
+int eink_store_load_http_creds(char *api_base, size_t api_cap, char *device_id,
+			       size_t id_cap, char *auth_token, size_t tok_cap);
+
+/**
  * Persist / reload SHA-256 of the LZ4-framed bytes for /node/v2 gallery hash-diff.
  * Hex is lowercase; byte_size is the compressed .es6f.lz4 length.
  */
