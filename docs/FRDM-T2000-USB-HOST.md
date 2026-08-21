@@ -1,7 +1,8 @@
 # FRDM-IMXRT1186 — T2000 USB host MVP
 
 **Status:** software MVP (host + thin client). Hardware proof needs TCON on Type-C OTG.  
-**Protocol SoT:** [DynamicDevices/eink-t2000-usb](https://github.com/DynamicDevices/eink-t2000-usb) (`/data_drive/esl/eink-t2000-usb`).
+**Protocol SoT:** [DynamicDevices/eink-t2000-usb](https://github.com/DynamicDevices/eink-t2000-usb) (`/data_drive/esl/eink-t2000-usb`).  
+**Bench (Michael):** [`FRDM-T2000-BENCH-MICHAEL.md`](FRDM-T2000-BENCH-MICHAEL.md).
 
 ## Hardware
 
