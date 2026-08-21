@@ -25,7 +25,8 @@
 
 LOG_MODULE_REGISTER(eink_display, LOG_LEVEL_INF);
 
-#define EINK_DISP_STACK_SIZE 4096
+/* EL133 stream chunk is BSS; keep headroom for FS + validate + LOG on show. */
+#define EINK_DISP_STACK_SIZE 8192
 #define EINK_DISP_PRIORITY   5
 #define EINK_ROW_STRIP       8
 

@@ -3,7 +3,8 @@
 **From:** device lane (`zephyr-rt1186-eink` / `feat/frdm-gpc-wait`)  
 **To:** Cloud API implementation (`/data_drive/esl/etablone-cloud`)  
 **Date:** 2026-08-20  
-**Priority:** blocks FRDM portal paint (download works; LZ4 expand fails)
+**Priority:** ~~blocks FRDM LZ4 expand / show~~ — **closed 2026-08-21**
+(expand + `refresh done result=0`; no heap grow)
 
 ## Problem
 
@@ -48,11 +49,20 @@ Source: `src/lz4frame.ts` → `compressEs6fLz4Frame` → `lz4js.compress(es6f)`
 
 ## Verify
 
-1. `GET` any device `.es6f.lz4` — `block_size_id` is 4 (64 KiB), not 7.
+1. `GET` any device `.es6f.lz4` — `block_size_id` is 4 (64 KiB), not 7.  
+   **Cloud:** etablone-dev @ `fc4cda7` (PR #15+#16); warmed asset
+   `f50a3f20-1e63-44fe-9b04-1ead111e8d4d` → header `04 22 4d 18 40 40 c0`, 4020 B.
 2. FRDM (HTTP image, ~96 KiB heap): after DHCP, `eink sync` → LZ4 expand OK →
-   `show job` / `refresh done` (glass optional for expand proof).
+   `show job` / `refresh done` (glass optional for expand proof).  
+   **Device expand (2026-08-20):** FRDM `feat/frdm-gpc-wait` @ `232abc5`, screen
+   `B1EF425C3B305DADE90FBB2D10211000` — download 4020 B → expand 960032 B →
+   store accepted → sync `ret=0`; **no** `ERROR_allocation_failed`; heap unchanged.  
+   **Follow-up (2026-08-21):** `eink_disp` stack overflow fixed — EL133
+   `stream_write` 4 KiB chunk moved to BSS (`el133_data`); `EINK_DISP_STACK_SIZE`
+   4→8 KiB. FRDM prove: `show job` → `refresh done result=0` (no USAGE FAULT).
 
 ## Device status when you land this
 
 - Screen `B1EF425C3B305DADE90FBB2D10211000` already has schedule + SDL fixture.
-- FRDM Ethernet sync/plan/download already green; only LZ4 expand blocked.
+- FRDM Ethernet sync/plan/download + **LZ4 expand** + **show/refresh** green
+  vs blockSizeID=4 cloud (glass optional; SPI stream path proven).
