@@ -1028,7 +1028,7 @@ int eink_store_accept_temp_image(const char *image_id, const char *temp_path)
 		struct fs_dirent ent;
 
 		ret = fs_stat(temp_path, &ent);
-		if (ret < 0 || ent.size < 16 || ent.size > (768u * 1024u)) {
+		if (ret < 0 || ent.size < 16 || ent.size > (1024u * 1024u)) {
 			LOG_ERR("reject temp LZ4 %s: bad size", image_id);
 			return -EINVAL;
 		}
