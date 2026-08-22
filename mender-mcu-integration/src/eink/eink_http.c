@@ -1729,6 +1729,16 @@ static void iso8601_utc(int64_t unix_s, char *out, size_t out_cap)
  * Optional constrained-board pressure metrics. Omit keys when a probe fails
  * (same pattern as GNSS). Wire contract: EINK-CONTRACT.md + cloud handoff.
  */
+static void telemetry_add_screen_type(cJSON *telemetry)
+{
+	const char *st = CONFIG_APP_EINK_SCREEN_TYPE;
+
+	if (!telemetry || !st || st[0] == '\0') {
+		return;
+	}
+	cJSON_AddStringToObject(telemetry, "screen_type", st);
+}
+
 static void telemetry_add_resource_metrics(cJSON *telemetry)
 {
 #if defined(CONFIG_APP_EINK_RESOURCE_TELEMETRY)
@@ -1816,6 +1826,7 @@ int eink_http_post_telemetry(const struct eink_schedule *sched,
 		}
 	}
 #endif
+	telemetry_add_screen_type(telemetry);
 	telemetry_add_resource_metrics(telemetry);
 	if (sched) {
 		for (size_t i = 0; i < sched->count; i++) {
@@ -2124,6 +2135,7 @@ static void telemetry_fill_object(cJSON *telemetry, const char *current_displaye
 		}
 	}
 #endif
+	telemetry_add_screen_type(telemetry);
 	telemetry_add_resource_metrics(telemetry);
 }
 
