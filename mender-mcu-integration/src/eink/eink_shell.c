@@ -9,6 +9,9 @@
 #if defined(CONFIG_APP_EINK_T2000)
 #include "eink_t2000.h"
 #endif
+#if defined(CONFIG_APP_EINK_PANEL_AUTODETECT)
+#include "eink_panel.h"
+#endif
 #if defined(CONFIG_APP_EINK_HTTP)
 #include "eink_http.h"
 #endif
@@ -89,6 +92,20 @@ static int cmd_status(const struct shell *sh, size_t argc, char **argv)
 	return 0;
 }
 
+#if defined(CONFIG_APP_EINK_PANEL_AUTODETECT)
+static int cmd_panel(const struct shell *sh, size_t argc, char **argv)
+{
+	const struct eink_panel_info *info;
+
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+	(void)eink_panel_detect();
+	info = eink_panel_get();
+	shell_print(sh, "panel=%s %ux%u screen_type=%s", info->name, info->width, info->height,
+		    info->screen_type[0] ? info->screen_type : "-");
+	return 0;
+}
+#endif
 
 #if defined(CONFIG_APP_EINK_LOCATION)
 static int cmd_location(const struct shell *sh, size_t argc, char **argv)
@@ -520,6 +537,9 @@ SHELL_STATIC_SUBCMD_SET_CREATE(eink_cmds,
 		      1),
 	SHELL_CMD(clear, NULL, "Clear panel (white)", cmd_clear),
 	SHELL_CMD(status, NULL, "Display status", cmd_status),
+#if defined(CONFIG_APP_EINK_PANEL_AUTODETECT)
+	SHELL_CMD(panel, NULL, "Show autodetection result", cmd_panel),
+#endif
 	SHELL_CMD(uid, NULL, "Print SoC UID hex (device identity SoT)", cmd_uid),
 	SHELL_CMD(tick, NULL, "Run one scheduler tick (local/fixture)", cmd_sched_tick),
 	SHELL_CMD_ARG(snvs, NULL, "SNVS try: eink snvs [seconds] [cut]", cmd_snvs, 1, 2),

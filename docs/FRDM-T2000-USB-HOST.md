@@ -56,11 +56,16 @@ Adds:
 
 Do **not** combine with `FRDM_ENROLL_OCRAM=1`. UDC stays disabled on the same controller.
 
+Combine with `FRDM_EINK_HTTP=1` when you want portal sync in the same image. Boot
+autodetect (`APP_EINK_PANEL_AUTODETECT`) prefers a plugged T2000 over EL133 glass
+and sets telemetry `screen_type` to `25in` / `13in` accordingly.
+
 ## Shell
 
 After flash + plug T2000 on **J63** (VBUS present):
 
 ```text
+eink panel                  # autodetect result (el133uf1 | t2000 | none)
 usbh ...                    # optional Zephyr host shell smoke
 eink t2000 info             # W/H, panel_id, TCON/LUT
 eink t2000 clear            # clear + wait idle

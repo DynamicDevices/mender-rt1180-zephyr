@@ -188,6 +188,28 @@ config APP_EINK_HTTP_ENABLE
 		  Optional telemetry field screen_type. Cloud accepts only
 		  "13in" or "25in" (portal Type column). Leave empty to omit.
 		  FRDM EL133 / Spectra 6 13.3″ lab: set "13in".
+		  When APP_EINK_PANEL_AUTODETECT is y, a successful probe
+		  overrides this string at runtime.
+
+	config APP_EINK_PANEL_AUTODETECT
+		bool "Soft-detect connected e-ink controller at boot"
+		depends on APP_EINK
+		default y
+		help
+		  Probe which panel stack answered: EL133 glass (BUSY after
+		  reset) and, when APP_EINK_T2000 is enabled, T2000 USB TCON.
+		  Prefer T2000 if enumerated. Sets runtime screen_type for
+		  telemetry (13in / 25in). Continues with panel=none when
+		  nothing is found.
+
+	config APP_EINK_PANEL_T2000_WAIT_MS
+		int "T2000 USB enumerate wait (ms)"
+		depends on APP_EINK_PANEL_AUTODETECT && APP_EINK_T2000
+		default 3000
+		range 500 30000
+		help
+		  How long panel detect waits for a T2000 VID/PID before
+		  falling back to EL133 / none.
 
 	config APP_EINK_DEBUG_LOG_UPLOAD
 		bool "On-demand debug log ring + portal upload"

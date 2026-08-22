@@ -14,6 +14,9 @@
 #include "eink_frame.h"
 #include "eink_scheduler.h"
 #include "eink_store.h"
+#if defined(CONFIG_APP_EINK_PANEL_AUTODETECT)
+#include "eink_panel.h"
+#endif
 #if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
 #include "eink_log_ring.h"
 #endif
@@ -1731,9 +1734,17 @@ static void iso8601_utc(int64_t unix_s, char *out, size_t out_cap)
  */
 static void telemetry_add_screen_type(cJSON *telemetry)
 {
-	const char *st = CONFIG_APP_EINK_SCREEN_TYPE;
+	const char *st;
 
-	if (!telemetry || !st || st[0] == '\0') {
+	if (!telemetry) {
+		return;
+	}
+#if defined(CONFIG_APP_EINK_PANEL_AUTODETECT)
+	st = eink_panel_screen_type();
+#else
+	st = CONFIG_APP_EINK_SCREEN_TYPE;
+#endif
+	if (!st || st[0] == '\0') {
 		return;
 	}
 	cJSON_AddStringToObject(telemetry, "screen_type", st);
