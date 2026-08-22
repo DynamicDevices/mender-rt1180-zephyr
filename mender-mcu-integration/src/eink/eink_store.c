@@ -961,7 +961,8 @@ bool eink_store_has_image_quick(const char *image_id)
 		struct fs_file_t f;
 		ssize_t nr;
 
-		if (ent.size < 16 || ent.size > (768u * 1024u)) {
+		/* Same ceiling as accept_temp_image / eink_lz4 expand. */
+		if (ent.size < 16 || ent.size > EINK_LZ4_COMPRESSED_MAX) {
 			return false;
 		}
 		fs_file_t_init(&f);
@@ -1042,7 +1043,7 @@ int eink_store_accept_temp_image(const char *image_id, const char *temp_path)
 		struct fs_dirent ent;
 
 		ret = fs_stat(temp_path, &ent);
-		if (ret < 0 || ent.size < 16 || ent.size > (1024u * 1024u)) {
+		if (ret < 0 || ent.size < 16 || ent.size > EINK_LZ4_COMPRESSED_MAX) {
 			LOG_ERR("reject temp LZ4 %s: bad size", image_id);
 			return -EINVAL;
 		}
