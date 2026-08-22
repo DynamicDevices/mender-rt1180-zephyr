@@ -72,6 +72,15 @@ int eink_power_enter_snvs(void);
 int eink_power_enter_snvs_in(uint32_t delay_sec, bool pmic_off);
 
 /**
+ * Lab: forever BOM (TOSP) + RTC hold for current measurement.
+ * Does not return when rails drop (POR is the loop). If WFI returns
+ * because main 3V3 stayed up, retries after PRE_SEC.
+ */
+#if defined(CONFIG_APP_EINK_BOM_POWER_LOOP)
+void eink_power_bom_power_loop(void);
+#endif
+
+/**
  * Hard-gate or power IW612 WiFi (battery mode).
  * Call true only around network work; false immediately after
  * eink_http_flush_deferred() — never leave the radio up into SNVS.

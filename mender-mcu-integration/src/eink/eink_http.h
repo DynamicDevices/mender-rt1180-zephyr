@@ -81,8 +81,20 @@ void eink_http_stop(void);
 /**
  * Replace credentials at runtime. This is the provisioning boundary: callers
  * should source the token from Bitwarden-backed device settings, never source.
+ * When APP_EINK_HTTP_CREDS_PERSIST, also writes LittleFS creds.json.
  */
 int eink_http_set_credentials(const char *api_base, const char *device_id,
 			      const char *auth_token);
+
+/**
+ * Load persisted credentials (if any) into the live client.
+ * No-op when APP_EINK_HTTP_CREDS_PERSIST is disabled or file missing.
+ */
+int eink_http_load_persisted_credentials(void);
+
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+/** Snapshot the RAM log ring and POST to /debug-log (lab shell / tests). */
+int eink_http_debug_log_upload_now(void);
+#endif
 
 #endif

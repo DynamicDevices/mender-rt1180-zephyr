@@ -40,6 +40,15 @@ eval "$(echo "${VTOR_LINES[0]}" | awk '{
 echo "ELF=${ELF}"
 echo "VTOR=${VTOR} SP=${SP} PC=${PC}"
 
+EXPECT_BOM_LOOP="${EXPECT_BOM_LOOP:-}"
+if [[ -z "${EXPECT_BOM_LOOP}" ]] && [[ -f "${ROOT}/build-frdm-rt1186-eink/mender-mcu-integration/zephyr/.config" ]]; then
+  if grep -q '^CONFIG_APP_EINK_BOM_POWER_LOOP=y$' \
+      "${ROOT}/build-frdm-rt1186-eink/mender-mcu-integration/zephyr/.config"; then
+    EXPECT_BOM_LOOP=1
+  fi
+fi
+echo "EXPECT_BOM_LOOP=${EXPECT_BOM_LOOP:-0}"
+
 exec renode-test \
   --variable "ROOT:${ROOT}" \
   --variable "REPL:@${REPL}" \
@@ -47,4 +56,5 @@ exec renode-test \
   --variable "VTOR:${VTOR}" \
   --variable "SP:${SP}" \
   --variable "PC:${PC}" \
+  --variable "EXPECT_BOM_LOOP:${EXPECT_BOM_LOOP:-}" \
   "${ROBOT}"

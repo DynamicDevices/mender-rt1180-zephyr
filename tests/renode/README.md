@@ -1,7 +1,8 @@
-# Renode — FRDM e-ink UART smoke
+# Renode — FRDM e-ink UART / PC-path smoke
 
 Proof class: **`renode`**. Same ARM ELF as the FRDM-IMXRT1186 e-ink build.
-Does **not** prove FRDM silicon, Spectra 6 waveforms, NETC/PHY, or live e-tabelone.
+Does **not** prove FRDM silicon, Spectra 6 waveforms, NETC/PHY, live e-tabelone,
+or µA sleep current.
 
 Portal + schedule TAP stays **`native_sim`**.
 
@@ -23,9 +24,15 @@ FRDM-IMXRT1186 Mender/e-ink uses **NETC**. In our `.repl` those windows are
 
 Do not claim Renode Hosted OTA on this FRDM ELF.
 
+## Scripts
+
 ```bash
 # after ./scripts/build-rt1186-frdm-eink.sh
-./scripts/renode-frdm-eink-uart.sh
+./scripts/renode-frdm-eink-uart.sh          # LPUART Robot (Booting + Hello)
+
+# BOM_POWER_LOOP lab image
+BOM_POWER_LOOP=1 ./scripts/build-rt1186-frdm-eink.sh
+./scripts/renode-frdm-eink-bom-pc-smoke.sh  # PC-path: BBNSM RTC_EN after settle
 ```
 
 Needs portable Renode (`~/.local/opt/renode-portable`) and Python 3.12 +
@@ -36,13 +43,21 @@ relative to the Renode install).
 VTOR is derived per ELF (`scripts/find-vtor.py`); MCUboot slot0 is not
 `0x14000000`.
 
-## Status (2026-08-19)
+Wrap UART Robot with a wall-clock `timeout` when testing BOM images: after the
+5 s settle the guest hits GPC STOP + WFI and virtual-time Waits can hang the
+suite.
+
+## Status (2026-08-20)
 
 - Hello_world on this `.repl` + Python CCM/ANATOP: **PASS** (F1 gemba).
-- This e-ink/Mender ELF: Robot **PASS** — `Hello World! frdm_imxrt1186` on
-  LPUART1 (~6 s; immediate-log image, shell prompt follows). Extra models vs
-  hello: BLK_CTRL_WAKEUPMIX + NETC PRIV/IERB RAM,
-  TRDC HWCFG0/DACFG (SDK `assert` on NMSTR/NCM), FlexSPI STS0 idle +
-  self-clearing `MCR0.SWRESET` (firmware spins until that bit reads 0).
-- Still **not** modelled: NETC/PHY, Spectra 6, real FlexSPI flash contents.
-  Proof class remains `renode` UART only.
+- E-ink/Mender ELF **LPUART Robot**: currently **FAIL** — guest runs (GPIO /
+  BBNSM side effects visible) but Terminal Tester sees no
+  `Booting Zephyr OS` / `Hello World!` / `BOM power-loop` text. Open issue;
+  do not claim UART PASS for this ELF.
+- E-ink/Mender **BOM_POWER_LOOP** ELF **PC-path**: **PASS** via
+  `renode-frdm-eink-bom-pc-smoke.sh` — after ~5 s settle the log shows BBNSM
+  CTRL `0x54440008` write `0x2` and the sticky-read spin from
+  `bbnsm_rtc_start()` (`eink_power.c`). That is enough to say the BOM loop
+  entered `enter_snvs`; it is **not** Spectra 6, FRDM µA, or Hosted OTA.
+- Still **not** modelled: NETC/PHY, Spectra 6, real FlexSPI flash contents,
+  BBNSM alarm wake from WFI.

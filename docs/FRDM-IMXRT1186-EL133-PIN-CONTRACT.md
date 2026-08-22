@@ -68,6 +68,11 @@ tree (`eink_http.c` / `eink_scheduler.c`):
 wake → net → `GET /node/v0/device/{id}/config` → fetch due then gallery
 images → `POST …/telemetry` → run cron → paint Spectra 6 → sleep.
 
+**Awake budget (FRDM 2026-08-22):** after 2 MiB A/B slots, `/lfs1` ≈11.75 MiB.
+Typical content-change wake with expand-on-display: ~6 s NOR write (LZ4) +
+~8 s expand write + paint; total sync wall ~22 s — see
+[`POWER-HARDWARE-CONTRACT.md`](../mender-mcu-integration/docs/POWER-HARDWARE-CONTRACT.md#frdm-wake-window-bench--littlefs--lz4-flash-io-2026-08-22).
+
 | Piece | Jaguar (i.MX93 Linux) | This Zephyr tree |
 |-------|----------------------|------------------|
 | Config / jobs | `GET …/config` | same path |
@@ -85,11 +90,14 @@ E Ink kit / parked Jaguar PMIC — FRDM does not generate ±16 V.
 
 **Alex 2026-08-19 (amended same day):** FRDM-IMXRT1186 is the **one lab board**
 for Spectra 6 SPI **and** Hosted **Mender MCU** over **NETC Ethernet** (not
-Foundries; not MIMXRT1180-EVK unless we add an EVK loom). Portal + schedule
-stay on **native_sim** until e-tabelone HTTP is turned back on. Renode does
-**not** prove Mender (NETC/PHY unmodelled). Dual-slot swap on silicon is
-**FRDM** proof (`dev-2` on `WGUPS4RWFPGOT`), not `renode`. **RT1170 is not**
-on this product path (Alex 2026-08-19).
+Foundries; not MIMXRT1180-EVK unless we add an EVK loom). **2026-08-20:** first HTTP=y flash hung (garbled UART);
+default image keeps `CONFIG_APP_EINK_HTTP=n`. Opt-in HyperRAM+MCUboot (F1
+class — DTCM bootloader, FlexSPI1 off, `CODE_DATA_RELOCATION_SRAM`):
+`FRDM_EINK_HTTP=1` appends `eink_hyperram.conf` + `eink_http.conf`. Do **not**
+combine with `FRDM_ENROLL_OCRAM=1` (link overflow). Paint still waits on
+Spectra 6 SPI wiring. Renode does **not** prove Mender (NETC/PHY unmodelled).
+Dual-slot swap on silicon is **FRDM** proof (`dev-2` on `WGUPS4RWFPGOT`), not
+`renode`. **RT1170 is not** on this product path (Alex 2026-08-19).
 
 **Renode (same day):** UART smoke of this FRDM e-ink ELF is in-tree
 (`./scripts/renode-frdm-eink-uart.sh`). Proof class **`renode`**. It does

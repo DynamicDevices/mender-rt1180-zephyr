@@ -1,9 +1,10 @@
 sysbus:
     init:
-        Tag <0x0 0x720000> "boot_partition / ocram1_available / slot0_partition"
-        Tag <0x720000 0x700000> "slot1_partition"
+        Tag <0x0 0x220000> "boot_partition / slot0_partition (2MiB)"
+        Tag <0x220000 0x200000> "slot1_partition (2MiB)"
         Tag <0x54000000 0x210000> "edma3"
-        Tag <0xe20000 0x1e0000> "storage_partition"
+        Tag <0x420000 0x20000> "storage_partition (NVS)"
+        Tag <0x440000 0xbc0000> "eink_storage_partition (/lfs1)"
         Tag <0x60a00000 0x10000> "switch"
         Tag <0x60b00000 0x10000> "enetc_psi0"
         Tag <0x60b40000 0x10000> "enetc_psi1"

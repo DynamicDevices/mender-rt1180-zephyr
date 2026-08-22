@@ -74,6 +74,16 @@ Telemetry JSON (`telemetry` object) includes at least:
 | `current_displayed_job_id` | Optional string when known |
 | `latitude` / `longitude` | Optional WGS84 degrees; **omit** when no fix |
 | `location_accuracy_m` | Optional metres; omit when unknown |
+| `storage_total_bytes` | Optional; LittleFS size for `APP_EINK_STORE_ROOT` (`fs_statvfs`) |
+| `storage_free_bytes` | Optional; free bytes on that FS |
+| `ram_heap_pool_bytes` | Optional; `CONFIG_HEAP_MEM_POOL_SIZE` |
+| `ram_heap_free_bytes` | Optional; system-heap free (`SYS_HEAP_RUNTIME_STATS`) |
+| `ram_heap_used_bytes` | Optional; system-heap allocated |
+| `ram_heap_max_used_bytes` | Optional; high-water allocated since boot |
+
+`CONFIG_APP_EINK_RESOURCE_TELEMETRY` (default y when HTTP is on) controls the
+storage/RAM group. **Omit** a group when the probe fails — never send zeros as
+placeholders. Cloud must treat these as additive optional keys (v0 freeze).
 
 Top-level `schedule` is an array of `{ "job_id": "…" }` acks. Never send
 null/zero placeholders for missing location — omit the keys entirely.
@@ -100,6 +110,22 @@ force-sync; the cloud clears the flag after that response. Clients should treat
 it as a hint to complete a full sync this wake (log/observe; optional freshness
 invalidation). It is not a push wake.
 
+### On-demand debug log upload
+
+Additive Cloudflare path (see [`docs/CLOUD-HANDOFF-DEBUG-LOG.md`](../../docs/CLOUD-HANDOFF-DEBUG-LOG.md)).
+**Do not** put log text in `telemetry` / v2 sync JSON (v0 freeze).
+
+| Piece | Contract |
+|-------|----------|
+| Config / v2 response | `"request_debug_log": true` (one-shot; cloud clears after successful upload) |
+| Board upload | `POST {base}/node/v0/device/{id}/debug-log` Bearer; `text/plain` or gzip; **≤64 KiB** uncompressed |
+| Capture | Circular RAM ring (**32 KiB** default, `APP_EINK_DEBUG_LOG_RING_SIZE`); Zephyr log backend |
+| Trigger | Portal request **or** shell `eink log upload` — never every-wake by default |
+| Privacy | Redact `Bearer …`, `token=`, `eink creds` lines (device best-effort + cloud) |
+
+`CONFIG_APP_EINK_DEBUG_LOG_UPLOAD` (depends on HTTP). native_sim `file://` may
+write `{store}/debug-log.txt` instead of HTTP.
+
 Production accepts **ES6F** raw, or an **LZ4 frame** whose decompressed
 payload is a complete ES6F v1 file (magic `04 22 4D 18`, same as `lz4 -f`).
 JPEG/PNG remain rejected by magic. Expand timing is selectable:
@@ -123,13 +149,23 @@ lets you hard-gate WiFi sooner; paint pays LZ4 + scratch write with radio off.
 Prefer on-display until HW joules say otherwise; switch to on-download if the
 same frame is repainted often offline (amortize expand once).
 
+**FRDM-IMXRT1186 bench (2026-08-22, expand-on-display, W25Q128 `/lfs1`):**
+HTTP LZ4 write ~**115 KiB/s** (5.6 s / 658 KiB); LZ4→ES6F expand write
+~**117 KiB/s** (8.0 s / 960 KiB); flash reads ~**5–7 MiB/s**. Full v2 sync +
+paint wall ~**22 s** then BOM/sleep candidate. Detail + sleep implications:
+[`POWER-HARDWARE-CONTRACT.md`](POWER-HARDWARE-CONTRACT.md#frdm-wake-window-bench--littlefs--lz4-flash-io-2026-08-22).
+Shell: `eink flash_bench <path> [write]`; logs `prof: flash_read|write=…`.
+
 Defaults: base
 `https://etablone.dynamicdevices.co.uk` (Cloudflare). Legacy AWS
 `https://api.dev.e-tabelone.com` remains valid during dual-run — set via
 `eink creds`. Sync **off** until credentials + `CONFIG_APP_EINK_HTTP_ENABLE`
 or shell `eink creds` / `eink sync`. **Device id SoT:** uppercase SoC UID hex
 (`hwinfo` / `soc_uid_get_hex`); leave `CONFIG_APP_EINK_HTTP_DEVICE_ID` empty
-in product builds. Auth remains Bearer `device_token`. Cutover notes:
+in product builds. Auth remains Bearer `device_token`. With
+`CONFIG_APP_EINK_HTTP_CREDS_PERSIST` (default), `eink creds` writes
+`APP_EINK_STORE_ROOT/creds.json` (LittleFS; plaintext) and reloads at boot —
+clear with token `none`/`-`. Cutover notes:
 `/data_drive/esl/etablone-cloud/docs/CUTOVER.md`.
 
 S3 pre-signed downloads (AWS gallery): omit default `:443` from the HTTP

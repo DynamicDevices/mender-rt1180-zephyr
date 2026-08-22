@@ -9,6 +9,7 @@ export BUILD_DIR="${BUILD_DIR:-build-frdm-rt1186-eink}"
 
 EL133_MODULE="${ROOT}/mender-mcu-integration/modules/eink-el133"
 EL133_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_eink_el133.overlay"
+FLASH_MAP_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_eink_flash_map.overlay"
 EL133_CONF="boards/frdm_imxrt1186_mimxrt1186_cm33_eink_el133.conf"
 SHELL_CONF="boards/mimxrt1170_eink_shell.conf"
 
@@ -23,10 +24,59 @@ else
   EXTRA_CONF="${SHELL_CONF};${EL133_CONF}"
 fi
 
+if [[ "${BOM_POWER_LOOP:-}" == "1" ]]; then
+  EXTRA_CONF="${EXTRA_CONF};boards/frdm_imxrt1186_mimxrt1186_cm33_bom_loop.conf"
+  echo "BOM_POWER_LOOP=1: appending bom_loop.conf" >&2
+fi
+if [[ "${FRDM_EINK_HTTP:-}" == "1" ]]; then
+  case "${FRDM_ENROLL_OCRAM:-}" in
+    1|true|TRUE|yes|YES|on|ON)
+      echo "error: FRDM_EINK_HTTP=1 needs HyperRAM; OCRAM enroll overflows (~534 KiB)." >&2
+      echo "  Unset FRDM_ENROLL_OCRAM and rebuild (MCUboot DTCM + HyperRAM BSS)." >&2
+      exit 1
+      ;;
+  esac
+  EXTRA_CONF="${EXTRA_CONF};boards/frdm_imxrt1186_mimxrt1186_cm33_eink_hyperram.conf;boards/frdm_imxrt1186_mimxrt1186_cm33_eink_http.conf"
+  echo "FRDM_EINK_HTTP=1: HyperRAM profile + eink_http.conf" >&2
+fi
+
+T2000_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_eink_t2000.overlay"
+if [[ "${FRDM_T2000:-}" == "1" ]]; then
+  case "${FRDM_ENROLL_OCRAM:-}" in
+    1|true|TRUE|yes|YES|on|ON)
+      echo "error: FRDM_T2000=1 needs HyperRAM; unset FRDM_ENROLL_OCRAM." >&2
+      exit 1
+      ;;
+  esac
+  # HyperRAM once even if HTTP not selected.
+  if [[ "${EXTRA_CONF}" != *"eink_hyperram.conf"* ]]; then
+    EXTRA_CONF="${EXTRA_CONF};boards/frdm_imxrt1186_mimxrt1186_cm33_eink_hyperram.conf"
+  fi
+  EXTRA_CONF="${EXTRA_CONF};boards/frdm_imxrt1186_mimxrt1186_cm33_eink_t2000.conf"
+  echo "FRDM_T2000=1: HyperRAM + USB host T2000 client" >&2
+fi
+
 MCUBOOT_DTCM_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_mcuboot_dtcm.overlay"
+
+# Do not overwrite OCRAM enroll overlay from build-rt1186-frdm.sh — merge.
+DTC_OVERLAYS="${FLASH_MAP_OVERLAY};${EL133_OVERLAY}"
+case "${FRDM_ENROLL_OCRAM:-}" in
+  1|true|TRUE|yes|YES|on|ON)
+    OCRAM_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_ocram.overlay"
+    DTC_OVERLAYS="${OCRAM_OVERLAY};${FLASH_MAP_OVERLAY};${EL133_OVERLAY}"
+    echo "FRDM_ENROLL_OCRAM=1: merging ocram.overlay + el133.overlay" >&2
+    ;;
+esac
+if [[ "${FRDM_T2000:-}" == "1" ]]; then
+  DTC_OVERLAYS="${DTC_OVERLAYS};${T2000_OVERLAY}"
+  echo "FRDM_T2000=1: merging eink_t2000.overlay" >&2
+fi
+
+# MCUboot must see the same slot/NVS/LittleFS map as the app (2 MiB slots).
+MCUBOOT_OVERLAYS="${FLASH_MAP_OVERLAY};${MCUBOOT_DTCM_OVERLAY}"
 
 exec "${ROOT}/scripts/build-rt1186-frdm.sh" "$@" \
   -DZEPHYR_EXTRA_MODULES="${EL133_MODULE}" \
   -DEXTRA_CONF_FILE="${EXTRA_CONF}" \
-  -DEXTRA_DTC_OVERLAY_FILE="${EL133_OVERLAY}" \
-  -Dmcuboot_EXTRA_DTC_OVERLAY_FILE="${MCUBOOT_DTCM_OVERLAY}"
+  -DEXTRA_DTC_OVERLAY_FILE="${DTC_OVERLAYS}" \
+  -Dmcuboot_EXTRA_DTC_OVERLAY_FILE="${MCUBOOT_OVERLAYS}"

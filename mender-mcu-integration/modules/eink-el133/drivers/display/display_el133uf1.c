@@ -10,9 +10,9 @@
  * command ordering match that reference exactly.
  *
  * No driver-owned framebuffer — the caller's full L_4 payload is streamed
- * in 4 KiB chunks. Refresh is blanking-gated: display_write()/stream_write()
- * load the DTM halves; blanking_off() runs PON(CS0)→PON(CS1)→DRF(both)→
- * POF(CS0)→POF(CS1).
+ * in 4 KiB chunks (BSS, not stack — eink_disp is only ~4–8 KiB). Refresh is
+ * blanking-gated: display_write()/stream_write() load the DTM halves;
+ * blanking_off() runs PON(CS0)→PON(CS1)→DRF(both)→POF(CS0)→POF(CS1).
  *
  * BUSY polarity follows the reference: the panel drives BUSY HIGH when ready
  * (idle) and LOW while working. Declare busy-gpios ACTIVE_HIGH in the overlay
@@ -107,6 +107,8 @@ struct el133_config {
 struct el133_data {
 	bool blanking_on;
 	bool dirty;
+	/* Stream SPI chunk lives in BSS — must not sit on eink_disp stack. */
+	uint8_t stream_chunk[EL133_CHUNK];
 };
 
 static void cs_set(const struct el133_config *cfg, enum el133_cs which, bool selected)
@@ -434,18 +436,18 @@ int el133uf1_stream_write(const struct device *dev, el133uf1_fill_cb_t fill, voi
 {
 	const struct el133_config *cfg = dev->config;
 	struct el133_data *data = dev->data;
-	uint8_t chunk[EL133_CHUNK];
+	uint8_t *chunk = data->stream_chunk;
 	int ret;
 
 	if (fill == NULL) {
 		return -EINVAL;
 	}
 
-	ret = stream_half(cfg, EL133_CS0, fill, user, chunk, sizeof(chunk));
+	ret = stream_half(cfg, EL133_CS0, fill, user, chunk, EL133_CHUNK);
 	if (ret < 0) {
 		return ret;
 	}
-	ret = stream_half(cfg, EL133_CS1, fill, user, chunk, sizeof(chunk));
+	ret = stream_half(cfg, EL133_CS1, fill, user, chunk, EL133_CHUNK);
 	if (ret < 0) {
 		return ret;
 	}

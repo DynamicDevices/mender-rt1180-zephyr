@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Translate live e-tabelone JPEG/PNG assets to ES6F (optionally LZ4) for native_sim.
+"""Translate live e-tabelone assets to ES6F (optionally LZ4) for native_sim.
 
 Production firmware accepts raw ES6F or an LZ4 *frame* whose payload is a full
 ES6F v1 file (magic 04 22 4D 18). This development bridge fetches the real
 config/schedule, rewrites image URLs to a local endpoint, and lazily converts
-each source asset into that packed frame (default: LZ4-framed for smaller
-radio transfers).
+JPEG/PNG sources into that packed frame (default: LZ4-framed for smaller
+radio transfers). Upstream ES6F / ES6F.LZ4 is passed through unchanged.
 
 After each config fetch, remaining images are prefetched in parallel so gallery
 downloads usually hit the host cache.
@@ -219,7 +219,54 @@ class Bridge:
             fetch_ms = (time.perf_counter() - t_fetch) * 1000
             if status != 200:
                 raise RuntimeError(f"upstream image returned HTTP {status}")
-            suffix = ".png" if "png" in content_type.lower() else ".jpg"
+
+            ctype = (content_type or "").lower()
+            # Portal may already serve packed ES6F / ES6F.LZ4 (SDL fixture, etc.).
+            # Pass those through — gen-eink-frame only accepts JPEG/PNG.
+            already_lz4 = (
+                "es6f+lz4" in ctype
+                or source_url.split("?", 1)[0].endswith(".es6f.lz4")
+                or (len(source) >= 11 and source[0:4] == b"\x04\"M\x18" and b"ES6" in source[:64])
+            )
+            already_es6f = (
+                ("es6f" in ctype and "lz4" not in ctype)
+                or source_url.split("?", 1)[0].endswith(".es6f")
+                or source.startswith(b"ES6F")
+            )
+            if already_lz4 or already_es6f:
+                if self.lz4 and already_lz4:
+                    output.write_bytes(source)
+                elif self.lz4 and already_es6f:
+                    raw_output.write_bytes(source)
+                    subprocess.run(
+                        [
+                            sys.executable,
+                            str(self.lz4_wrap),
+                            str(raw_output),
+                            "-o",
+                            str(output),
+                        ],
+                        check=True,
+                    )
+                elif (not self.lz4) and already_es6f:
+                    output.write_bytes(source)
+                else:
+                    # Bridge wants raw ES6F but upstream sent LZ4 — unwrap not supported;
+                    # keep LZ4 bytes only when lz4 mode is on (handled above).
+                    raise RuntimeError(
+                        "upstream ES6F.LZ4 but bridge started with --no-lz4"
+                    )
+                data = output.read_bytes()
+                print(
+                    f"bridge: passthrough {image_id} src={len(source)} B "
+                    f"out={len(data)} B already={'lz4' if already_lz4 else 'es6f'} "
+                    f"fetch={fetch_ms:.0f} ms "
+                    f"total={(time.perf_counter() - t0) * 1000:.0f} ms",
+                    flush=True,
+                )
+                return data
+
+            suffix = ".png" if "png" in ctype else ".jpg"
             with tempfile.TemporaryDirectory(prefix="etabelone-image-") as tmp:
                 source_path = Path(tmp) / f"source{suffix}"
                 temp_output = Path(tmp) / "converted.es6f"
@@ -269,6 +316,75 @@ class Bridge:
     def telemetry(self, body: bytes) -> tuple[int, str, bytes]:
         url = f"{self.upstream}/node/v0/device/{self.device_id}/telemetry"
         return self.request(url, method="POST", body=body)
+
+    def _rewrite_plan_urls(self, plan: dict) -> dict[str, str]:
+        """Point images/download URLs at this bridge; return upstream URL map."""
+        next_urls: dict[str, str] = {}
+
+        images = plan.get("images")
+        if isinstance(images, list):
+            for image in images:
+                if not isinstance(image, dict):
+                    continue
+                image_id = image.get("image_id")
+                image_url = image.get("url")
+                if not isinstance(image_id, str) or not isinstance(image_url, str):
+                    continue
+                next_urls[image_id] = image_url
+                image["url"] = f"{self.public_base}/images/{image_id}{self.image_suffix}"
+
+        downloads = plan.get("download")
+        if isinstance(downloads, list):
+            for item in downloads:
+                if not isinstance(item, dict):
+                    continue
+                asset_id = item.get("asset_id")
+                asset_url = item.get("url")
+                if not isinstance(asset_id, str) or not isinstance(asset_url, str):
+                    continue
+                next_urls[asset_id] = asset_url
+                item["url"] = f"{self.public_base}/images/{asset_id}{self.image_suffix}"
+
+        return next_urls
+
+    def sync_v2(self, body: bytes) -> tuple[int, str, bytes]:
+        """Proxy POST /node/v2/.../sync and rewrite asset URLs like config()."""
+        t0 = time.perf_counter()
+        url = f"{self.upstream}/node/v2/device/{self.device_id}/sync"
+        status, content_type, resp = self.request(url, method="POST", body=body)
+        if status != 200:
+            print(
+                f"bridge: sync_v2 upstream HTTP {status} "
+                f"in {(time.perf_counter() - t0) * 1000:.0f} ms",
+                flush=True,
+            )
+            return status, content_type, resp
+
+        plan = json.loads(resp)
+        if not isinstance(plan, dict):
+            raise RuntimeError("upstream sync_v2 returned non-object JSON")
+
+        next_urls = self._rewrite_plan_urls(plan)
+        if next_urls:
+            with self.lock:
+                self.image_urls.update(next_urls)
+            if self.prefetch_enabled:
+                threading.Thread(
+                    target=self._prefetch_all,
+                    args=(list(next_urls.keys()),),
+                    name="es6f-prefetch-v2",
+                    daemon=True,
+                ).start()
+
+        out = json.dumps(plan, separators=(",", ":")).encode()
+        noop = plan.get("noop")
+        print(
+            f"bridge: sync_v2 noop={noop!r} images={len(plan.get('images') or [])} "
+            f"download={len(plan.get('download') or [])} bytes={len(out)} "
+            f"in {(time.perf_counter() - t0) * 1000:.0f} ms",
+            flush=True,
+        )
+        return 200, "application/json", out
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -338,19 +454,24 @@ class Handler(BaseHTTPRequestHandler):
             self.send_body(502, "text/plain", b"upstream/conversion failed\n")
 
     def do_POST(self) -> None:  # noqa: N802
+        path = urllib.parse.urlsplit(self.path).path
         telemetry_path = f"/node/v0/device/{self.bridge.device_id}/telemetry"
-        if urllib.parse.urlsplit(self.path).path != telemetry_path:
-            self.send_body(404, "text/plain", b"not found\n")
-            return
+        sync_v2_path = f"/node/v2/device/{self.bridge.device_id}/sync"
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            status, content_type, body = self.bridge.telemetry(
-                self.rfile.read(length)
-            )
-            self.send_body(status, content_type, body)
+            payload = self.rfile.read(length)
+            if path == sync_v2_path:
+                status, content_type, body = self.bridge.sync_v2(payload)
+                self.send_body(status, content_type, body)
+                return
+            if path == telemetry_path:
+                status, content_type, body = self.bridge.telemetry(payload)
+                self.send_body(status, content_type, body)
+                return
+            self.send_body(404, "text/plain", b"not found\n")
         except Exception as error:
             print(f"bridge: POST failed: {error}", file=sys.stderr, flush=True)
-            self.send_body(502, "text/plain", b"upstream telemetry failed\n")
+            self.send_body(502, "text/plain", b"upstream post failed\n")
 
 
 def main() -> None:

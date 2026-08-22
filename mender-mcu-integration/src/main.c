@@ -65,6 +65,9 @@ LOG_MODULE_REGISTER(mender_app, LOG_LEVEL_DBG);
 #if defined(CONFIG_APP_EINK_GNSS)
 #include "eink_gnss.h"
 #endif
+#if defined(CONFIG_APP_EINK_T2000)
+#include "eink_t2000.h"
+#endif
 #endif
 
 #ifdef CONFIG_MENDER_CLIENT_INVENTORY_DISABLE
@@ -134,6 +137,10 @@ main(void) {
         LOG_ERR("eink power policy failed (CM4 must stay held in reset)");
         goto END;
     }
+#if defined(CONFIG_APP_EINK_BOM_POWER_LOOP)
+    /* Lab DMM: settle → TOSP/BOM + RTC → POR (or soft retry). Never returns. */
+    eink_power_bom_power_loop();
+#endif
     if (0 != eink_store_init(CONFIG_APP_EINK_STORE_ROOT)) {
         LOG_ERR("eink store init failed");
     }
@@ -146,10 +153,19 @@ main(void) {
         /* No panel on the FRDM Ethernet/Mender lab bench — do not block enroll. */
         LOG_ERR("eink display init failed (continuing without panel)");
     }
+#if defined(CONFIG_APP_EINK_T2000)
+    if (0 != eink_t2000_init()) {
+        LOG_WRN("T2000 USB host init failed (plug TCON on Type-C OTG later)");
+    }
+#endif
 #if defined(CONFIG_APP_EINK_HTTP)
+#if defined(CONFIG_APP_EINK_HTTP_BOOT_INIT) && CONFIG_APP_EINK_HTTP_BOOT_INIT
     if (0 != eink_scheduler_init()) {
         LOG_ERR("eink scheduler init failed");
     }
+#else
+    LOG_INF("eink scheduler deferred (HTTP boot init off)");
+#endif
 #else
     LOG_INF("eink scheduler skipped (HTTP off)");
 #endif
@@ -158,7 +174,8 @@ main(void) {
         LOG_WRN("eink gnss init failed (shell location still works)");
     }
 #endif
-#if defined(CONFIG_APP_EINK_HTTP)
+#if defined(CONFIG_APP_EINK_HTTP) && defined(CONFIG_APP_EINK_HTTP_CLIENT_BOOT_INIT) && \
+	CONFIG_APP_EINK_HTTP_CLIENT_BOOT_INIT
     {
         struct eink_http_config hcfg = { 0 };
 
@@ -186,6 +203,7 @@ main(void) {
             }
         }
         (void)eink_http_init(&hcfg);
+        (void)eink_http_load_persisted_credentials();
     }
 #endif
 #if defined(CONFIG_APP_EINK_SELFTEST)

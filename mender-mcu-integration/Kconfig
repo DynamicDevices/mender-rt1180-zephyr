@@ -66,6 +66,16 @@ if APP_EINK
 		default y
 		depends on SHELL
 
+	config APP_EINK_T2000
+		bool "T2000 USB host client (25\" Spectra 6 TCON)"
+		default n
+		depends on USB_HOST_STACK && UHC_DRIVER
+		help
+		  Thin vendor-bulk client for E Ink T2000 (VID 0x3558). Requires
+		  FRDM Type-C OTG in host role with VBUS, and zephyr_uhc0 in DT
+		  (boards/..._eink_t2000.overlay). Protocol SoT:
+		  DynamicDevices/eink-t2000-usb.
+
 	config APP_EINK_HTTP
 		bool "e-tabelone HTTP client"
 		default y
@@ -86,7 +96,21 @@ if APP_EINK
 		  HyperRAM. FRDM with FlexSPI1/HyperRAM off must use 32–48 KiB
 		  or the BSS will not fit in on-chip SRAM.
 
-	config APP_EINK_HTTP_ENABLE
+	config APP_EINK_HTTP_BOOT_INIT
+		bool "Run eink_scheduler_init() from main()"
+		default y
+		depends on APP_EINK_HTTP
+		help
+		  When disabled, skip scheduler load at boot (HTTP objects still linked).
+
+config APP_EINK_HTTP_CLIENT_BOOT_INIT
+		bool "Run eink_http_init() from main()"
+		default y
+		depends on APP_EINK_HTTP
+		help
+		  When disabled, skip HTTP client/workqueue init at boot.
+
+config APP_EINK_HTTP_ENABLE
 		bool "Enable e-tabelone HTTP sync at boot"
 		default n
 		depends on APP_EINK_HTTP
@@ -117,6 +141,16 @@ if APP_EINK
 		  Do not commit real tokens. Prefer Bitwarden-backed runtime
 		  provisioning via eink_http_set_credentials().
 
+	config APP_EINK_HTTP_CREDS_PERSIST
+		bool "Persist e-tabelone credentials on LittleFS"
+		depends on APP_EINK_HTTP
+		default y
+		help
+		  Save api_base/device_id/auth_token to
+		  APP_EINK_STORE_ROOT/creds.json when set via shell or API.
+		  Reload at boot after eink_http_init. Plaintext on the e-ink
+		  flash partition (not Mender NVS). Clear with token none/-.
+
 	config APP_EINK_HTTP_POLL_INTERVAL
 		int "e-tabelone poll interval (seconds)"
 		depends on APP_EINK_HTTP
@@ -134,6 +168,36 @@ if APP_EINK
 		  to /node/v0 for file:// fixtures. Keep /node/v0 path when
 		  this is disabled (AWS dual-run).
 
+	config APP_EINK_RESOURCE_TELEMETRY
+		bool "Report LittleFS + system-heap usage in telemetry"
+		depends on APP_EINK_HTTP
+		default y
+		select SYS_HEAP_RUNTIME_STATS
+		help
+		  Adds optional telemetry fields storage_total_bytes,
+		  storage_free_bytes, ram_heap_free_bytes,
+		  ram_heap_used_bytes, ram_heap_max_used_bytes (omit a
+		  group when the probe fails). Cloud must accept unknown
+		  optional keys (v0 freeze: additive only).
+
+	config APP_EINK_DEBUG_LOG_UPLOAD
+		bool "On-demand debug log ring + portal upload"
+		depends on APP_EINK_HTTP
+		default y
+		help
+		  Capture recent Zephyr log lines in a circular RAM ring and
+		  POST them to /node/v0/device/{id}/debug-log when the cloud
+		  sets request_debug_log or the operator runs eink log upload.
+
+	config APP_EINK_DEBUG_LOG_RING_SIZE
+		int "Debug log ring size (bytes)"
+		depends on APP_EINK_DEBUG_LOG_UPLOAD
+		default 32768
+		range 4096 65536
+		help
+		  Circular buffer for formatted log text. Upload body is capped
+		  at 64 KiB uncompressed by the cloud.
+
 	config APP_EINK_HTTP_GALLERY_DEFER
 		bool "Defer gallery ES6F downloads until after paint"
 		depends on APP_EINK_HTTP
@@ -144,6 +208,17 @@ if APP_EINK
 		  when that option is enabled). Keeps time-to-first-frame short.
 		  On CONFIG_APP_EINK_BATTERY_DUTY_CYCLE, gallery is skipped so
 		  the radio can drop immediately after telemetry flush.
+
+	config APP_EINK_HTTP_SKIP_GALLERY
+		bool "Skip gallery prefetch (due/primary image only)"
+		depends on APP_EINK_HTTP
+		default n
+		help
+		  Do not download schedule images beyond the due/primary frame.
+		  Required on boards with a small e-ink LittleFS (e.g. FRDM
+		  ~1.75 MiB) where a multi-slot Demo campaign cannot cache
+		  several ~0.5–1 MiB LZ4/ES6F objects. Still downloads and
+		  paints the currently due image.
 
 	config APP_EINK_HTTP_TELEMETRY_DEFER
 		bool "Fire-and-forget telemetry after paint"
@@ -328,6 +403,30 @@ if APP_EINK
 		help
 		  Lab default for "eink snvs" and enter_snvs() when wall
 		  clock / next_wake is not a future unix time.
+
+	config APP_EINK_BOM_POWER_LOOP
+		bool "RT118x lab: loop BOM (TOSP) + BBNSM RTC wake for DMM"
+		depends on APP_EINK && SOC_SERIES_IMXRT118X
+		default n
+		help
+		  After boot, wait PRE_SEC then enter BOM via BBNSM TOSP with
+		  a HOLD_SEC RTC alarm. True BOM wake is a full POR (loop via
+		  reboot). If main 3V3 stays up (FRDM USB), WFI returns and
+		  the loop retries in software. Unplug MCU-Link/OTG and measure
+		  on the DC jack. Rebuild without this option to restore a
+		  normal shell image.
+
+	config APP_EINK_BOM_POWER_LOOP_PRE_SEC
+		int "Seconds to wait before each BOM entry (Agilent settle)"
+		depends on APP_EINK_BOM_POWER_LOOP
+		default 5
+		range 1 120
+
+	config APP_EINK_BOM_POWER_LOOP_HOLD_SEC
+		int "BBNSM RTC alarm seconds while in BOM"
+		depends on APP_EINK_BOM_POWER_LOOP
+		default 10
+		range 2 600
 
 	config APP_EINK_IW612_GPIO
 		bool "Drive IW612 enable from zephyr,user iw612-enable-gpios"
