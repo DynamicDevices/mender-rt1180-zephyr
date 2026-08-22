@@ -180,6 +180,15 @@ config APP_EINK_HTTP_ENABLE
 		  group when the probe fails). Cloud must accept unknown
 		  optional keys (v0 freeze: additive only).
 
+	config APP_EINK_SCREEN_TYPE
+		string "Board-reported screen_type for portal (13in|25in)"
+		depends on APP_EINK_HTTP
+		default ""
+		help
+		  Optional telemetry field screen_type. Cloud accepts only
+		  "13in" or "25in" (portal Type column). Leave empty to omit.
+		  FRDM EL133 / Spectra 6 13.3″ lab: set "13in".
+
 	config APP_EINK_DEBUG_LOG_UPLOAD
 		bool "On-demand debug log ring + portal upload"
 		depends on APP_EINK_HTTP
