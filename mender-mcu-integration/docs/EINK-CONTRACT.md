@@ -110,6 +110,22 @@ force-sync; the cloud clears the flag after that response. Clients should treat
 it as a hint to complete a full sync this wake (log/observe; optional freshness
 invalidation). It is not a push wake.
 
+### On-demand debug log upload
+
+Additive Cloudflare path (see [`docs/CLOUD-HANDOFF-DEBUG-LOG.md`](../../docs/CLOUD-HANDOFF-DEBUG-LOG.md)).
+**Do not** put log text in `telemetry` / v2 sync JSON (v0 freeze).
+
+| Piece | Contract |
+|-------|----------|
+| Config / v2 response | `"request_debug_log": true` (one-shot; cloud clears after successful upload) |
+| Board upload | `POST {base}/node/v0/device/{id}/debug-log` Bearer; `text/plain` or gzip; **≤64 KiB** uncompressed |
+| Capture | Circular RAM ring (**32 KiB** default, `APP_EINK_DEBUG_LOG_RING_SIZE`); Zephyr log backend |
+| Trigger | Portal request **or** shell `eink log upload` — never every-wake by default |
+| Privacy | Redact `Bearer …`, `token=`, `eink creds` lines (device best-effort + cloud) |
+
+`CONFIG_APP_EINK_DEBUG_LOG_UPLOAD` (depends on HTTP). native_sim `file://` may
+write `{store}/debug-log.txt` instead of HTTP.
+
 Production accepts **ES6F** raw, or an **LZ4 frame** whose decompressed
 payload is a complete ES6F v1 file (magic `04 22 4D 18`, same as `lz4 -f`).
 JPEG/PNG remain rejected by magic. Expand timing is selectable:

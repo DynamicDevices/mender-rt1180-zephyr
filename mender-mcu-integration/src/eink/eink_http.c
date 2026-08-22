@@ -14,6 +14,9 @@
 #include "eink_frame.h"
 #include "eink_scheduler.h"
 #include "eink_store.h"
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+#include "eink_log_ring.h"
+#endif
 #if defined(CONFIG_APP_EINK_LOCATION)
 #include "eink_location.h"
 #endif
@@ -111,6 +114,9 @@ struct hdr_scan {
 
 static struct eink_http_config cfg;
 static bool inited;
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+static bool s_request_debug_log;
+#endif
 static bool started;
 static struct k_mutex mu;
 static struct k_work_q http_q;
@@ -628,7 +634,8 @@ static int on_hdr_value2(struct http_parser *parser, const char *at, size_t leng
 
 static int do_http(const char *url, enum http_method method, const char *payload,
 		   size_t payload_len, bool send_auth, struct body_ctx *body,
-		   struct download_ctx *dl, int32_t timeout_ms, const char *extra_hdr)
+		   struct download_ctx *dl, int32_t timeout_ms, const char *extra_hdr,
+		   const char *content_type)
 {
 	/* Static to keep TLS + large URL paths off the shell stack. */
 	static struct url_parts parts;
@@ -689,7 +696,8 @@ static int do_http(const char *url, enum http_method method, const char *payload
 	if (payload != NULL && payload_len > 0) {
 		req.payload = payload;
 		req.payload_len = payload_len;
-		req.content_type_value = "application/json";
+		req.content_type_value =
+			content_type != NULL ? content_type : "application/json";
 	}
 
 	headers[h++] = "Connection: close\r\n";
@@ -752,7 +760,7 @@ static int http_get_body(const char *url, bool send_auth, uint8_t *buf, size_t c
 		ctx.etag_set = false;
 		ctx.etag[0] = '\0';
 		ret = do_http(current, HTTP_GET, NULL, 0, send_auth, &ctx, NULL,
-			      EINK_HTTP_TIMEOUT_MS, extra);
+			      EINK_HTTP_TIMEOUT_MS, extra, NULL);
 		if (ret) {
 			return ret;
 		}
@@ -825,7 +833,7 @@ static int http_download_to_file(const char *url, bool send_auth, const char *pa
 		ctx.location[0] = '\0';
 
 		ret = do_http(current, HTTP_GET, NULL, 0, send_auth && !is_s3_url(current), NULL,
-			      &ctx, EINK_HTTP_DOWNLOAD_TIMEOUT_MS, NULL);
+			      &ctx, EINK_HTTP_DOWNLOAD_TIMEOUT_MS, NULL, NULL);
 		if (ret == 0) {
 			int64_t tw = k_uptime_get();
 
@@ -903,7 +911,7 @@ static int http_post_json(const char *url, const char *json)
 	ctx.buf = discard;
 	ctx.cap = sizeof(discard);
 	ret = do_http(url, HTTP_POST, json, strlen(json), true, &ctx, NULL, EINK_HTTP_TIMEOUT_MS,
-		      NULL);
+		      NULL, NULL);
 	if (ret) {
 		return ret;
 	}
@@ -913,6 +921,92 @@ static int http_post_json(const char *url, const char *json)
 	}
 	return 0;
 }
+
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+#define EINK_DEBUG_LOG_POST_MAX CONFIG_APP_EINK_DEBUG_LOG_RING_SIZE
+
+static char debug_log_snap[EINK_DEBUG_LOG_POST_MAX];
+
+static int eink_http_upload_debug_log(void)
+{
+	char url[320];
+	struct body_ctx ctx = { 0 };
+	static uint8_t discard[256];
+	size_t n;
+	int64_t t0;
+	int ret;
+
+	if (!inited || cfg.api_base[0] == '\0' || cfg.device_id[0] == '\0') {
+		return -EINVAL;
+	}
+
+	n = eink_log_ring_snapshot(debug_log_snap, sizeof(debug_log_snap));
+	if (n == 0) {
+		LOG_WRN("debug log ring empty — uploading placeholder");
+		n = snprintk(debug_log_snap, sizeof(debug_log_snap),
+			     "(empty debug log ring)\n");
+	}
+	eink_log_ring_redact_inplace(debug_log_snap, n);
+
+	if (strncmp(cfg.api_base, "file://", 7) == 0) {
+		char path[320];
+		struct fs_file_t f;
+
+		snprintf(path, sizeof(path), "%s/debug-log.txt", CONFIG_APP_EINK_STORE_ROOT);
+		(void)fs_unlink(path);
+		fs_file_t_init(&f);
+		ret = fs_open(&f, path, FS_O_CREATE | FS_O_WRITE | FS_O_TRUNC);
+		if (ret < 0) {
+			return ret;
+		}
+		ret = fs_write(&f, debug_log_snap, n);
+		(void)fs_close(&f);
+		if (ret < 0) {
+			return ret;
+		}
+		LOG_INF("debug log wrote fixture %s (%u bytes)", path, (unsigned)n);
+		return 0;
+	}
+
+	snprintf(url, sizeof(url), "%s/node/v0/device/%s/debug-log", cfg.api_base, cfg.device_id);
+	ctx.buf = discard;
+	ctx.cap = sizeof(discard);
+	t0 = k_uptime_get();
+	LOG_INF("POST %s (%u bytes)", url, (unsigned)n);
+	ret = do_http(url, HTTP_POST, debug_log_snap, n, true, &ctx, NULL, EINK_HTTP_TIMEOUT_MS,
+		      NULL, "text/plain; charset=utf-8");
+	if (ret) {
+		return ret;
+	}
+	if (ctx.status_code != 201 && (ctx.status_code < 200 || ctx.status_code >= 300)) {
+		LOG_ERR("debug log HTTP %d", ctx.status_code);
+		return -EIO;
+	}
+	LOG_INF("prof: debug_log upload=%lld ms bytes=%u http=%d",
+		(long long)(k_uptime_get() - t0), (unsigned)n, ctx.status_code);
+	return 0;
+}
+
+int eink_http_debug_log_upload_now(void)
+{
+	return eink_http_upload_debug_log();
+}
+
+static void eink_http_maybe_upload_debug_log(bool requested)
+{
+	int ret;
+
+	if (!requested && !s_request_debug_log) {
+		return;
+	}
+	s_request_debug_log = false;
+	ret = eink_http_upload_debug_log();
+	if (ret) {
+		/* Leave cloud flag set — retry next wake. */
+		LOG_WRN("debug log upload failed: %d — retry next wake", ret);
+	}
+}
+#endif /* CONFIG_APP_EINK_DEBUG_LOG_UPLOAD */
 
 #if defined(CONFIG_APP_EINK_HTTP_V2_SYNC)
 static int http_post_json_body(const char *url, const char *json, uint8_t *buf, size_t cap,
@@ -929,7 +1023,7 @@ static int http_post_json_body(const char *url, const char *json, uint8_t *buf, 
 	}
 	memset(buf, 0, cap);
 	ret = do_http(url, HTTP_POST, json, strlen(json), true, &ctx, NULL, EINK_HTTP_TIMEOUT_MS,
-		      NULL);
+		      NULL, NULL);
 	if (ret) {
 		return ret;
 	}
@@ -1023,13 +1117,22 @@ static int parse_config_json(const char *json, size_t json_len, struct eink_sche
 		*orientation = ori->valueint;
 	}
 
-	/* Optional cloud force-sync hint (cleared server-side after this GET). */
+	/* Optional cloud force-sync / debug-log hints (server clears after action). */
 	{
 		cJSON *sync_now = cJSON_GetObjectItemCaseSensitive(root, "sync_now");
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+		cJSON *rdl = cJSON_GetObjectItemCaseSensitive(root, "request_debug_log");
+#endif
 
 		if (cJSON_IsTrue(sync_now)) {
 			LOG_INF("cloud sync_now requested — full sync this wake");
 		}
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+		if (cJSON_IsTrue(rdl)) {
+			s_request_debug_log = true;
+			LOG_INF("cloud request_debug_log — upload after sync");
+		}
+#endif
 	}
 
 	sched = cJSON_GetObjectItemCaseSensitive(root, "schedule");
@@ -1110,6 +1213,9 @@ int eink_http_init(const struct eink_http_config *c)
 		cfg.poll_interval_seconds = 300;
 	}
 	inited = true;
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+	eink_log_ring_init();
+#endif
 	LOG_INF("http %s base=%s device=%s tls_tag=%d", cfg.enabled ? "on" : "off", cfg.api_base,
 		cfg.device_id, cfg.tls_sec_tag);
 	ensure_http_queue();
@@ -2052,6 +2158,11 @@ static int sync_v2_once_inner(void)
 	int ret;
 	bool noop = false;
 	bool sync_now = false;
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+	bool request_debug_log = false;
+	int64_t ms_log = 0;
+	size_t log_bytes = 0;
+#endif
 
 	if (!inited || !cfg.enabled) {
 		return -EINVAL;
@@ -2138,6 +2249,9 @@ static int sync_v2_once_inner(void)
 		cJSON *proto = cJSON_GetObjectItemCaseSensitive(root, "protocol");
 		cJSON *noop_j = cJSON_GetObjectItemCaseSensitive(root, "noop");
 		cJSON *sn = cJSON_GetObjectItemCaseSensitive(root, "sync_now");
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+		cJSON *rdl = cJSON_GetObjectItemCaseSensitive(root, "request_debug_log");
+#endif
 		cJSON *sched_j = cJSON_GetObjectItemCaseSensitive(root, "schedule");
 		cJSON *imgs = cJSON_GetObjectItemCaseSensitive(root, "images");
 		cJSON *dls = cJSON_GetObjectItemCaseSensitive(root, "download");
@@ -2153,6 +2267,12 @@ static int sync_v2_once_inner(void)
 		if (sync_now) {
 			LOG_INF("cloud sync_now requested — full sync this wake");
 		}
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+		request_debug_log = cJSON_IsTrue(rdl);
+		if (request_debug_log) {
+			LOG_INF("cloud request_debug_log — upload after sync");
+		}
+#endif
 
 		sched.count = 0;
 		if (cJSON_IsArray(sched_j)) {
@@ -2340,10 +2460,28 @@ static int sync_v2_once_inner(void)
 	ms_gallery = k_uptime_get() - t_mark;
 	(void)eink_store_save_last_sync(now);
 
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+	t_mark = k_uptime_get();
+	if (request_debug_log) {
+		log_bytes = eink_log_ring_bytes();
+	}
+	eink_http_maybe_upload_debug_log(request_debug_log);
+	ms_log = k_uptime_get() - t_mark;
+#endif
+
 	LOG_INF("prof: sync total=%lld ms plan=%lld primary=%lld paint=%lld "
-		"gallery=%lld (%u dl) telem=0 (v2)",
+		"gallery=%lld (%u dl) telem=0 (v2)"
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+		" log_ms=%lld log_bytes=%u"
+#endif
+		,
 		(long long)(k_uptime_get() - t_sync), (long long)ms_plan, (long long)ms_primary,
-		(long long)ms_paint, (long long)ms_gallery, (unsigned)gallery_downloads);
+		(long long)ms_paint, (long long)ms_gallery, (unsigned)gallery_downloads
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+		,
+		(long long)ms_log, (unsigned)log_bytes
+#endif
+		);
 	return 0;
 }
 #endif /* CONFIG_APP_EINK_HTTP_V2_SYNC */
@@ -2573,6 +2711,9 @@ static int eink_http_sync_once_inner(void)
 			(long long)(k_uptime_get() - t_sync), (long long)ms_config,
 			(long long)ms_primary, (long long)ms_paint, (long long)ms_gallery,
 			(unsigned)gallery_downloads, (long long)ms_telem);
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+		eink_http_maybe_upload_debug_log(false);
+#endif
 		return telem_ret;
 	}
 }

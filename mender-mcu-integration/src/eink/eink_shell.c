@@ -12,6 +12,9 @@
 #if defined(CONFIG_APP_EINK_HTTP)
 #include "eink_http.h"
 #endif
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+#include "eink_log_ring.h"
+#endif
 #if defined(CONFIG_APP_EINK_LOCATION)
 #include "eink_location.h"
 #endif
@@ -214,6 +217,38 @@ static int cmd_creds(const struct shell *sh, size_t argc, char **argv)
 	shell_print(sh, "credentials updated and persisted (token not echoed)");
 	return 0;
 }
+
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+static int cmd_log_status(const struct shell *sh, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+	shell_print(sh, "debug log ring: %u bytes, %u newlines (cap %u)",
+		    (unsigned)eink_log_ring_bytes(), (unsigned)eink_log_ring_line_count(),
+		    (unsigned)CONFIG_APP_EINK_DEBUG_LOG_RING_SIZE);
+	return 0;
+}
+
+static int cmd_log_upload(const struct shell *sh, size_t argc, char **argv)
+{
+	int ret;
+
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+	ret = eink_http_debug_log_upload_now();
+	if (ret) {
+		shell_error(sh, "debug log upload failed: %d", ret);
+		return ret;
+	}
+	shell_print(sh, "debug log upload ok");
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(eink_log_cmds,
+	SHELL_CMD(status, NULL, "Show RAM debug log ring fill", cmd_log_status),
+	SHELL_CMD(upload, NULL, "POST debug log ring to cloud", cmd_log_upload),
+	SHELL_SUBCMD_SET_END);
+#endif /* CONFIG_APP_EINK_DEBUG_LOG_UPLOAD */
 #endif
 
 static int cmd_uid(const struct shell *sh, size_t argc, char **argv)
@@ -499,6 +534,9 @@ SHELL_STATIC_SUBCMD_SET_CREATE(eink_cmds,
 	SHELL_CMD(sync, NULL, "One-shot e-tabelone sync", cmd_sync),
 	SHELL_CMD(http_start, NULL, "Start periodic e-tabelone sync", cmd_http_start),
 	SHELL_CMD_ARG(creds, NULL, "Set API base/device/token", cmd_creds, 4, 0),
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+	SHELL_CMD(log, &eink_log_cmds, "Debug log ring (status|upload)", NULL),
+#endif
 #endif
 	SHELL_SUBCMD_SET_END);
 

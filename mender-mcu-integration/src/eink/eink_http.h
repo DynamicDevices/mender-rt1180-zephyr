@@ -92,4 +92,9 @@ int eink_http_set_credentials(const char *api_base, const char *device_id,
  */
 int eink_http_load_persisted_credentials(void);
 
+#if defined(CONFIG_APP_EINK_DEBUG_LOG_UPLOAD)
+/** Snapshot the RAM log ring and POST to /debug-log (lab shell / tests). */
+int eink_http_debug_log_upload_now(void);
+#endif
+
 #endif

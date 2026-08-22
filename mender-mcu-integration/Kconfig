@@ -180,6 +180,24 @@ config APP_EINK_HTTP_ENABLE
 		  group when the probe fails). Cloud must accept unknown
 		  optional keys (v0 freeze: additive only).
 
+	config APP_EINK_DEBUG_LOG_UPLOAD
+		bool "On-demand debug log ring + portal upload"
+		depends on APP_EINK_HTTP
+		default y
+		help
+		  Capture recent Zephyr log lines in a circular RAM ring and
+		  POST them to /node/v0/device/{id}/debug-log when the cloud
+		  sets request_debug_log or the operator runs eink log upload.
+
+	config APP_EINK_DEBUG_LOG_RING_SIZE
+		int "Debug log ring size (bytes)"
+		depends on APP_EINK_DEBUG_LOG_UPLOAD
+		default 32768
+		range 4096 65536
+		help
+		  Circular buffer for formatted log text. Upload body is capped
+		  at 64 KiB uncompressed by the cloud.
+
 	config APP_EINK_HTTP_GALLERY_DEFER
 		bool "Defer gallery ES6F downloads until after paint"
 		depends on APP_EINK_HTTP
