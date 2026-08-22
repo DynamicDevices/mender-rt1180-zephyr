@@ -28,11 +28,6 @@ LOG_MODULE_REGISTER(eink_lz4, LOG_LEVEL_INF);
 #define EINK_LZ4_IO_CHUNK 8192u
 #endif
 
-#ifndef EINK_LZ4_COMPRESSED_MAX
-/* Allow near-ES6F “uncompressed block” LZ4F frames (cloud device-safe path). */
-#define EINK_LZ4_COMPRESSED_MAX (1024u * 1024u)
-#endif
-
 bool eink_lz4_is_frame(const uint8_t *buf, size_t n)
 {
 	if (buf == NULL || n < 4) {

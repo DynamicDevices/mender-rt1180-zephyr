@@ -22,6 +22,14 @@
 #define EINK_LZ4_FRAME_MAGIC_2 0x4Du
 #define EINK_LZ4_FRAME_MAGIC_3 0x18u
 
+/**
+ * Max on-disk LZ4 frame size we accept/show (near-ES6F “uncompressed block”
+ * frames from cloud). Must match accept + has_image_quick + expand paths.
+ */
+#ifndef EINK_LZ4_COMPRESSED_MAX
+#define EINK_LZ4_COMPRESSED_MAX (1024u * 1024u)
+#endif
+
 /** True if @a n bytes look like an LZ4 frame. */
 bool eink_lz4_is_frame(const uint8_t *buf, size_t n);
 
