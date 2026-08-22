@@ -6,6 +6,7 @@
  * LZ4F_decompress into LittleFS in EINK_LZ4_IO_CHUNK writes.
  */
 #include "eink_lz4.h"
+#include "eink_store.h"
 
 #include "eink_frame.h"
 
@@ -112,15 +113,21 @@ int eink_lz4_decompress_file(const char *src_path, const char *dst_path)
 	size_t src_len = 0;
 	size_t src_off = 0;
 	size_t total_out = 0;
+	int64_t write_ms = 0;
 	int ret;
 
 	if (src_path == NULL || dst_path == NULL) {
 		return -EINVAL;
 	}
 
-	ret = read_all(src_path, &src, &src_len);
-	if (ret < 0) {
-		return ret;
+	{
+		int64_t t_rd = k_uptime_get();
+
+		ret = read_all(src_path, &src, &src_len);
+		if (ret < 0) {
+			return ret;
+		}
+		eink_prof_flash_io("read", src_len, k_uptime_get() - t_rd);
 	}
 
 	fs_file_t_init(&out);
@@ -157,7 +164,12 @@ int eink_lz4_decompress_file(const char *src_path, const char *dst_path)
 				ret = -EFBIG;
 				goto out;
 			}
-			nw = fs_write(&out, out_buf, dst_size);
+			{
+				int64_t tw = k_uptime_get();
+
+				nw = fs_write(&out, out_buf, dst_size);
+				write_ms += k_uptime_get() - tw;
+			}
 			if (nw != (ssize_t)dst_size) {
 				ret = nw < 0 ? (int)nw : -EIO;
 				goto out;
@@ -175,10 +187,16 @@ int eink_lz4_decompress_file(const char *src_path, const char *dst_path)
 		}
 	}
 
-	ret = fs_sync(&out);
+	{
+		int64_t tw = k_uptime_get();
+
+		ret = fs_sync(&out);
+		write_ms += k_uptime_get() - tw;
+	}
 	if (ret < 0) {
 		goto out;
 	}
+	eink_prof_flash_io("write", total_out, write_ms);
 	if (total_out != EINK_FRAME_FILE_SIZE) {
 		LOG_ERR("LZ4 expand size %u != ES6F %u", (unsigned)total_out,
 			(unsigned)EINK_FRAME_FILE_SIZE);

@@ -9,6 +9,7 @@ export BUILD_DIR="${BUILD_DIR:-build-frdm-rt1186-eink}"
 
 EL133_MODULE="${ROOT}/mender-mcu-integration/modules/eink-el133"
 EL133_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_eink_el133.overlay"
+FLASH_MAP_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_eink_flash_map.overlay"
 EL133_CONF="boards/frdm_imxrt1186_mimxrt1186_cm33_eink_el133.conf"
 SHELL_CONF="boards/mimxrt1170_eink_shell.conf"
 
@@ -58,11 +59,11 @@ fi
 MCUBOOT_DTCM_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_mcuboot_dtcm.overlay"
 
 # Do not overwrite OCRAM enroll overlay from build-rt1186-frdm.sh — merge.
-DTC_OVERLAYS="${EL133_OVERLAY}"
+DTC_OVERLAYS="${FLASH_MAP_OVERLAY};${EL133_OVERLAY}"
 case "${FRDM_ENROLL_OCRAM:-}" in
   1|true|TRUE|yes|YES|on|ON)
     OCRAM_OVERLAY="${ROOT}/mender-mcu-integration/boards/frdm_imxrt1186_mimxrt1186_cm33_ocram.overlay"
-    DTC_OVERLAYS="${OCRAM_OVERLAY};${EL133_OVERLAY}"
+    DTC_OVERLAYS="${OCRAM_OVERLAY};${FLASH_MAP_OVERLAY};${EL133_OVERLAY}"
     echo "FRDM_ENROLL_OCRAM=1: merging ocram.overlay + el133.overlay" >&2
     ;;
 esac
@@ -71,8 +72,11 @@ if [[ "${FRDM_T2000:-}" == "1" ]]; then
   echo "FRDM_T2000=1: merging eink_t2000.overlay" >&2
 fi
 
+# MCUboot must see the same slot/NVS/LittleFS map as the app (2 MiB slots).
+MCUBOOT_OVERLAYS="${FLASH_MAP_OVERLAY};${MCUBOOT_DTCM_OVERLAY}"
+
 exec "${ROOT}/scripts/build-rt1186-frdm.sh" "$@" \
   -DZEPHYR_EXTRA_MODULES="${EL133_MODULE}" \
   -DEXTRA_CONF_FILE="${EXTRA_CONF}" \
   -DEXTRA_DTC_OVERLAY_FILE="${DTC_OVERLAYS}" \
-  -Dmcuboot_EXTRA_DTC_OVERLAY_FILE="${MCUBOOT_DTCM_OVERLAY}"
+  -Dmcuboot_EXTRA_DTC_OVERLAY_FILE="${MCUBOOT_OVERLAYS}"

@@ -68,6 +68,11 @@ tree (`eink_http.c` / `eink_scheduler.c`):
 wake → net → `GET /node/v0/device/{id}/config` → fetch due then gallery
 images → `POST …/telemetry` → run cron → paint Spectra 6 → sleep.
 
+**Awake budget (FRDM 2026-08-22):** after 2 MiB A/B slots, `/lfs1` ≈11.75 MiB.
+Typical content-change wake with expand-on-display: ~6 s NOR write (LZ4) +
+~8 s expand write + paint; total sync wall ~22 s — see
+[`POWER-HARDWARE-CONTRACT.md`](../mender-mcu-integration/docs/POWER-HARDWARE-CONTRACT.md#frdm-wake-window-bench--littlefs--lz4-flash-io-2026-08-22).
+
 | Piece | Jaguar (i.MX93 Linux) | This Zephyr tree |
 |-------|----------------------|------------------|
 | Config / jobs | `GET …/config` | same path |

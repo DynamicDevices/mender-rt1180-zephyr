@@ -77,6 +77,7 @@ struct url_parts {
 struct download_ctx {
 	struct fs_file_t *fp;
 	size_t written;
+	int64_t flash_write_ms;
 	int status_code;
 	int err;
 	bool headers_done;
@@ -564,11 +565,15 @@ static int download_response_cb(struct http_response *rsp, enum http_final_call 
 				return -ENOTSUP;
 			}
 		}
-		ssize_t written = fs_write(ctx->fp, rsp->body_frag_start, rsp->body_frag_len);
+		{
+			int64_t tw = k_uptime_get();
+			ssize_t written = fs_write(ctx->fp, rsp->body_frag_start, rsp->body_frag_len);
 
-		if (written != (ssize_t)rsp->body_frag_len) {
-			ctx->err = -EIO;
-			return -EIO;
+			ctx->flash_write_ms += k_uptime_get() - tw;
+			if (written != (ssize_t)rsp->body_frag_len) {
+				ctx->err = -EIO;
+				return -EIO;
+			}
 		}
 		ctx->written += rsp->body_frag_len;
 	}
@@ -812,6 +817,7 @@ static int http_download_to_file(const char *url, bool send_auth, const char *pa
 		}
 		ctx.fp = &file;
 		ctx.written = 0;
+		ctx.flash_write_ms = 0;
 		ctx.err = 0;
 		ctx.status_code = 0;
 		ctx.location_set = false;
@@ -821,7 +827,13 @@ static int http_download_to_file(const char *url, bool send_auth, const char *pa
 		ret = do_http(current, HTTP_GET, NULL, 0, send_auth && !is_s3_url(current), NULL,
 			      &ctx, EINK_HTTP_DOWNLOAD_TIMEOUT_MS, NULL);
 		if (ret == 0) {
+			int64_t tw = k_uptime_get();
+
 			ret = fs_sync(ctx.fp);
+			ctx.flash_write_ms += k_uptime_get() - tw;
+			if (ret == 0) {
+				eink_prof_flash_io("write", ctx.written, ctx.flash_write_ms);
+			}
 		}
 		(void)fs_close(ctx.fp);
 		ctx.fp = NULL;

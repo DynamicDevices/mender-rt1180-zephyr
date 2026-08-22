@@ -1,0 +1,42 @@
+/*
+ * Upstream: 128 KiB MCUboot + 7 MiB ×2 slots + ~1.9 MiB storage on 16 MiB NOR.
+ * App is ~0.4 MiB — shrink A/B slots to 2 MiB each and give the rest to /lfs1
+ * so expand-on-display can hold LZ4 + ES6F (~1.6 MiB) with gallery headroom.
+ *
+ *   boot   @ 0x000000  128 KiB  (unchanged)
+ *   slot0  @ 0x020000    2 MiB
+ *   slot1  @ 0x220000    2 MiB
+ *   NVS    @ 0x420000  128 KiB
+ *   /lfs1  @ 0x440000 ~11.75 MiB  (to end of 16 MiB)
+ */
+/delete-node/ &slot0_partition;
+/delete-node/ &slot1_partition;
+/delete-node/ &storage_partition;
+
+&w25q128jv {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		slot0_partition: partition@20000 {
+			label = "image-0";
+			reg = <0x00020000 DT_SIZE_M(2)>;
+		};
+
+		slot1_partition: partition@220000 {
+			label = "image-1";
+			reg = <0x00220000 DT_SIZE_M(2)>;
+		};
+
+		storage_partition: partition@420000 {
+			label = "storage";
+			reg = <0x00420000 DT_SIZE_K(128)>;
+		};
+
+		eink_storage_partition: partition@440000 {
+			label = "eink-storage";
+			reg = <0x00440000 0x00bc0000>;
+		};
+	};
+};

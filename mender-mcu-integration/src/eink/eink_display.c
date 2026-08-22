@@ -16,6 +16,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/display.h>
 #include <zephyr/fs/fs.h>
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/util.h>
 
@@ -68,6 +69,8 @@ struct stream_file {
 	FILE *host;
 #endif
 	size_t payload_left;
+	size_t flash_read_bytes;
+	int64_t flash_read_ms;
 	uint8_t solid_byte;
 	bool solid;
 };
@@ -145,6 +148,9 @@ static void stream_close(struct stream_file *s)
 	if (s->open) {
 		(void)fs_close(&s->f);
 		s->open = false;
+		if (s->flash_read_bytes > 0) {
+			eink_prof_flash_io("read", s->flash_read_bytes, s->flash_read_ms);
+		}
 	}
 }
 
@@ -174,7 +180,12 @@ static int stream_fill_cb(void *user, uint8_t *dst, size_t max_len)
 		return (int)want;
 	}
 #endif
-	n = (int)fs_read(&s->f, dst, want);
+	{
+		int64_t tr = k_uptime_get();
+
+		n = (int)fs_read(&s->f, dst, want);
+		s->flash_read_ms += k_uptime_get() - tr;
+	}
 	if (n < 0) {
 		return n;
 	}
@@ -182,6 +193,7 @@ static int stream_fill_cb(void *user, uint8_t *dst, size_t max_len)
 		return -EINVAL;
 	}
 	s->payload_left -= want;
+	s->flash_read_bytes += (size_t)n;
 	return n;
 }
 #endif
@@ -392,7 +404,15 @@ static int stream_read_row(void *user, uint16_t y, bool right, uint8_t *row300)
 	if (n < 0) {
 		return n;
 	}
-	n = (int)fs_read(&s->f, row300, 300);
+	{
+		int64_t tr = k_uptime_get();
+
+		n = (int)fs_read(&s->f, row300, 300);
+		s->flash_read_ms += k_uptime_get() - tr;
+	}
+	if (n > 0) {
+		s->flash_read_bytes += (size_t)n;
+	}
 	return (n == 300) ? 0 : (n < 0 ? n : -EINVAL);
 }
 #endif /* POSIX || LCD_PREVIEW */

@@ -133,6 +133,13 @@ lets you hard-gate WiFi sooner; paint pays LZ4 + scratch write with radio off.
 Prefer on-display until HW joules say otherwise; switch to on-download if the
 same frame is repainted often offline (amortize expand once).
 
+**FRDM-IMXRT1186 bench (2026-08-22, expand-on-display, W25Q128 `/lfs1`):**
+HTTP LZ4 write ~**115 KiB/s** (5.6 s / 658 KiB); LZ4→ES6F expand write
+~**117 KiB/s** (8.0 s / 960 KiB); flash reads ~**5–7 MiB/s**. Full v2 sync +
+paint wall ~**22 s** then BOM/sleep candidate. Detail + sleep implications:
+[`POWER-HARDWARE-CONTRACT.md`](POWER-HARDWARE-CONTRACT.md#frdm-wake-window-bench--littlefs--lz4-flash-io-2026-08-22).
+Shell: `eink flash_bench <path> [write]`; logs `prof: flash_read|write=…`.
+
 Defaults: base
 `https://etablone.dynamicdevices.co.uk` (Cloudflare). Legacy AWS
 `https://api.dev.e-tabelone.com` remains valid during dual-run — set via

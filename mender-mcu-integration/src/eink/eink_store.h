@@ -80,4 +80,7 @@ int eink_store_validate_path(const char *path, struct eink_frame_header *out_hdr
  */
 int eink_store_materialize_es6f(const char *path, char *out, size_t out_cap);
 
+/** Log flash I/O timing: prof: flash_<op>=N ms bytes=B (K KiB/s). */
+void eink_prof_flash_io(const char *op, size_t bytes, int64_t ms);
+
 #endif

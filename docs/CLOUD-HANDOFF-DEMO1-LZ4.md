@@ -26,7 +26,7 @@ Known-good SDL fixture `f50a3f20-…` (~4 KiB) decompresses to 960032-byte ES6F 
 ## Root causes (cloud)
 
 1. **`src/lz4frame.ts` still calls raw `lz4.compress(es6f)`** — no ≤64 KiB independent blocks. Sticky R2 `frame.es6f.lz4` objects for Demo assets were never recompressed (or are corrupt / non-ES6F payloads).
-2. Demo photo LZ4 objects are **~0.5–0.7 MiB** each; FRDM eink LittleFS is **~1.75 MiB** — even with gallery skip, a single bad/oversized frame hurts.
+2. Demo photo LZ4 objects are **~0.5–0.7 MiB** each; FRDM eink LittleFS was **~1.75 MiB** (pre–2 MiB-slot map); now **~11.75 MiB** (`…_eink_flash_map.overlay`) — even with gallery skip, a single bad/oversized frame hurts.
 
 ## Desired cloud actions
 

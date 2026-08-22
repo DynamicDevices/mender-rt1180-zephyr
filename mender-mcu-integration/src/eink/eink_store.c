@@ -20,6 +20,20 @@
 
 LOG_MODULE_REGISTER(eink_store, LOG_LEVEL_INF);
 
+void eink_prof_flash_io(const char *op, size_t bytes, int64_t ms)
+{
+	unsigned kib_s = 0;
+
+	if (op == NULL) {
+		op = "?";
+	}
+	if (ms > 0) {
+		kib_s = (unsigned)(((uint64_t)bytes * 1000ull) / ((uint64_t)ms * 1024ull));
+	}
+	LOG_INF("prof: flash_%s=%lld ms bytes=%u (%u KiB/s)", op, (long long)ms, (unsigned)bytes,
+		kib_s);
+}
+
 static char root[256] = "/tmp/eink-zephyr";
 
 /** Unlink if present; avoid Zephyr ERR logs on missing paths (-ENOENT). */
@@ -1145,13 +1159,21 @@ int eink_store_put_image(const char *image_id, const uint8_t *es6f, size_t len)
 	if (ret < 0) {
 		return ret;
 	}
-	ret = fs_write(&f, es6f, len);
-	if (ret != (int)len) {
-		(void)fs_close(&f);
-		(void)fs_unlink(tmp);
-		return ret < 0 ? ret : -EIO;
+	{
+		int64_t t0 = k_uptime_get();
+
+		ret = fs_write(&f, es6f, len);
+		if (ret == (int)len) {
+			int sync_ret = fs_sync(&f);
+
+			eink_prof_flash_io("write", len, k_uptime_get() - t0);
+			ret = sync_ret;
+		} else {
+			(void)fs_close(&f);
+			(void)fs_unlink(tmp);
+			return ret < 0 ? ret : -EIO;
+		}
 	}
-	ret = fs_sync(&f);
 	(void)fs_close(&f);
 	if (ret < 0) {
 		(void)fs_unlink(tmp);

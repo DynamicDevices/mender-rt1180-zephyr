@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include "eink_display.h"
+#include "eink_store.h"
 #include "eink_frame.h"
 #include "eink_power.h"
 #include "eink_scheduler.h"
@@ -20,8 +21,11 @@
 #include "utils/soc_uid.h"
 
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <zephyr/fs/fs.h>
+#include <zephyr/kernel.h>
 #include <zephyr/shell/shell.h>
 #include <zephyr/logging/log.h>
 
@@ -348,8 +352,137 @@ SHELL_STATIC_SUBCMD_SET_CREATE(eink_t2000_cmds,
 	SHELL_SUBCMD_SET_END);
 #endif
 
+
+static int cmd_flash_bench(const struct shell *sh, size_t argc, char **argv)
+{
+	struct fs_file_t f;
+	struct fs_dirent ent;
+	static uint8_t chunk[4096];
+	const char *path;
+	char tmp[340];
+	size_t total = 0;
+	int64_t t0;
+	int64_t ms;
+	int ret;
+	bool do_write = false;
+
+	if (argc < 2) {
+		shell_error(sh, "usage: eink flash_bench <path> [write]");
+		return -EINVAL;
+	}
+	path = argv[1];
+	if (argc >= 3 && strcmp(argv[2], "write") == 0) {
+		do_write = true;
+	}
+
+	ret = fs_stat(path, &ent);
+	if (ret < 0) {
+		shell_error(sh, "stat %s: %d", path, ret);
+		return ret;
+	}
+
+	fs_file_t_init(&f);
+	ret = fs_open(&f, path, FS_O_READ);
+	if (ret < 0) {
+		shell_error(sh, "open %s: %d", path, ret);
+		return ret;
+	}
+	t0 = k_uptime_get();
+	while (total < ent.size) {
+		size_t want = ent.size - total;
+
+		if (want > sizeof(chunk)) {
+			want = sizeof(chunk);
+		}
+		ssize_t n = fs_read(&f, chunk, want);
+
+		if (n < 0) {
+			(void)fs_close(&f);
+			shell_error(sh, "read: %d", (int)n);
+			return (int)n;
+		}
+		if (n == 0) {
+			break;
+		}
+		total += (size_t)n;
+	}
+	(void)fs_close(&f);
+	ms = k_uptime_get() - t0;
+	eink_prof_flash_io("read", total, ms);
+	shell_print(sh, "flash_bench read %u bytes in %lld ms", (unsigned)total, (long long)ms);
+
+	if (!do_write) {
+		return 0;
+	}
+	if (strlen(path) + 12 >= sizeof(tmp)) {
+		return -ENOMEM;
+	}
+	snprintf(tmp, sizeof(tmp), "%s.bench", path);
+	(void)fs_unlink(tmp);
+	fs_file_t_init(&f);
+	ret = fs_open(&f, tmp, FS_O_CREATE | FS_O_WRITE | FS_O_TRUNC);
+	if (ret < 0) {
+		shell_error(sh, "create %s: %d", tmp, ret);
+		return ret;
+	}
+	/* Re-read source while writing — measures write path of same size. */
+	{
+		struct fs_file_t in;
+		size_t written = 0;
+
+		fs_file_t_init(&in);
+		ret = fs_open(&in, path, FS_O_READ);
+		if (ret < 0) {
+			(void)fs_close(&f);
+			(void)fs_unlink(tmp);
+			return ret;
+		}
+		t0 = k_uptime_get();
+		while (written < ent.size) {
+			size_t want = ent.size - written;
+			ssize_t n;
+			ssize_t nw;
+
+			if (want > sizeof(chunk)) {
+				want = sizeof(chunk);
+			}
+			n = fs_read(&in, chunk, want);
+			if (n <= 0) {
+				ret = n < 0 ? (int)n : -EIO;
+				break;
+			}
+			nw = fs_write(&f, chunk, (size_t)n);
+			if (nw != n) {
+				ret = nw < 0 ? (int)nw : -EIO;
+				break;
+			}
+			written += (size_t)n;
+			ret = 0;
+		}
+		if (ret == 0) {
+			ret = fs_sync(&f);
+		}
+		ms = k_uptime_get() - t0;
+		(void)fs_close(&in);
+		(void)fs_close(&f);
+		if (ret < 0) {
+			(void)fs_unlink(tmp);
+			shell_error(sh, "write failed: %d", ret);
+			return ret;
+		}
+		eink_prof_flash_io("write", written, ms);
+		shell_print(sh, "flash_bench write %u bytes in %lld ms -> %s", (unsigned)written,
+			    (long long)ms, tmp);
+		(void)fs_unlink(tmp);
+	}
+	return 0;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(eink_cmds,
 	SHELL_CMD_ARG(show, NULL, "Show ES6F frame file", cmd_show, 2, 1),
+	SHELL_CMD_ARG(flash_bench, NULL,
+		      "Time LittleFS image R/W: flash_bench <path> [write]", cmd_flash_bench, 2,
+		      1),
 	SHELL_CMD(clear, NULL, "Clear panel (white)", cmd_clear),
 	SHELL_CMD(status, NULL, "Display status", cmd_status),
 	SHELL_CMD(uid, NULL, "Print SoC UID hex (device identity SoT)", cmd_uid),

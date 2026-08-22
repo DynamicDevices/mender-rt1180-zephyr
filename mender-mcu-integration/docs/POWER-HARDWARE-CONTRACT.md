@@ -96,6 +96,45 @@ domains; pick SNVS-capable net for IW612 host-wake; status LEDs **DNP** on
 production (FRDM LED was ~mA in the sleep budget). Target remains ≤50 µA @
 25 °C at battery input once the product tree is instrumented.
 
+## FRDM wake-window bench — LittleFS / LZ4 flash I/O (2026-08-22)
+
+Measured on **FRDM-IMXRT1186** HTTP image (`feat/frdm-gpc-wait`), expand-on-display,
+after shrinking A/B slots to **2 MiB** each so `/lfs1` is **~11.75 MiB** on the
+16 MiB W25Q128 (only external NOR). Logs: `prof: flash_read|write=…`
+and shell `eink flash_bench <path> [write]`.
+
+Proof class: **FRDM** (not Renode). Useful for **awake-time / joules** before
+BOM sleep — NOR + CPU stay up for these windows; Wi‑Fi can be gated after
+download if expand-on-display is used.
+
+| Step | Wall | Bytes | Approx rate | Notes |
+|------|------|-------|-------------|--------|
+| HTTP body → LittleFS write | **5567 ms** | 658 354 (LZ4) | **~115 KiB/s** | Dominated by FlexSPI program; radio still up in this sync |
+| LZ4 expand — flash read | **99 ms** | 658 354 | **~6.3 MiB/s** | Full compressed object into RAM |
+| LZ4 expand — flash write | **7972 ms** | 960 032 (ES6F) | **~117 KiB/s** | Scratch `.paint.es6f`; **radio can be off** |
+| Display stream — flash read | **173 ms** | 960 000 | **~5.3 MiB/s** | Payload stream to EL133 |
+| `flash_bench` read (LZ4 file) | **91 ms** | 658 354 | **~6.9 MiB/s** | Shell; no network |
+
+Sync wall (same run): plan ~1.9 s + primary download/validate ~8.6 s + paint
+~11.3 s ≈ **22 s** total (`prof: sync … (v2)`), then sleep/BOM candidate.
+
+**Implications for sleep / power management**
+
+1. **NOR program is the long pole after radio** (~5–8 s per ~0.6–1.0 MiB write
+   at ~115 KiB/s). Budget awake time for **at least one LZ4 write + one ES6F
+   expand write** on a content change (~13 s flash alone on this chip).
+2. Prefer **`APP_EINK_LZ4_EXPAND_ON_DISPLAY`**: hard-gate IW612 as soon as the
+   compressed object is accepted; pay the ~8 s expand + paint with Wi‑Fi down.
+3. Reads are cheap vs writes (~50–70× faster here) — repaint-from-cache is a
+   short NOR window if the ES6F scratch already exists.
+4. Field BOM still kills main 3V3 (NOR off). These numbers are **awake-slot**
+   costs between BOM cycles, not sleep current.
+5. Partition headroom: keep enough free LittleFS for **LZ4 + expanded ES6F at
+   once** (~1.6 MiB) during materialize; FRDM map now leaves ~11.75 MiB `/lfs1`
+   after 2 MiB slots (see `boards/…_eink_flash_map.overlay`).
+
+Hosted Mender 401 on this lab image is unrelated to the e-tabelone path.
+
 ## EVK lab only
 
 - `APP_EINK_FULL_FRAMEBUFFER` + SDRAM for panel electrical bring-up
