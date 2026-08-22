@@ -10,6 +10,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/display.h>
 
@@ -39,6 +40,13 @@ typedef int (*el133uf1_fill_cb_t)(void *user, uint8_t *dst, size_t max_len);
  * Requires blanking to be on; pairs with display_blanking_off() to refresh.
  */
 int el133uf1_stream_write(const struct device *dev, el133uf1_fill_cb_t fill, void *user);
+
+/**
+ * True when init saw BUSY go ready after reset (glass / controller present).
+ * False when BUSY timed out — driver stays stubbed so lab boards without a
+ * panel can still boot.
+ */
+bool el133uf1_glass_present(const struct device *dev);
 
 #ifdef __cplusplus
 }

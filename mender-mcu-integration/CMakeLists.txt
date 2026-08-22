@@ -42,6 +42,7 @@ if(CONFIG_APP_EINK)
     target_sources(app PRIVATE
         src/eink/eink_frame.c
         src/eink/eink_display.c
+        src/eink/eink_panel.c
         src/eink/eink_scheduler_core.c
         src/eink/eink_scheduler.c
         src/eink/eink_store.c

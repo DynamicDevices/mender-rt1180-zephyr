@@ -72,7 +72,7 @@ Telemetry JSON (`telemetry` object) includes at least:
 | `battery_capacity` | Integer percent, or `-1` when unknown |
 | `next_wakeup_date` | ISO-8601 UTC |
 | `current_displayed_job_id` | Optional string when known |
-| `screen_type` | Optional; portal Type — only `"13in"` or `"25in"` (`CONFIG_APP_EINK_SCREEN_TYPE`; omit when empty) |
+| `screen_type` | Optional; portal Type — only `"13in"` or `"25in"` (`CONFIG_APP_EINK_SCREEN_TYPE`; omit when empty). With `APP_EINK_PANEL_AUTODETECT`, a successful probe overrides (EL133→`13in`, T2000→`25in`). |
 | `latitude` / `longitude` | Optional WGS84 degrees; **omit** when no fix |
 | `location_accuracy_m` | Optional metres; omit when unknown |
 | `storage_total_bytes` | Optional; LittleFS size for `APP_EINK_STORE_ROOT` (`fs_statvfs`) |

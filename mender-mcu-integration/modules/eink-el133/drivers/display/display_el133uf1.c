@@ -107,6 +107,7 @@ struct el133_config {
 struct el133_data {
 	bool blanking_on;
 	bool dirty;
+	bool glass_present;
 	/* Stream SPI chunk lives in BSS — must not sit on eink_disp stack. */
 	uint8_t stream_chunk[EL133_CHUNK];
 };
@@ -546,19 +547,33 @@ static int el133_init(const struct device *dev)
 		LOG_WRN("no panel (BUSY timeout) — skip EPD register init");
 		data->blanking_on = false;
 		data->dirty = false;
+		data->glass_present = false;
 		return 0;
 	}
 
 	ret = epd_init_registers(cfg);
 	if (ret < 0) {
 		LOG_ERR("EPD register init failed (%d)", ret);
+		data->glass_present = false;
 		return ret;
 	}
 
 	data->blanking_on = false;
 	data->dirty = false;
+	data->glass_present = true;
 	LOG_INF("EL133UF1 ready (%ux%u)", cfg->width, cfg->height);
 	return 0;
+}
+
+bool el133uf1_glass_present(const struct device *dev)
+{
+	const struct el133_data *data;
+
+	if (dev == NULL || !device_is_ready(dev)) {
+		return false;
+	}
+	data = dev->data;
+	return data->glass_present;
 }
 
 static const struct display_driver_api el133_api = {
